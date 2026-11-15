@@ -1,0 +1,46 @@
+# What Cachito keeps and what it sends
+
+## What is sent
+
+**As installed, nothing.** Neither plugin sends anything anywhere or asks any model. cachito-lean adds its eight lines to the system prompt of your own chat, and reads the token count of each request to know when the chat is long.
+
+**The one exception is comments**, off until you turn them on ([comments.md](comments.md) has the cost). Each comment, and each `/pet say`, is one request to a small model on your own account, with:
+
+- the pet's name, animal, statistics and language, and the rules of a line;
+- why the pet speaks, the names of the tools used (those of your MCP servers among them) and how many calls each, the program names of commands that failed (`npm`, never its arguments), how many files changed;
+- **the last 600 characters of the assistant's reply**, as they are: a file or words of yours quoted there go with them;
+- the pet's own last two lines, and at most three lines of the diary;
+- when another chat ends a long turn: its folder name and the times;
+- with `/pet say`, the first 300 characters of what you typed.
+
+Never the content of a file, the output or arguments of a command, a file path, or your prompts to the assistant.
+
+## What is kept on your machine
+
+In Claude Code's plugin store (`~/.claude/plugins/store/`):
+
+- **The pet**: seed, name, character, affection, days of use, stars, what it owns, how many times you petted it and when last, token totals.
+- **Preferences**: lean, comments, chats, language, what is worn.
+- **The diary**: at most 40 lines of times, counts and folder names. `/pet diary clear` empties it.
+- **Comments' count**: lines, tokens and cost, the time of the last line, the pet's last two lines.
+- **One mark for each chat**: the **full path of its working folder**, when its last turn started and ended, when it last gave a sign of life, and since when a tool call has waited for your leave. Not which tool or command. The 30 newest are kept, for 30 days at most.
+- **After `/pet adopt`**: three fields of your old `/buddy` (`name`, `personality`, `hatchedAt`).
+- **cachito-lean**: whether you turned the lines off.
+
+Never the content of a chat, a prompt or a command.
+
+In the session's own memory, which other plugins could read, the pet keeps no path and no command line: only hashes of the files read and of the commands that failed.
+
+A headless run (`claude -p`) leaves no chat mark and keeps no diary.
+
+## What is read
+
+- **`/pet adopt`** reads `~/.claude.json`, whole, when you run it and never otherwise. That file also holds your account data and the secrets of your MCP servers. Three fields are kept, the rest is dropped at once, and the file is never written.
+- **`/pet audit`** reads your local Claude Code transcripts to add up costs. Nothing is sent.
+- **Skin packs** in `~/.claude/cachito-skins/` are read as data, never run as code.
+
+`/pet chats off` hides this chat from your others; it still leaves its mark, with no sign of life.
+
+## Left by earlier versions
+
+Nothing is written to `~/.claude/cachito-out` any more. If that folder exists, an earlier version saved long command outputs there. They can hold anything a command printed, secrets included: delete it.
