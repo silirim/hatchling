@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="412" viewBox="0 0 880 412" role="img" aria-labelledby="t d" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#efe9dc">
+<title id="t">Mean cost of a whole coding session, by plugin</title>
+<desc id="d">clean $2.40, cachito-lean $1.64, caveman 4.0.1 $2.17, ponytail 5.3.3 $1.47. gin-gonic/gin v1.12.0, claude-opus-5-5, 8 runs an arm.</desc>
+<rect width="880" height="412" rx="8" fill="#1e1e2e"/>
+<rect y="350" width="880" height="62" fill="#27273a"/><rect y="404" width="880" height="8" rx="8" fill="#27273a"/>
+<text x="32.0" y="46.0" font-size="18" font-weight="bold">Mean cost of a whole coding session, by plugin</text>
+<text x="32.0" y="70.0" font-size="13" fill-opacity=".7">bar: mean of 8 sessions · dot: one session · beside: against clean</text>
+<line x1="196.0" x2="196.0" y1="96" y2="320" stroke="#efe9dc" stroke-opacity=".5"/>
+<text x="196.0" y="338.0" text-anchor="middle" font-size="12" fill-opacity=".7">$0</text>
+<line x1="336.0" x2="336.0" y1="96" y2="320" stroke="#efe9dc" stroke-opacity=".14"/>
+<text x="336.0" y="338.0" text-anchor="middle" font-size="12" fill-opacity=".7">$1</text>
+<line x1="476.0" x2="476.0" y1="96" y2="320" stroke="#efe9dc" stroke-opacity=".14"/>
+<text x="476.0" y="338.0" text-anchor="middle" font-size="12" fill-opacity=".7">$2</text>
+<line x1="616.0" x2="616.0" y1="96" y2="320" stroke="#efe9dc" stroke-opacity=".14"/>
+<text x="616.0" y="338.0" text-anchor="middle" font-size="12" fill-opacity=".7">$3</text>
+<text x="184.0" y="136.0" text-anchor="end" font-size="14">clean</text>
+<path d="M196 119H528.6a4 4 0 0 1 4 4V139a4 4 0 0 1 -4 4H196Z" fill="#efe9dc" fill-opacity=".42"/>
+<circle cx="545.2" cy="125" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="497.1" cy="131" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="554.9" cy="137" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="547.8" cy="125" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="563.0" cy="131" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="558.6" cy="137" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="530.9" cy="125" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="463.3" cy="131" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<text x="638.0" y="136.0" font-size="14" font-weight="bold">$2.40</text>
+<text x="698.0" y="136.0" font-size="13" fill-opacity=".7">no plugin</text>
+<text x="184.0" y="190.0" text-anchor="end" font-size="14" font-weight="bold">cachito-lean</text>
+<path d="M196 173H421.4a4 4 0 0 1 4 4V193a4 4 0 0 1 -4 4H196Z" fill="#ffd54f"/>
+<circle cx="414.5" cy="179" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="421.2" cy="185" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="444.5" cy="191" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="436.8" cy="179" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="419.3" cy="185" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="430.2" cy="191" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="431.7" cy="179" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="405.0" cy="185" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<text x="638.0" y="190.0" font-size="14" font-weight="bold">$1.64</text>
+<text x="698.0" y="190.0" font-size="14">−31.8%</text>
+<text x="184.0" y="244.0" text-anchor="end" font-size="14">caveman 4.0.1</text>
+<path d="M196 227H496.3a4 4 0 0 1 4 4V247a4 4 0 0 1 -4 4H196Z" fill="#efe9dc" fill-opacity=".42"/>
+<circle cx="501.7" cy="233" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="471.9" cy="239" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="514.6" cy="245" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="501.5" cy="233" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="451.3" cy="239" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="458.2" cy="245" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="558.0" cy="233" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="545.5" cy="239" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<text x="638.0" y="244.0" font-size="14" font-weight="bold">$2.17</text>
+<text x="698.0" y="237.0" font-size="14">−9.6%</text>
+<text x="698.0" y="252.0" font-size="11" fill-opacity=".7">may be chance (p 0.10)</text>
+<text x="184.0" y="298.0" text-anchor="end" font-size="14">ponytail 5.3.3</text>
+<path d="M196 281H398.5a4 4 0 0 1 4 4V301a4 4 0 0 1 -4 4H196Z" fill="#efe9dc" fill-opacity=".42"/>
+<circle cx="398.8" cy="287" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="374.0" cy="293" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="402.7" cy="299" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="420.1" cy="287" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="426.9" cy="293" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="394.9" cy="299" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="382.1" cy="287" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<circle cx="420.4" cy="293" r="3.5" fill="#1e1e2e" stroke="#efe9dc" stroke-width="1.5"/>
+<text x="638.0" y="298.0" font-size="14" font-weight="bold">$1.47</text>
+<text x="698.0" y="298.0" font-size="14">−38.7%</text>
+<text x="32.0" y="376.0" font-size="12" fill-opacity=".7">gin-gonic/gin v1.12.0 · claude-opus-5-5 · 8 runs an arm, 14 Nov 2026 · cost of whole sessions as billed</text>
+<text x="32.0" y="396.0" font-size="12" fill-opacity=".7">full method and data: bench/RESULTS.md</text>
+</svg>

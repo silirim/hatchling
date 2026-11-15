@@ -1,0 +1,12 @@
+{ "about": "six real defects of gin-gonic/gin at v1.12.0, each fixed upstream later with a regression test: one user report each, with no file and no fix named; a fix at the cause, a test and a commit for each",
+  "task": "https://github.com/gin-gonic/gin.git", "ref": "73726dc606796a025971fe451f0aa6f1b9b847f6",
+  "trimpath": false,
+  "commits": 6, "testAdded": true, "originalTests": true,
+  "defects": [
+    { "id": "copy", "dir": ".", "file": "accept_copy_test.go", "run": "^TestAcceptCopy" },
+    { "id": "recovery", "dir": ".", "file": "accept_recovery_test.go", "run": "^TestAcceptRecovery" },
+    { "id": "upload", "dir": ".", "file": "accept_upload_test.go", "run": "^TestAcceptUpload" },
+    { "id": "html", "dir": ".", "file": "accept_html_test.go", "run": "^TestAcceptHTML" },
+    { "id": "methodnotallowed", "dir": ".", "file": "accept_methodnotallowed_test.go", "run": "^TestAcceptMethodNotAllowed" },
+    { "id": "slowheader", "dir": ".", "file": "accept_slowheader_test.go", "run": "^TestAcceptSlowHeader" }
+  ] }

@@ -1,0 +1,2 @@
+{ "about": "a debugging session: three planted defects (setup.patch) that the project's own tests catch, three commits",
+  "orphan": true, "commits": 3, "originalTests": true, "recall": ["xmltv\\.go", "lineup\\.go", "title\\.go"] }

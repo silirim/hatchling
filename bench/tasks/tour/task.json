@@ -1,0 +1,2 @@
+{ "about": "a long read-heavy session: explore, explain, one test, one comment, one commit, then recall from memory",
+  "commits": 1, "testAdded": true, "recallChanged": true, "recall": ["api\\.go", "assistant\\.go", "(recording|service)\\.go", "release\\.sh"] }

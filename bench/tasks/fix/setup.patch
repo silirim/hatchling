@@ -1,0 +1,39 @@
+diff --git a/internal/catalog/title.go b/internal/catalog/title.go
+index 186e9d0..5e3316f 100644
+--- a/internal/catalog/title.go
++++ b/internal/catalog/title.go
+@@ -45,7 +45,7 @@ func CleanTitle(raw string) (string, int) {
+ 	for range 3 {
+ 		clean = strings.TrimSpace(trailingTags.ReplaceAllString(clean, ""))
+ 		m := trailingYear.FindStringSubmatchIndex(clean)
+-		if m == nil || year != 0 || m[0] == 0 {
++		if m == nil || year != 0 {
+ 			break
+ 		}
+ 		var digits string
+diff --git a/internal/epg/xmltv.go b/internal/epg/xmltv.go
+index 698e714..eec7589 100644
+--- a/internal/epg/xmltv.go
++++ b/internal/epg/xmltv.go
+@@ -205,9 +205,6 @@ func ParseTime(s string) (time.Time, error) {
+ 	if offset == "Z" {
+ 		offset = ""
+ 	}
+-	if len(offset) == 3 { // "+01"
+-		offset += "00"
+-	}
+ 	if len(offset) == 6 && offset[3] == ':' {
+ 		offset = offset[:3] + offset[4:]
+ 	}
+diff --git a/internal/lineup/lineup.go b/internal/lineup/lineup.go
+index b1c812a..c7ab025 100644
+--- a/internal/lineup/lineup.go
++++ b/internal/lineup/lineup.go
+@@ -67,7 +67,6 @@ func Normalize(name string) string {
+ 		}
+ 		return r
+ 	}, s)
+-	s = tags.ReplaceAllString(s, " ")
+ 	s = nonAlnum.ReplaceAllString(s, " ")
+ 	return strings.Join(strings.Fields(s), " ")
+ }

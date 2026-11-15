@@ -1,0 +1,3 @@
+Come viene ripulito il titolo di un film prima di cercarlo su TMDB? Rispondi in breve.
+Fai riconoscere a CleanTitle anche l'anno tra parentesi quadre, come in "Heat [1995] 4K", lasciando intatti i titoli come "[REC]". Aggiungi i casi al test, esegui i test e fai un commit locale con messaggio in italiano.
+Dimmi in due righe cosa hai cambiato e se la documentazione della funzione è ancora corretta.

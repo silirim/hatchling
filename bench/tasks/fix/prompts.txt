@@ -1,0 +1,5 @@
+Esegui i test del progetto. Dimmi quali falliscono e perché, senza modificare nulla.
+Correggi il primo alla causa e fai un commit locale con messaggio in italiano.
+Correggi gli altri due, un commit per ciascuno.
+Esegui gofmt e tutti i test e dimmi l'esito.
+Senza usare strumenti: elenca i file che hai modificato e, per ciascuno, la causa del difetto in una riga.

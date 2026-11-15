@@ -1,0 +1,2 @@
+{ "about": "a short chat: one question, one small feature with its test and a commit",
+  "commits": 1, "accept": { "dir": "internal/catalog", "file": "accept_test.go", "run": "TestAccept" } }

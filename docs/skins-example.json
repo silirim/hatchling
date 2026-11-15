@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "id": "example",
+  "name": "Example",
+  "animals": {
+    "robot": {
+      "name": { "en": "robot", "es": "robot" },
+      "palette": { "B": "#90a4ae", "D": "#546e7a" },
+      "states": {
+        "adult": {
+          "frames": [[
+            "....DDDD....",
+            "..BBBBBBBB..",
+            ".BBBBBBBBBB.",
+            ".BBkBBBBkBB.",
+            ".BBBBBBBBBB.",
+            ".BBBDDDDBBB.",
+            "..BBBBBBBB..",
+            "..DBBBBBBD..",
+            "..BBBBBBBB..",
+            "..DD....DD.."
+          ]]
+        }
+      }
+    }
+  },
+  "items": {
+    "tophat": {
+      "part": "head",
+      "name": { "en": "a top hat" },
+      "fallback": [{ "anchor": "head", "art": [".uuuu.", ".RRRR.", "uuuuuu"] }]
+    }
+  },
+  "coats": {
+    "mint": { "name": { "en": "a mint coat" }, "ramp": ["#00796b", "#4db6ac", "#b2dfdb"] }
+  }
+}

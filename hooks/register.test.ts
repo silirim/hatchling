@@ -1,0 +1,2959 @@
+import { expect, mock, test as kitTest } from 'claude-code/testing'
+import { dayOf, RULES, SHOP, SOLD } from '../engine/engine.js'
+import zoo from '../sprites/zoo.js'
+import { BUILTIN, REG, marksFor } from '../engine/skins.js'
+import { open as diaryOpened, whole as diaryOf, bandOf, dated } from '../engine/diary.js'
+
+// One pet in a hundred is born golden, and a golden one has a `skin` button and another card: every test here runs with the roll
+// left out (CACHITO_PLAIN, read by the mod when a pet is born), over whatever the test itself answers for the environment.
+const test: typeof kitTest = (name, ...rest: any[]) => {
+  const body = rest.pop() as ($: any, on: any) => unknown
+  kitTest(name, ...[...rest, ($: any, on: any) => {
+    let own: ((c: any, e: any) => any) | undefined
+    on('env.get', (c: any, e: any) => e.name === 'CACHITO_PLAIN' ? { value: '1' } : own ? own(c, e) : { value: undefined })
+    return body($, (event: string, ...hook: any[]) => event === 'env.get' ? void (own = hook.at(-1)) : on(event, ...hook))
+  }] as [any])
+}
+
+// The preferences as the store holds them: each under a key of its own, `pref.<name>`, over the one object (`prefs`) earlier versions kept
+const prefsOf = (disk: Record<string, any>) => ({ ...disk.prefs, ...Object.fromEntries(Object.entries(disk).filter(([key]) => key.startsWith('pref.')).map(([key, value]) => [key.slice(5), value])) }) as Record<string, any>
+/** Another chat on this version changes some preferences: it writes their keys and nothing else. */
+const elsewhere = (disk: Record<string, any>, patch: Record<string, unknown>) => { for (const [name, value] of Object.entries(patch)) disk[`pref.${name}`] = value }
+/** A store that lost every preference. */
+const forget = (disk: Record<string, any>) => { for (const key of Object.keys(disk)) if (key === 'prefs' || key.startsWith('pref.')) delete disk[key] }
+const KNOWN = ['asked', 'born', 'chats', 'cuddled', 'cuddles', 'hatched', 'hidden', 'lang', 'missing', 'name', 'personality', 'seed', 'species', 'stats', 'style', 'voice', 'voiceAsked', 'wear'] // the preferences of this version
+const BAND = { plugin: 'cachito', component: 'AbovePrompt', props: { hasSurvey: false } } as any // the other props are the engine's
+
+test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
+  const clock = mock.clock(on)
+  let compacted = 0
+  on('session.compact', () => { compacted++; return { messages: [{ role: 'user', text: 'summary', toolUses: [], toolResults: [] }] } as any })
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 60_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+  mock.store(on)
+  on('config.list', () => ({ value: [] }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  let filled = ''
+  on('prompt.fill', (_, e) => { filled = e.text; return { isFilled: true, text: e.text, cursor: 0 } })
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  const LONG = 'a'.repeat(3000) + 'MIDDLE' + 'z'.repeat(9000)
+  on('tool.call', (_, e) => ({ result: e.tool === 'Bash' ? { stdout: LONG, stderr: '', interrupted: false } : {} }) as any)
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/me' : undefined }))
+  const files: Record<string, string> = {}, written: Record<string, number> = {}
+  let writes = 0
+  on('fs.write', (_, e) => { files[e.path] = e.text; written[e.path] = ++writes; return { value: undefined } })
+  on('fs.list', () => ({ value: Object.keys(files).map(p => ({ name: p.split('/').pop()!, kind: 'file', size: files[p]!.length, mtimeMs: written[p]!, isLink: false })) }) as any)
+  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'core', scope: 'shared' }] }) as any)
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 5, isLink: false } }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.advance(9_000) // the store was empty: the pet hatches first, for 8 s
+  await $.command.run({ command: 'pet', args: 'voice off' } as any) // the old name of /pet comments still answers; then it asks about the voice: answered here, tested further down
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const head = (await ui.find({ type: 'Text', text: /★ \d+/ }))?.text
+    expect(head).toMatch(/^\w+  ★ 0/) // the name and the stars: no health, no number to lose
+    expect(head).not.toMatch(/[♥♡]|happy|calm/) // hearts and humour are on the card only
+    expect(head).not.toMatch(/streak|cache|\dk/) // no request yet: no weight to show
+    await ui.unmount()
+  }
+
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /re-read/ }))?.text).toMatch(/a\.txt/)
+  expect(await ui.find({ type: 'Raster' })).toBeTruthy()
+  await ui.press({ key: 'fix' })
+  expect(filled).toMatch(/already in context/)
+  await ui.unmount()
+
+  // the diet is gone: a long output passes whole, the command says it was taken out and why, and nothing is written
+  const bash = { tool: 'Bash', command: 'cat big.log', tool_use_id: 't1' } as any
+  expect((await $.tool.call(bash) as any).result.stdout).toBe(LONG)
+  expect(((await $.command.run({ command: 'pet', args: 'diet on' } as any)) as any).text).toBe('/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; the outputs it saved are still in ~/.claude/cachito-out. /pet lean, the style, is the lever that showed one.')
+  expect((await $.tool.call(bash) as any).result.stdout).toBe(LONG)
+  expect(Object.keys(files)).toEqual([])
+
+  const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
+  // the style: a section of the system prompt only when the person turned it on
+  expect((await $.prompt.compose(ask)).sections.length).toBe(1)
+  await $.command.run({ command: 'pet', args: 'style on' } as any)
+  expect((await $.prompt.compose(ask)).sections.at(-1)).toMatchObject({ id: 'cachito:style', scope: 'session' })
+
+  // the card: no saving claimed for this chat. Lean is the style, with the bench figure
+  const card = JSON.stringify(await $.command.run({ command: 'pet', args: '' } as any))
+  expect(card).toMatch(/Cachito the (\w+ )?\w+, baby/)
+  expect(card).toMatch(/lean on: the style\. In our bench it cost 14\.8% less on one long task\\n/)
+  expect(card).toMatch(/\\ncomments off: fixed lines only, nothing sent\. \/pet comments on lets a small model write them, on your tokens"/)
+  expect(card).not.toMatch(/diet|trimmed/)
+  expect(card).not.toMatch(/saved|streak|drowned|about 14|!/)
+  expect(card).toMatch(/affection 0 over 0 days of use; grown up at 3 days and 60 affection\\n0 stars; owns nothing yet\. \/pet shop\\n/)
+  expect(card).not.toMatch(/health|\/100|efficient|out cold|unlocked/)
+  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'lean off' } as any))).toMatch(/Lean off\./)
+  expect((await $.prompt.compose(ask)).sections.length).toBe(1)
+  const off = JSON.stringify(await $.command.run({ command: 'pet', args: '' } as any))
+  expect(off).toMatch(/lean off: \/pet lean on adds the style\. In our bench it cost 14\.8% less on one long task\\n/)
+  await $.command.run({ command: 'pet', args: 'lean on' } as any)
+
+  // a name that is no animal cannot be picked
+  const rare = await Promise.all(['robot', 'yeti'].map(a => $.command.run({ command: 'pet', args: `animal ${a}` } as any)))
+  expect(JSON.stringify(rare)).toMatch(/Pick one of/)
+
+  // the band shows what the chat weighs after each request of the main thread, and no cache percentage
+  const headOf = async () => { const b = await $.ui.mount({ ...BAND, surface: 'terminal' }); const text = (await b.find({ type: 'Text', text: /★ \d+$/ }))?.text; await b.unmount(); return text }
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ;
+  expect(await headOf()).not.toMatch(/\dk/) // the size of the chat is not shown: alone the number said nothing
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5', agentId: 'sub' } as any)) ;
+  expect(await headOf()).not.toMatch(/cache|\//)
+
+  // there is no context budget any more: the command sets nothing, and the mod never compacts on its own
+  expect(((await $.command.run({ command: 'pet', args: 'budget 50k' } as any)) as any).text).toMatch(/^The context budget was taken out: no valid run of ours showed that compacting at a threshold pays; on paper it did not on a large model\. Nothing was set\.[^\n]*$/) // one line: gone, and why
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ;
+  await $.turn.complete({ answer: '' } as any)
+  await clock.advance(5000)
+  expect(compacted).toBe(0)
+  expect(await headOf()).not.toMatch(/\dk/)
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await $.command.run({ command: 'pet', args: 'hide' } as any)
+  expect(await band.find({ type: 'Raster' })).toBeFalsy()
+  await band.unmount()
+})
+
+test('/clear keeps the preferences: the session state starts empty, the store still has them', async ($, on) => {
+  mock.clock(on)
+  const disk: Record<string, any> = {}
+  on('store.get', (_, e) => ({ value: disk[e.key] }))
+  on('store.set', (_, e) => { disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  // the session's state, emptied by /clear as the engine does; the kit's own outlives a session.end
+  let state: Record<string, { value: unknown, version: number }> = {}
+  on('state.get', (_, e) => ({ value: state[e.key] ?? { value: undefined, version: 0 } }))
+  on('state.set', (_, e) => { const version = (state[e.key]?.version ?? 0) + 1; state[e.key] = { value: e.value, version }; return { value: { isSet: true, version } } })
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('prompt.compose', () => ({ sections: [] }) as any)
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'pet', args: 'lean on' } as any)
+  expect(prefsOf(disk)).toMatchObject({ style: true })
+  await $.command.run({ command: 'pet', args: 'lang es' } as any)
+  const before = prefsOf(disk)
+  expect(before).toMatchObject({ lang: 'es', style: true })
+  expect(before.species).toBeTruthy()
+
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
+  state = {}
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Raster' })).toBeTruthy()
+  await band.unmount()
+  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'lean' } as any))).toMatch(/Lean on/)
+  const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
+  expect((await $.prompt.compose(ask)).sections.at(-1)).toMatchObject({ id: 'cachito:style' })
+  // a change after /clear must not write the empty session state over the stored animal
+  await $.command.run({ command: 'pet', args: 'lang en' } as any)
+  expect(prefsOf(disk)).toMatchObject({ lang: 'en', style: true, species: before.species, born: before.born })
+})
+
+test('the diet and /pet weight are gone: a long output passes whole whatever was chosen before, the choice kept for the diet leaves the store at the first write, and each command says why', async ($, on) => {
+  mock.clock(on)
+  const disk: Record<string, any> = { prefs: { species: 'penguin', born: 'penguin', diet: true }, 'pref.diet': true, 'pref.lang': 'en' }
+  on('store.get', (_, e) => ({ value: structuredClone(disk[e.key]) }))
+  on('store.set', (_, e) => { disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  on('store.delete', (_, e) => { delete disk[e.key]; return { value: undefined } })
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/me' : e.name === 'CACHITO_DIET' ? '1' : undefined }))
+  const written: string[] = []
+  on('fs.write', (_, e) => { written.push(e.path); return { value: undefined } })
+  on('fs.list', () => ({ value: [{ name: 'out-00.txt', kind: 'file', size: 9, mtimeMs: 1, isLink: false }] }) as any)
+  const LONG = 'line\n'.repeat(4000)
+  on('tool.call', () => ({ result: { stdout: LONG, stderr: '', interrupted: false } }) as any)
+  const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  // the stored choice and the bench's old variable switch nothing on: the output is whole, and no file is written, not even to empty an old one
+  expect(((await $.tool.call({ tool: 'Bash', command: 'x', tool_use_id: 't1' } as any)) as any).result.stdout).toBe(LONG)
+  expect(written).toEqual([])
+  expect(await cmd('')).not.toMatch(/diet|trimmed/)
+  // each command answers with one line: taken out, and why. Neither changes anything
+  for (const args of ['diet', 'diet on', 'diet off']) expect(await cmd(args)).toMatch(/^\/pet diet was taken out: in our bench it showed no saving \(alone -3\.6%, p 0\.31\)\..*still in ~\/\.claude\/cachito-out/)
+  expect(await cmd('weight')).toBe('/pet weight was taken out: /context in Claude Code already shows what every request carries. /pet audit still shows where the tokens went.')
+  // the first write of a preference (here the pet's own, at its first start) took the diet's key out of the store; the object of the earlier version is never written
+  expect('pref.diet' in disk).toBe(false)
+  await cmd('lang es')
+  expect('pref.diet' in disk).toBe(false)
+  expect(disk.prefs).toEqual({ species: 'penguin', born: 'penguin', diet: true })
+  expect(await cmd('diet')).toMatch(/^\/pet diet se quitó/)
+  expect(await cmd('weight')).toMatch(/^\/pet weight se quitó: \/context de Claude Code/)
+})
+
+test('two chats on one store: a change keeps what the other chat chose meanwhile', async ($, on) => {
+  mock.clock(on)
+  const disk: Record<string, any> = { prefs: { species: 'fox', born: 'fox', hidden: false, wear: '', diet: false, style: false } }
+  on('store.get', (_, e) => ({ value: structuredClone(disk[e.key]) }))
+  on('store.set', (_, e) => { disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('prompt.compose', () => ({ sections: [] }) as any)
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run({ command: 'pet', args: '' } as any) // this chat has read its preferences
+
+  // the other chat, on an earlier version, saves a budget and changes animal; this one then picks a language.
+  // The animal is kept; the budget is ignored and leaves the preferences with this first write
+  disk.prefs = { ...disk.prefs, budget: 150_000, species: 'bunny' }
+  await $.command.run({ command: 'pet', args: 'lang pt' } as any)
+  expect(prefsOf(disk)).toMatchObject({ lang: 'pt', species: 'bunny', born: 'fox', style: false })
+  expect(Object.keys(disk).filter(key => key.startsWith('pref.')).sort()).toEqual(['pref.asked', 'pref.lang', 'pref.name', 'pref.seed', 'pref.stats', 'pref.voiceAsked']) // the language, what the pet lacked at its first read, and the hint about /pet adopt and the question about the comments marked as said: no copy of the rest
+  expect(disk.prefs).toEqual({ species: 'bunny', born: 'fox', hidden: false, wear: '', diet: false, style: false, budget: 150_000 }) // the earlier version's object is read and never written
+
+  // the other chat turns the style on; this one hides the band
+  elsewhere(disk, { style: true })
+  await $.command.run({ command: 'pet', args: 'hide' } as any)
+  expect(prefsOf(disk)).toMatchObject({ hidden: true, style: true, lang: 'pt', species: 'bunny' })
+  // and this chat now goes by what the store holds
+  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'lean' } as any))).toMatch(/Lean on/)
+
+  // a store that lost the preferences: this chat's are written back, not the defaults
+  forget(disk)
+  await $.command.run({ command: 'pet', args: 'show' } as any)
+  expect(prefsOf(disk)).toMatchObject({ hidden: false, style: true, lang: 'pt', species: 'bunny' })
+})
+
+test('over 30k the style waits: lean is the style alone, the note goes while it waits, the cheer comes when the style is in', async ($, on) => {
+  mock.clock(on)
+  mock.store(on, { prefs: { species: 'penguin', born: 'penguin', trait: 'dry', voiceAsked: true } }) // born with the old traits: dry is the wit
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('prompt.compose', () => ({ sections: [] }) as any)
+  on('session.compact', () => ({ messages: [{ role: 'user', text: 'summary', toolUses: [], toolResults: [] }] }) as any)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+
+  const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
+  const styled = async () => (await $.prompt.compose(ask)).sections.some((s: any) => s.id === 'cachito:style')
+  const turn = async () => { const has = await styled(); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any); return has }
+  const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.find({ type: 'Text', text: /★/ }))?.text ?? ''; await b.unmount(); return text }
+  const cmd = async (args: string) => JSON.stringify(await $.command.run({ command: 'pet', args } as any))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(await turn()).toBe(false)
+  expect(await band()).toMatch(/long chat, lean off: 70k/)
+
+  // lean chosen: over 30k the style waits. No cheer, the bubble says so, the note is gone
+  const chosen = await cmd('lean on')
+  expect(chosen).toMatch(/Lean chosen: this chat is already long, so the style starts at the next compaction or the next chat\..*In our bench the style alone \(the `style` arm of Series 4 in bench\/RESULTS\.md\) cost 14\.8% less on one long task \(Opus 5\.5, 8 runs, p 0\.0014\)\. On the two short tasks the style was never run alone, only with a lever that is gone since, and no saving was shown\./)
+  expect(chosen).not.toMatch(/about 14|!|diet/i)
+  expect(await band()).toMatch(/long chat, lean chosen$/)
+  expect(await band()).not.toMatch(/at work|lean off/)
+  expect(await cmd('')).toMatch(/lean chosen, the style starts at the next compaction or chat/)
+  expect(await turn()).toBe(false)
+  expect(await band()).toMatch(/lean chosen/)
+
+  // the compaction lets the style in: the cheer comes now, and the next request carries the style
+  await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'old', toolUses: [], toolResults: [] }] } as any)
+  expect(await band()).toMatch(/lean on\. fewer words, finally/) // the cheer, as the wit says it
+  expect(await turn()).toBe(true)
+  expect(await cmd('')).toMatch(/lean on: the style\. In our bench/)
+
+  // turned off in a long chat, the style stays in the prompt until a cheap moment, but lean is off for the pet at once
+  await cmd('lean off')
+  expect(await turn()).toBe(true)
+  expect(await band()).toMatch(/long chat, lean off: 70k/)
+  expect(await band()).not.toMatch(/health|\d\/100/)
+  // chosen again, by its other name, then /clear: the new chat carries it from its first request
+  await cmd('style on')
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
+  expect(await styled()).toBe(true)
+})
+
+test('/pet audit says when node is missing', async ($, on) => {
+  mock.clock(on)
+  mock.store(on, { prefs: { species: 'penguin', born: 'penguin', trait: 'dry', voiceAsked: true } }) // born with the old traits: dry is the wit
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  let path: string | undefined
+  const stats: string[] = []
+  on('env.get', (_: any, e: any) => ({ value: e.name === 'PATH' ? path : undefined }))
+  on('fs.stat', (_: any, e: any) => { stats.push(e.path); if (!['/w/proj/bin/node', '/usr/local/bin/node'].includes(e.path)) throw new Error('ENOENT'); return { value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } } })
+  on('fs.list', () => ({ value: [] }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('tool.call', () => ({ result: {} }) as any)
+  let breakdown: any
+  on('session.usage', () => ({ value: { context: { breakdown } } }) as any)
+  let node: () => any = () => ({ deny: 'spawn node ENOENT' })
+  const ran: string[][] = []
+  on('process.run', (_: any, e: any) => { ran.push(e.argv); return node() })
+  const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
+
+  await $.session.start({ cwd: '/w/proj', surface: 'terminal', isInteractive: true })
+
+  // no PATH, or no node in its folders: said, and nothing is run
+  expect(await cmd('audit')).toMatch(/`node` is not on the PATH Claude Code was started with/)
+  path = '/opt/empty:/usr/bin'
+  expect(await cmd('audit')).toMatch(/`node` is not on the PATH Claude Code was started with/)
+  expect(ran).toEqual([])
+  // E24: node is run by its absolute path, from an absolute folder of the PATH that is not inside the project: never a `node`
+  // found through the working folder (an empty entry, `.`, a relative one) or left in the repository
+  path = ':.:bin:/w/proj/bin:/w/proj:/usr/local/bin:/usr/bin'
+  node = () => ({ value: { exitCode: 0, stdout: 'CACHITO RECEIPT', stderr: '' } })
+  expect(await cmd('audit 7')).toBe('CACHITO RECEIPT')
+  expect(ran).toEqual([['/usr/local/bin/node', expect.stringMatching(/\/engine\/audit\.js$/), '--days', '7']])
+  expect(stats.some(p => p.startsWith('/w/proj') || !p.startsWith('/'))).toBe(false) // the project's own folders were not even looked in
+  // a wrong argument is said here, with what is right, and nothing is run
+  for (const bad of ['0', 'abc', '-3', '7.5', '99999']) expect(await cmd(`audit ${bad}`)).toBe(`/pet audit [days]: the days are a whole number from 1 to 3650, not ${bad}. With none, all your sessions.`)
+  expect(ran.length).toBe(1)
+  node = () => ({ value: { exitCode: 2, stdout: '', stderr: 'boom\u001b[31m' } })
+  expect(await cmd('audit')).toBe('The receipt stopped with an error (exit 2). It needs Node 20 or later.\nboom')
+  expect(await cmd('demo fox')).toBe('Cachito demo: egg, seedling, healthy, bloom, cheer, dizzy, stomach, loop, bloated, sleep (5 s each).')
+})
+
+test('the companion: a greeting from the marks, a mark of its own with nothing of the chat in it, news of another chat, the outline', async ($, on) => {
+  const T0 = Date.UTC(2026, 10, 12, 12), MIN = 60_000
+  const clock = mock.clock(on, { now: T0 })
+  // another chat was left in this folder 20 minutes ago, in the middle of a turn
+  const disk: Record<string, any> = { prefs: { species: 'fox', born: 'fox', hidden: false, wear: '', budget: 0, diet: true, style: true, seed: 7, name: 'Miro', trait: 'dry', voiceAsked: true }, chats: { other: { cwd: '/w/cachito', at: T0 - 20 * MIN, done: false } } }
+  on('store.get', (_, e) => ({ value: structuredClone(disk[e.key]) }))
+  on('store.set', (_, e) => { disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  on('store.keys', () => ({ value: Object.keys(disk) }))
+  on('store.delete', (_, e) => { delete disk[e.key]; return { value: undefined } })
+  on('session.id', () => ({ value: 'me' }))
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 5, isLink: false } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  let filled = ''
+  on('prompt.fill', (_, e) => { filled = e.text; return { isFilled: true, text: e.text, cursor: 0 } })
+  on('prompt.submit', (_, e) => ({ text: e.text }) as any)
+  on('prompt.compose', () => ({ sections: [] }) as any)
+  on('tool.call', () => ({ result: { stdout: '', stderr: 'boom', interrupted: false }, isError: true }) as any)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 60_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+  const band = async () => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const texts = (await ui.findAll({ type: 'Text' })).map(x => x.text), buttons = (await ui.findAll({ type: 'Button' })).map(x => x.text)
+    return { ui, texts, buttons }
+  }
+
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  let b = await band()
+  expect(b.texts).toContain('Miro: a chat here stopped mid-turn 20 min\nago. pick it up?')
+  expect(b.buttons).toEqual(['pet', 'resume']) // the pet's own in the row of the name, the phrase's under the bubble
+  await b.ui.press({ key: 'fix' })
+  expect(filled).toBe('/resume')
+  await b.ui.unmount()
+  expect(disk.chats).toEqual({ other: { cwd: '/w/cachito', at: T0 - 20 * MIN, done: false } }) // the marks of earlier versions are read, never written
+  expect(disk['chat.me']).toBeUndefined() // opening a chat leaves no mark
+
+  // a prompt and a failing command: the mark says the folder, the time and that the turn runs. Nothing of the prompt or the command
+  await clock.advance(9_000)
+  await $.prompt.submit({ text: 'the secret plan', wait: false, origin: 'user' } as any)
+  expect(disk['chat.me']).toEqual({ cwd: '/w/cachito', at: T0 + 9_000, done: false, beat: T0 + 9_000 }) // under its own key: the folder, the time, that the turn runs, and that it is alive
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'cd /srv && TOKEN=abc deploy --key hunter2', tool_use_id: `t${i}` } as any)
+  b = await band()
+  expect(b.texts).toContain('deploy failed 3 times in a row')
+  expect(b.texts.join(' ')).not.toMatch(/pick it up/) // the greeting went with the first prompt
+  await b.ui.unmount()
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ;
+  await clock.advance(3 * MIN)
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  expect(disk['chat.me']).toEqual({ cwd: '/w/cachito', at: T0 + 9_000 + 3 * MIN, done: true, took: 3 * MIN, beat: T0 + 9_000 + 3 * MIN }) // and how long the turn lasted: a number
+  expect(JSON.stringify(disk)).not.toMatch(/secret|plan|deploy|hunter2|TOKEN|srv/)
+  // the long turn ends with a recap under the note
+  b = await band()
+  expect(b.texts).toContain('long turn: deploy failed 3 times')
+  await b.ui.unmount()
+
+  // a slash command starts no turn: the mark stays as the finished turn left it; an interrupted turn is left midway
+  await $.prompt.submit({ text: '/pet', command: { name: 'pet', args: '' }, wait: false, origin: 'user' } as any)
+  expect(disk['chat.me'].done).toBe(true)
+  await $.prompt.submit({ text: 'again', wait: false, origin: 'user' } as any)
+  await $.turn.complete({ answer: '', reason: 'aborted' } as any)
+  expect(disk['chat.me'].done).toBe(false)
+  await $.turn.complete({ answer: '', agentId: 'sub', reason: 'answer' } as any) // a subagent's end is not the chat's
+  expect(disk['chat.me'].done).toBe(false)
+
+  // the long chat with lean on: the outline is offered, and its button writes the request for the agent
+  await clock.advance(5 * MIN)
+  await $.prompt.submit({ text: 'go on', wait: false, origin: 'user' } as any)
+  await clock.advance(10_000)
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ;
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  b = await band()
+  expect(b.texts).toContain('long chat: shall we put our thoughts in\norder?')
+  expect(b.buttons).toEqual(['pet', 'outline'])
+  await b.ui.press({ key: 'fix' })
+  expect(filled).toMatch(/^Write an outline of this chat that I can paste into a new one\..*where we are.*where we need to get to.*still missing/)
+  await b.ui.unmount()
+
+  // another open chat ends a turn while this one is in use. A short turn is no news; a long one, a job the person was waiting for,
+  // is said once, with the folder's name and since when
+  const said = async () => { const x = await band(); await x.ui.unmount(); return x.texts.join(' ').replace(/\s+/g, ' ') }
+  await $.prompt.submit({ text: 'next', wait: false, origin: 'user' } as any)
+  const latest = () => Number(disk['chat.me'].beat) // now, as this chat's own mark has it: a mark dated after now is not believed
+  await clock.advance(10_000)
+  disk['chat.quick'] = { cwd: '/home/me/work/notes', at: latest(), done: true, took: 30_000, beat: latest() }
+  await clock.advance(10_000)
+  expect(await said()).not.toMatch(/finished its job/)
+  disk['chat.other2'] = { cwd: '/home/me/work/vodmax', at: latest(), done: true, took: 3 * MIN, beat: latest() }
+  await clock.advance(10_000)
+  expect(await said()).toMatch(/the chat in vodmax finished its job (just now|\d+ min ago)/)
+  await $.prompt.submit({ text: 'next', wait: false, origin: 'user' } as any)
+  await clock.advance(20_000)
+  expect(await said()).not.toMatch(/finished its job/)
+  // the same chat ends another long turn a minute later: not said again so soon
+  disk['chat.other2'] = { cwd: '/home/me/work/vodmax', at: latest() + 1, done: true, took: 4 * MIN, beat: latest() + 1 }
+  await clock.advance(20_000)
+  expect(await said()).not.toMatch(/finished its job/)
+
+  // after /clear: the same sitting, so no second greeting, and the new chat's mark goes under its own id
+  await $.session.end({ reason: 'clear', sessionId: 'me', resume: { id: 'me' } } as any)
+  b = await band()
+  expect(b.texts.join(' ')).not.toMatch(/pick it up|first chat|folder/)
+  await b.ui.unmount()
+})
+
+test('a headless run leaves no mark and gets no greeting', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const disk: Record<string, any> = {}
+  on('store.get', (_, e) => ({ value: structuredClone(disk[e.key]) }))
+  on('store.set', (_, e) => { disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('prompt.submit', (_, e) => ({ text: e.text }) as any)
+  on('turn.complete', () => ({ text: '' }) as any)
+
+  await $.session.start({ cwd: '/w/bench', surface: null, isInteractive: false })
+  await $.prompt.submit({ text: 'run', wait: false, origin: 'user' } as any)
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  expect(Object.keys(disk).filter(key => key === 'chats' || key.startsWith('chat.'))).toEqual([])
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/first chat|folder|pick it up|May I/)
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).not.toContain('comments on')
+  await ui.unmount()
+  expect(prefsOf(disk)).toMatchObject({ voice: false, voiceAsked: false }) // nobody to ask: the voice is off and the question is kept for a person
+})
+
+test('the phrase sits in a speech bubble: advice inside, keys outside, tail at the pet', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('config.list', () => ({ value: [] }))
+  on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false } }) as any)
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const bubble = (await ui.find({ type: 'Box', key: 'bubble' }))!
+  expect(bubble.props.borderStyle).toBe('round')
+  // the bubble holds the phrase and the dim advice, and nothing else: no hearts, no keys
+  const inside = bubble.children as { type: string, props?: { dimColor?: boolean }, children: string[] }[]
+  expect(inside.map(x => x.type)).toEqual(['Text', 'Text'])
+  expect(inside[0]!.children[0]).toBe('re-read, unchanged: a.txt')
+  expect(inside[0]!.props?.dimColor).toBeFalsy()
+  expect(inside[1]!.children[0]).toBe('A note only. Fix asks the agent to use what\nit has.') // wrapped here, by columns
+  expect(inside[1]!.props?.dimColor).toBe(true)
+  // 51 characters of advice wrap at 44 columns: the longest line is "A note only. Fix asks the agent to use what", 43, plus border and padding
+  expect(bubble.props.width).toBe(47)
+  expect((await ui.find({ type: 'Text', text: /^\w+  ★ \d+$/ }))).toBeTruthy()
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'fix'])
+  expect(await ui.find({ type: 'Link', text: 'guide' })).toBeTruthy()
+  // the tail sits on the bubble's first line, where the pet's eyes are
+  expect((await ui.find({ type: 'Box', key: 'tail' }))!.props.marginTop).toBe(2)
+  await ui.unmount()
+
+  // no Raster, no bubble: the other surfaces keep the one line of text
+  const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await desk.find({ type: 'Box', key: 'bubble' })).toBeFalsy()
+  expect((await desk.find({ type: 'Text', text: /★/ }))?.text).toMatch(/re-read/)
+  await desk.unmount()
+})
+
+// what a person's ~/.claude.json holds next to the old /buddy: none of it may reach the store
+const CONFIG = { userID: 'u-123', oauthAccount: { emailAddress: 'me@example.com' }, projects: { '/w/private': {} }, companion: { name: 'Pixel', personality: 'A calm thing who waits.', hatchedAt: Date.UTC(2026, 3, 2), species: 'axolotl', secret: 's3cr3t' } }
+
+const SKINS = '/home/me/.claude/cachito-skins'
+/** The kit of a person at the prompt whose config holds `config`; `disk` is the store, `state` the session's, `reads` and `writes` the files touched. */
+function home(on: any, config: object, prefs?: object) {
+  const k = { env: {} as Record<string, string>, box: '', disk: (prefs ? { prefs: { voiceAsked: true, ...prefs } } : {}) as Record<string, any>, state: {} as Record<string, { value: unknown, version: number }>, reads: [] as string[], writes: [] as string[], toasts: [] as string[], filled: '', sets: [] as string[], lost: false, skins: {} as Record<string, unknown> | null, skinReads: [] as string[], meanwhile: null as (() => void) | null }
+  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 12, 12) })
+  // `meanwhile` is what another chat does right after each read of this one, so before the write that follows it; `lost` is a store that cannot be read; `sets` the keys written
+  on('store.get', (_: any, e: any) => { if (k.lost) throw new Error('unreadable'); const value = structuredClone(k.disk[e.key]); k.meanwhile?.(); return { value } })
+  on('store.set', (_: any, e: any) => { if ((k as any).ro) throw new Error('read-only'); k.sets.push(e.key); k.disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  on('store.keys', () => { if (k.lost) throw new Error('unreadable'); return { value: Object.keys(k.disk) } })
+  on('store.delete', (_: any, e: any) => { delete k.disk[e.key]; return { value: undefined } })
+  on('state.get', (_: any, e: any) => ({ value: k.state[e.key] ?? { value: undefined, version: 0 } }))
+  on('state.set', (_: any, e: any) => { const version = (k.state[e.key]?.version ?? 0) + 1; k.state[e.key] = { value: e.value, version }; return { value: { isSet: true, version } } })
+  on('session.id', () => ({ value: (k as any).id ?? 'me' }))
+  on('config.list', () => ({ value: (k as any).theme ? [{ key: 'theme', value: (k as any).theme }] : [] }) as any)
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('session.end', (_: any, e: any) => ({ sessionId: e.sessionId }))
+  on('env.get', (_: any, e: any) => ({ value: e.name === 'HOME' ? '/home/me' : k.env[e.name] }))
+  // `skins` is the person's folder of skin packs: name -> content (an object is written as JSON), 'link' for a link, a number for a size too big to read; null is a folder that cannot be listed
+  on('fs.list', (_: any, e: any) => { if (!k.skins) throw new Error('EACCES'); return { value: e.path === SKINS ? Object.entries(k.skins).map(([name, v]) => ({ name, kind: v === 'link' ? 'other' : 'file', size: typeof v === 'number' ? v : 100, mtimeMs: 0, isLink: v === 'link' })) : [] } })
+  on('fs.read', (_: any, e: any) => {
+    if (String(e.path).startsWith(SKINS)) { k.skinReads.push(e.path); const v = k.skins?.[String(e.path).slice(SKINS.length + 1)]; return { value: typeof v === 'string' ? v : JSON.stringify(v) } }
+    k.reads.push(e.path); return { value: JSON.stringify(config) }
+  })
+  on('fs.write', (_: any, e: any) => { k.writes.push(e.path); return { value: undefined } })
+  on('ui.toast', (_: any, e: any) => { k.toasts.push(String(e.message ?? e.text ?? JSON.stringify(e))); return { value: undefined } })
+  on('prompt.read', () => ({ value: { text: k.box, cursor: 0 } }))
+  on('prompt.fill', (_: any, e: any) => { k.filled = e.text; return { isFilled: true, text: e.text, cursor: 0 } })
+  on('prompt.compose', () => ({ sections: [] }) as any)
+  return Object.assign(k, { clock }) // the same object the handlers read: a test may replace `state` or `disk.pet`
+}
+const cardOf = async ($: any, args = '') => String((await $.command.run({ command: 'pet', args } as any) as any).text)
+
+test('a pet is born with a name and a character of its own: on the card and in the greeting, kept over /clear, a new animal and a rename', async ($, on) => {
+  const { companion, ...plain } = CONFIG
+  const k = home(on, plain)
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+
+  const born = prefsOf(k.disk)
+  expect(born.seed).toBeGreaterThan(0)
+  expect(born.name).toMatch(/^[A-Z][a-z]{3,5}$/)
+  const STATS = ['WIT', 'CURIOSITY', 'CALM', 'RIGOR', 'WARMTH']
+  expect(born.stats.length).toBe(5)
+  for (const n of born.stats) expect(Number.isInteger(n) && n >= 0 && n <= 100).toBe(true)
+  expect(Math.max(...born.stats)).toBeGreaterThanOrEqual(82) // a peak
+  expect(Math.min(...born.stats)).toBeLessThanOrEqual(22) // and a weak point
+  expect(born.trait).toBeUndefined()
+  expect(Object.keys(zoo.pack.animals)).toContain(born.species)
+  expect(born).toMatchObject({ asked: true, personality: '', hatched: 0 })
+  expect(k.reads).toEqual([]) // D16: the person's config is not opened at a start, not even once
+  expect(JSON.stringify(k.disk)).not.toMatch(/u-123|example\.com|private/)
+
+  // the first start ever: an egg that rocks, cracks and, after 8 s, is the animal with its greeting
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('an egg. something moves inside')
+  expect(await ui.find({ type: 'Raster' })).toBeTruthy()
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual([])
+  await ui.unmount()
+  await k.clock.advance(6_500)
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('the shell is cracking')
+  await ui.unmount()
+  await k.clock.advance(2_000)
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  // hatched: before anything else it asks whether it may speak, once, and says what a yes comes to
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account, at most about\n$0.00280 a day, and sends it a short summary\nof the turn. Details: /pet comments')
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
+  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
+  await ui.press({ key: 'voice-off' })
+  expect(k.toasts.at(-1)).toBe('Cachito stays quiet. /pet comments on changes that.')
+  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const said = (await ui.findAll({ type: 'Text' })).map(x => x.text)
+  expect(said.join(' ')).not.toMatch(/egg|shell|May I/)
+  expect(said.some(t => t?.startsWith(`${born.name}: `))).toBe(true)
+  expect(said.join(' ')).not.toMatch(/!/)
+  expect(said.join(' ').replace(/\n/g, ' ')).toContain('had a /buddy before? /pet adopt gives me its name and character') // once, under the first greeting, with nothing read
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toContain('adopt') // the hint's button: it fills /pet adopt, the person sends it or not
+  await ui.unmount()
+  const first = await cardOf($)
+  expect(first).toMatch(new RegExp(`^${born.name}, Cachito the (\\w+ )?${born.species},`)) // a rare colour comes before the animal
+  // the card: a line of personality, then the five statistics, each with a short bar and its value; the peak and the weak point are marked
+  const rows = first.split('\n')
+  expect(rows[1]).toMatch(/^character: [A-Z][a-z ,]+\.$/)
+  STATS.forEach((name, i) => expect(rows[2 + i]).toMatch(new RegExp(`^  ${name} +[█░]{10} +${born.stats[i]}(  peak|  weak point)?$`)))
+  expect(rows[2 + born.stats.indexOf(Math.max(...born.stats))]).toMatch(/  peak$/)
+  expect(rows[2 + born.stats.indexOf(Math.min(...born.stats))]).toMatch(/  weak point$/)
+  expect(first).not.toMatch(/petted|adopted/)
+  expect(await cardOf($, 'adopt')).toMatch(/nothing to adopt/)
+
+  // /clear empties the session's state; the animal changes; neither touches who the pet is
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
+  k.state = {}
+  const other = born.species === 'bunny' ? 'fox' : 'bunny'
+  expect(await cardOf($, `animal ${other}`)).toMatch(/is not yours yet: 100 stars unlock it/) // another animal is unlocked first
+  k.disk.pet = { ...k.disk.pet, animals: [other] }
+  await k.clock.advance(11_000) // the next look at the store
+  expect(await cardOf($, `animal ${other}`)).toContain(other)
+  expect(prefsOf(k.disk)).toMatchObject({ species: other, seed: born.seed, name: born.name, stats: born.stats })
+  expect(await cardOf($)).toMatch(new RegExp(`^${born.name}, Cachito the (\\w+ )?${other},`))
+
+  expect(await cardOf($, 'name')).toContain(born.name)
+  expect(await cardOf($, 'name  <b>Zoë</b>   the 2nd ')).toContain('bZoëb the 2nd')
+  expect(await cardOf($, 'name Zoë the 2nd')).toContain('Zoë the 2nd')
+  expect(await cardOf($, 'name !!!')).toContain('Zoë the 2nd') // nothing usable: the name stays
+  k.state = {}
+  expect(await cardOf($)).toMatch(new RegExp(`^Zoë the 2nd, Cachito the (\\w+ )?${other},`))
+  expect(prefsOf(k.disk)).toMatchObject({ name: 'Zoë the 2nd', seed: born.seed, stats: born.stats })
+  expect(k.reads.length).toBe(1) // /pet adopt alone: never by itself
+  expect(k.writes).toEqual([])
+})
+
+test('the old /buddy: the config is read only when the person runs /pet adopt; a hint says so once; adopting takes its name, personality and hatching day, keeps our animal, and nothing else of the config is stored', async ($, on) => {
+  const k = home(on, CONFIG, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', trait: 'fussy', trait2: 'shy' })
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  expect(prefsOf(k.disk)).toMatchObject({ asked: true, name: 'Miro' }) // the hint was said, nothing adopted
+  expect(k.reads).toEqual([]) // and nothing read to say it: the file holds the account and the secrets of the MCP servers
+  // born with two traits, fussy and shy: they became its statistics, rigor the peak and calm the second, and are not kept
+  const was = prefsOf(k.disk).stats as number[]
+  expect([...was].sort((x, y) => y - x).slice(0, 2)).toEqual([was[3], was[2]])
+  expect('pref.trait' in k.disk).toBe(false)
+  expect(await cardOf($)).toMatch(/^character: Checks everything twice, and /m)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/egg|shell/) // born before: no second hatching
+  const said = (await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ').replace(/\n/g, ' ')
+  expect(said).toContain('had a /buddy before? /pet adopt gives me its name and character')
+  expect(said).not.toContain('Pixel') // it cannot know the name: it has not looked
+  await ui.press({ key: 'fix' })
+  expect(k.filled).toBe('/pet adopt') // the person sends it, or not
+  await ui.unmount()
+  expect(k.reads).toEqual([])
+
+  expect(await cardOf($, 'adopt')).toMatch(/Adopted: Pixel is your fox now/)
+  expect(prefsOf(k.disk)).toMatchObject({ name: 'Pixel', personality: 'A calm thing who waits.', hatched: Date.UTC(2026, 3, 2), species: 'fox', born: 'fox', seed: 7, asked: true })
+  const card = await cardOf($)
+  expect(card).toMatch(/^Pixel, Cachito the (\w+ )?fox,/)
+  expect(card).toContain('\nadopted from /buddy (hatched 2026-04-02): A calm thing who waits.')
+  const now = prefsOf(k.disk).stats as number[]
+  expect(now.indexOf(Math.max(...now))).toBe(2) // "calm" in its words: calm is the peak now
+  expect(card).toMatch(/^character: Hard to rattle, and /m)
+
+  expect(JSON.stringify(k.disk)).not.toMatch(/u-123|example\.com|private|axolotl|s3cr3t/)
+  expect(Object.keys(k.disk).filter(key => key.startsWith('pref.') && !KNOWN.includes(key.slice(5)))).toEqual([])
+  expect(k.writes).toEqual([]) // the config is read, never written
+  expect(k.reads).toEqual(['/home/me/.claude.json']) // read once, when asked
+
+  // the next chat of the same sitting gets no second hint, and reads nothing
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
+  k.state = {}
+  const again = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await again.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/adopt/)
+  await again.unmount()
+  expect(k.reads.length).toBe(1)
+})
+
+test('with the cachito-lean plugin the style is on whatever /pet lean says: the card, /pet lean and the note of a long chat do not say lean off', async ($, on) => {
+  mock.clock(on)
+  mock.store(on, { prefs: { species: 'penguin', born: 'penguin', voiceAsked: true } })
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  // what the other plugin does to the prompt: its section, under the id the two plugins share, while its own /lean is on
+  let plugin = true
+  on('prompt.compose', () => ({ sections: plugin ? [{ id: 'intro', text: 'core', scope: 'shared' }, { id: 'cachito:style', text: 'the style', scope: 'session' }] : [{ id: 'intro', text: 'core', scope: 'shared' }] }) as any)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+
+  const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
+  const styles = async () => (await $.prompt.compose(ask)).sections.filter((s: any) => s.id === 'cachito:style').length
+  const turn = async () => { const n = await styles(); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any); return n }
+  const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.find({ type: 'Text', text: /★/ }))?.text ?? ''; await b.unmount(); return text }
+  const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(await turn()).toBe(1) // the plugin's section, and the pet adds none: /pet lean was never given
+  // a long chat, 70k: with the style in, no note
+  expect(await band()).not.toMatch(/lean off|lean chosen/)
+  expect(await cmd('')).toMatch(/\nlean on: the style, by the cachito-lean plugin \(\/lean off takes it out\)\. In our bench it cost 14\.8% less on one long task/)
+  expect(await cmd('')).not.toMatch(/lean off:|lean chosen/)
+  expect(await cmd('lean')).toMatch(/^Lean on: the cachito-lean plugin adds the style to the system prompt, whatever \/pet lean says\. \/lean off takes it out\./)
+  expect(await cmd('lean off')).toMatch(/^Lean on: the cachito-lean plugin adds the style/) // the pet's own lever is off, and says who holds the style on
+
+  // /lean off in the other plugin: from the next prompt the section is gone, and the pet says what is true then
+  plugin = false
+  expect(await turn()).toBe(0)
+  expect(await band()).toMatch(/long chat, lean off: 70k/)
+  expect(await cmd('')).toMatch(/\nlean off: \/pet lean on adds the style/)
+  expect(await cmd('lean')).toMatch(/^Lean off\./)
+
+  // and back: the style is in again, the note goes
+  plugin = true
+  expect(await turn()).toBe(1)
+  expect(await band()).not.toMatch(/lean off/)
+  expect(await cmd('')).toMatch(/\nlean on: the style, by the cachito-lean plugin/)
+})
+
+test('one pet for two chats: a turn here keeps what another chat did meanwhile, the card and the band show the shared pet, and lean switched there counts here', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', trait: 'dry', asked: true })
+  // a pet of the version before the shop: its counters go at the first write, what its 5 efficient sessions had unlocked is owned
+  k.disk.pet = { variant: null, life: { input: 1000, cacheRead: 900 }, health: 60, turn: 40, cleanStreak: 0, efficientSessions: 5, bestSessionHit: 0.9, ko: false, drowned: 0, flowerDebt: 0, lastCheerAt: 0, pending: [] }
+  let context = 10_000
+  on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 0, cache_read_input_tokens: context, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+  const turn = async () => {
+    await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+    await $.prompt.compose({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any)
+    for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ;
+    await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  }
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.find({ type: 'Text', text: /★ \d+$/ }))?.text; await ui.unmount(); return t }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+
+  await turn() // the first use of the day and a turn
+  expect(k.disk.pet).toMatchObject({ coins: 6, affection: 6, days: 1, owned: ['shades'] })
+  expect(Object.keys(k.disk.pet).filter(key => /health|ko|efficient|drowned|flower|clean|best|pending/.test(key))).toEqual([])
+  expect(k.disk.pet.session).toBeUndefined() // the chat's own part stays out of the store
+  expect(k.disk.pet.issues).toBeUndefined()
+
+  // meanwhile another chat earned coins, bought a cap and counted its tokens
+  k.disk.pet = { ...k.disk.pet, coins: 40, affection: 70, owned: ['shades', 'cap'], turn: 155, life: { input: 9000, cacheRead: 8000 } }
+  await turn()
+  expect(k.disk.pet).toMatchObject({ coins: 41, affection: 71, owned: ['shades', 'cap'], life: { input: 19_000, cacheRead: 18_000 } }) // its progress, plus this turn
+  const card = await cardOf($)
+  expect(card).toMatch(/^41 stars; owns sunglasses, a travel cap\. \/pet shop$/m) // bought in the other chat
+  expect(card).not.toMatch(/cache/i) // 18k of 19k came from the cache: not said here, the figure is /pet audit's
+  expect(card).toMatch(/♥♥♡♡♡/)
+
+  // the skin button opens the parts something is owned for, one button each: a press turns that part alone, and the bubble tells what is on
+  expect(card).toMatch(/^  wears head: a travel cap$/m) // no choice made yet: the last thing owned, as before the parts
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const keys = async () => (await ui.findAll({ type: 'Button' })).map(b => b.key)
+  const said = async () => (await ui.findAll({ type: 'Text' })).map(t => t.text).join('\n')
+  const again = async () => { await ui.unmount(); ui = await $.ui.mount({ ...BAND, surface: 'terminal' }) } // a mounted band is the drawing of that moment
+  const press = async (key: string) => { await ui.press({ key }); await k.clock.advance(1); await again() } // the handler is not awaited by the press
+  expect(await keys()).toContain('skin')
+  await press('skin')
+  expect('pref.wear' in k.disk).toBe(false) // opening changes nothing
+  expect(await keys()).toEqual(['slot-head', 'slot-face', 'skin-done']) // nothing owned for the body, the feet or as an accessory
+  expect(await said()).toContain('head: a travel cap, face: –\na press changes that part')
+  await press('slot-face')
+  expect(prefsOf(k.disk).wear).toBe('cap shades') // the cap stays on
+  expect(await said()).toContain('head: a travel cap, face: sunglasses')
+  await press('slot-head')
+  expect(prefsOf(k.disk).wear).toBe('shades') // one hat owned: after it, a bare head
+  await press('slot-head')
+  expect(prefsOf(k.disk).wear).toBe('cap shades')
+  await press('slot-face')
+  await press('slot-head')
+  expect(prefsOf(k.disk).wear).toBe('none')
+  expect(await said()).toContain('head: –, face: –')
+  await press('slot-face')
+  expect(prefsOf(k.disk).wear).toBe('shades')
+  await press('skin-done')
+  expect(await keys()).toContain('skin')
+  expect(await keys()).not.toContain('slot-head')
+  await press('skin')
+  await k.clock.advance(21_000) // left alone, the row closes by itself
+  await again()
+  expect(await keys()).not.toContain('slot-head')
+  await ui.unmount()
+
+  // the other chat writes again: the card shows it at once and writes nothing; the band follows at its next look
+  k.disk.pet = { ...k.disk.pet, coins: 12 }
+  expect(await cardOf($)).toMatch(/^12 stars;/m)
+  expect(k.disk.pet.coins).toBe(12)
+  k.disk.pet = { ...k.disk.pet, affection: 150 }
+  await k.clock.advance(11_000) // past the 10 s between two looks
+  expect(await head()).toMatch(/^\w+  ★ 12$/) // the stars on the band follow the store
+  expect(await head()).not.toMatch(/[♥♡]/)
+  expect(await cardOf($)).toMatch(/♥♥♥♡♡/)
+
+  // this chat grows long, lean off: a note, and the turn earns its coin like any other
+  context = 90_000
+  await turn()
+  expect(k.disk.pet).toMatchObject({ coins: 13, affection: 151 })
+  // lean is switched on in another chat: here the style waits (the chat is over 30k)
+  elsewhere(k.disk, { style: true })
+  await turn()
+  expect(k.disk.pet.coins).toBe(14)
+  expect(await cardOf($)).toMatch(/lean chosen, the style starts at the next compaction or chat/)
+})
+
+test('/pet demo shows every mood in turn, also while the pet sleeps, and the egg goes through all its phases', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', trait: 'dry', trait2: 'shy', asked: true })
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const look = async () => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const say = (await ui.findAll({ type: 'Text' })).map(x => x.text).filter(t => t && !/★ \d+$|^[─·]$/.test(t)).join(' | ')
+    const drawn = JSON.stringify(await ui.find({ type: 'Raster' }))
+    await ui.unmount()
+    return { say, drawn }
+  }
+  await k.clock.advance(5 * 60_000 + 3_000) // the chat stands still: the pet falls asleep
+  expect((await look()).say).toBe('zzz')
+  await k.clock.advance(15_000) // said once: then it sleeps with no bubble
+  expect((await look()).say).toBe('')
+
+  expect(await cardOf($, 'demo')).toMatch(/^Cachito demo: egg, seedling/)
+  // one look per tick, 5 s a mood
+  const slots: { say: string, drawn: string }[][] = []
+  for (let mood = 0; mood < 10; mood++) {
+    const seen = []
+    for (let i = 0; i < 10; i++) { await k.clock.advance(500); seen.push(await look()) }
+    slots.push(seen)
+  }
+  const says = slots.map(seen => [...new Set(seen.map(x => x.say))])
+  // the sad and the ko drawings are still in the zoo, and no mood leads to them: the demo leaves them out
+  const [egg, seedling, healthy, bloom, cheer, dizzy, stomach, loop, bloated, sleep] = says as [string[], string[], string[], string[], string[], string[], string[], string[], string[], string[]]
+  // the egg: still, then rocking, then cracked
+  expect(egg).toEqual(['an egg. something moves inside', 'the shell is cracking'])
+  const eggs = slots[0]!.map(x => x.drawn)
+  expect(new Set(eggs).size).toBe(4) // whole, leaning left, leaning right, cracked
+  expect(eggs[0]).toBe(eggs[1]) // it starts still
+  expect(new Set(eggs.slice(-3)).size).toBe(1) // and ends cracked
+  // every mood says its own line: none of them is the sleeping pet's
+  for (const calm of [seedling, healthy, bloom]) expect(calm.join()).toMatch(/short chat|small context/)
+  expect(cheer.join()).toMatch(/^grew a stage/) // the cheer of the demo is the one for growing: none is about the cache
+  expect(dizzy.join()).toMatch(/re-read, unchanged: app\.js/)
+  expect(stomach.join()).toMatch(/cache rebuilt: tools changed mid-chat/)
+  expect(loop.join()).toMatch(/npm failed 3 times in a row/)
+  expect(bloated.join()).toMatch(/context 91% full/)
+  expect(sleep).toEqual(['zzz'])
+  expect(says.slice(0, 9).flat()).not.toContain('zzz')
+  expect(says.flat().join()).not.toMatch(/worn|low health|out cold|flat out/)
+  // each mood has its own drawing
+  expect(new Set(slots.map(seen => seen[5]!.drawn)).size).toBeGreaterThanOrEqual(9)
+
+  // the demo over, the pet is asleep again
+  await k.clock.advance(1000)
+  expect((await look()).say).toBe('') // its zzz was said before the demo: nothing new
+})
+
+test('a prompt after a pause over an hour in a chat of 100k: the pet says the cache expired and offers /compact, and compacts nothing itself', async ($, on) => {
+  const clock = mock.clock(on)
+  // a budget saved by an earlier version: ignored
+  const disk: Record<string, any> = { prefs: { species: 'penguin', born: 'penguin', trait: 'dry', seed: 7, budget: 50_000, diet: false, style: true } }
+  on('store.get', (_, e) => ({ value: structuredClone(disk[e.key]) }))
+  on('store.set', (_, e) => { disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('prompt.submit', (_, e) => ({ text: e.text }) as any)
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  let filled = ''
+  on('prompt.fill', (_, e) => { filled = e.text; return { isFilled: true, text: e.text, cursor: 0 } })
+  on('prompt.compose', () => ({ sections: [] }) as any)
+  let compacted = 0
+  on('session.compact', () => { compacted++; return { messages: [{ role: 'user', text: 'summary', toolUses: [], toolResults: [] }] } as any })
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 120_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+  const say = (text: string, command?: any) => $.prompt.submit({ text, ...(command && { command }), wait: false, origin: 'user' } as any)
+  const turn = async () => { await $.prompt.compose({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any) }
+  const texts = async () => { const b = await $.ui.mount({ ...BAND, surface: 'terminal' }); const all = (await b.findAll({ type: 'Text' })).map((x: any) => x.text).join(' | '); await b.unmount(); return all }
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.advance(1000) // the mock clock starts at 0, which the engine reads as "no request yet"
+  await say('go'); await turn()
+  expect(await texts()).not.toMatch(/cache expired/)
+
+  await clock.advance(61 * 60_000)
+  await say('/pet', { name: 'pet', args: '' })
+  expect(await texts()).not.toMatch(/cache expired/) // a slash command sends no request
+  await say('back')
+  expect(await texts()).toMatch(/cache expired: 120k sent again in full \| Restarting small costs less: \/compact, or\n\/clear if the task is done\./)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await ui.press({ key: 'fix' })
+  await ui.unmount()
+  expect(filled).toBe('/compact') // in the prompt box only: the person sends it, or not
+  await turn()
+  await clock.advance(5000)
+  expect(compacted).toBe(0) // over the old budget for two turns, and the mod compacted nothing. Under 100k and within the hour: engine/engine.test.js
+
+  // the saved budget is not carried into the preferences this version writes
+  await $.command.run({ command: 'pet', args: 'hide' } as any)
+  expect(prefsOf(disk)).toMatchObject({ hidden: true, style: true, diet: false })
+  expect('pref.budget' in disk).toBe(false)
+})
+
+test('under the bench the person\'s store is neither read nor written, and the lever is the arm\'s variable only', async ($, on) => {
+  mock.clock(on)
+  // the person has a pet, and the style on in the preferences (with the diet of an earlier version): none of it may reach a run, and no run may change it
+  const person = { pet: { health: 50, efficientSessions: 5, drowned: 0 }, prefs: { species: 'fox', born: 'fox', seed: 7, diet: true, style: true }, chats: {} }
+  const disk: Record<string, any> = structuredClone(person)
+  let touched = 0
+  on('store.get', (_, e) => { touched++; return { value: structuredClone(disk[e.key]) } })
+  on('store.set', (_, e) => { touched++; disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  const env: Record<string, string> = { HOME: '/home/me', CACHITO_BENCH: '/bench/out/cachito-out/style-1' }
+  on('env.get', (_, e) => ({ value: env[e.name] }))
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('prompt.submit', (_, e) => ({ text: e.text }) as any)
+  on('prompt.compose', () => ({ sections: [] }) as any)
+  const files: Record<string, string> = {}
+  on('fs.write', (_, e) => { files[e.path] = e.text; return { value: undefined } })
+  on('fs.list', () => ({ value: [] }))
+  const LONG = 'x'.repeat(12_000)
+  on('tool.call', () => ({ result: { stdout: LONG, stderr: '', interrupted: false } }) as any)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+  const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
+  const styled = async () => (await $.prompt.compose(ask)).sections.some((s: any) => s.id === 'cachito:style')
+  const bash = async () => ((await $.tool.call({ tool: 'Bash', command: 'cat big.log', tool_use_id: 't1' } as any)) as any).result.stdout as string
+
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: false })
+  // an arm with no lever: the person's style does not apply
+  expect(await styled()).toBe(false)
+  expect(await bash()).toBe(LONG)
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ;
+  await $.turn.complete({ answer: '' } as any)
+  // the card is this run's own pet: a newborn with the coins of its one turn, not the person's
+  const card = ((await $.command.run({ command: 'pet', args: '' } as any)) as any).text as string
+  expect(card).toMatch(/^6 stars; owns nothing yet/m)
+  expect(card).toMatch(/^affection 6 over 1 day of use/m)
+  // a command that writes preferences stays in memory too
+  await $.command.run({ command: 'pet', args: 'hide' } as any)
+  // the arm's variable turns the style on; the old variable of the diet does nothing, and no file is written
+  env.CACHITO_STYLE = '1'
+  env.CACHITO_DIET = '1'
+  await $.session.end({ reason: 'clear', sessionId: 's0', resume: { id: 's0' } } as any)
+  expect(await styled()).toBe(true)
+  expect(await bash()).toBe(LONG)
+  expect(Object.keys(files)).toEqual([])
+  await $.session.end({ reason: 'exit', sessionId: 's1' } as any)
+
+  expect(touched).toBe(0)
+  expect(disk).toEqual(person)
+})
+
+/** The band as drawn: its texts, its buttons, and how many hearts the pet's drawing holds. */
+async function drawn($: any) {
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const said = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text as string)
+  const buttons = (await ui.findAll({ type: 'Button' })).map((x: any) => x.text as string)
+  const bytes = Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells), c => c.charCodeAt(0))
+  const cells = new Uint32Array(bytes.buffer)
+  const hearts = [...cells].filter((c, i) => i % 3 === 0 && c === 0x2665).length
+  return { ui, said, buttons, hearts }
+}
+
+test('cuddles: /pet pet and the pet button count them with the time of the last; hearts rise for a couple of seconds with a line in its character; the first three of a day bring stars and affection', async ($, on) => {
+  // rigor is the peak and warmth the second: the rigorous one speaks most lines, the warm one some
+  const k = home(on, {}, { species: 'bunny', born: 'bunny', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const t0 = Date.UTC(2026, 10, 12, 12)
+  let b = await drawn($)
+  expect(b.buttons).toContain('pet')
+  expect(b.hearts).toBe(0)
+  expect(prefsOf(k.disk)).toMatchObject({ stats: [20, 50, 40, 90, 70] })
+  expect(await cardOf($)).not.toMatch(/petted/)
+  const name = prefsOf(k.disk).name
+  expect(b.said).toContain(`${name}  ★ 0`)
+  expect(await cardOf($)).toMatch(/♡♡♡♡♡ calm$/m)
+
+  // the button: counted, hearts on the drawing, a line in the bubble. Rigor 90 and warmth 70 share the voice: this one is the warm one's
+  await b.ui.press({ key: 'pet' })
+  await b.ui.unmount()
+  expect(prefsOf(k.disk)).toMatchObject({ cuddles: 1, cuddled: t0 })
+  b = await drawn($)
+  expect(b.said).toContain('I like it when you do that')
+  expect(b.hearts).toBeGreaterThan(0)
+  expect(b.said).toContain(`${name}  ★ 7`) // the stars move with what the cuddle earned; the rising hearts are on the drawing
+  expect(b.said.join(' ')).not.toMatch(/happy|calm|♡/)
+  expect(await cardOf($)).toMatch(/♡♡♡♡♡ happy$/m) // content after a cuddle; 7 of affection are not a heart yet
+  expect(k.disk.pet).toMatchObject({ coins: RULES.coinsFirstUse + RULES.coinsCuddle, affection: 7, dayCuddles: 1, days: 1 })
+  await b.ui.unmount()
+  // the hearts move while they last
+  const seen = new Set<string>()
+  for (let i = 0; i < 3; i++) { await k.clock.advance(500); const d = await drawn($); seen.add(JSON.stringify((await d.ui.find({ type: 'Raster' }))!.props.cells)); expect(d.said).toContain('I like it when you do that'); await d.ui.unmount() }
+  expect(seen.size).toBe(3)
+  // after a couple of seconds the hearts are gone; the line holds the bubble for 5 seconds in all, and then the pet says what it said before
+  await k.clock.advance(1_500)
+  b = await drawn($)
+  expect(b.hearts).toBe(0)
+  expect(b.said).toContain('I like it when you do that')
+  await b.ui.unmount()
+  await k.clock.advance(2_500)
+  b = await drawn($)
+  expect(b.said.join(' ')).not.toMatch(/I like it when you do that/)
+  await b.ui.unmount()
+
+  // the command: the other line of its character, the count, and the time of this one
+  await k.clock.advance(60_000)
+  expect(await cardOf($, 'pet')).toBe('Miro: pat received, in good order  (petted 2 times, +2 stars)')
+  expect(prefsOf(k.disk)).toMatchObject({ cuddles: 2, cuddled: t0 + 5_500 + 60_000 })
+  b = await drawn($)
+  expect(b.said).toContain('pat received, in good order')
+  expect(b.hearts).toBeGreaterThan(0)
+  await b.ui.unmount()
+  expect(await cardOf($)).toMatch(/^petted 2 times, last just now$/m)
+
+  // a cuddle in another chat is counted too: the store's count is the one that grows
+  elsewhere(k.disk, { cuddles: 9 })
+  expect(await cardOf($, 'pet')).toMatch(/petted 10 times, \+2 stars\)$/)
+
+  // three cuddles of the day paid: 5 for the first use and 2 each, a heart filled, and no token was asked for
+  expect(k.disk.pet).toMatchObject({ coins: 11, affection: 11, dayCuddles: 3 })
+  expect((await drawn($)).said).toContain(`${name}  ★ 11`)
+  expect(await cardOf($)).toMatch(/♥♡♡♡♡ happy$/m)
+  expect(k.filled).toBe('')
+  // a count that is not a number reads as none
+  elsewhere(k.disk, { cuddles: 'many', cuddled: null })
+  k.state = {}
+  expect(await cardOf($, 'pet')).toMatch(/petted once\)$/) // the fourth of the day: as welcome, and no coins
+  expect(k.disk.pet.coins).toBe(11)
+})
+
+test('on a light theme white gets a darker edge where it touches the background, and stays white inside; on a dark one nothing changes', async ($, on) => {
+  const k = home(on, {}, { species: 'bunny', born: 'bunny', seed: 7, name: 'Miro', trait: 'dry', trait2: 'shy', asked: true })
+  k.disk.pet = { animals: ['chick'] }
+  const inks = async (theme: string) => {
+    Object.assign(k, { theme }) // the theme is read when a session starts
+    await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const cells = new Uint32Array(Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells as string), c => c.charCodeAt(0)).buffer)
+    await ui.unmount()
+    return new Set([...cells].filter((_, i) => i % 3 !== 0))
+  }
+  const dark = await inks('dark'), light = await inks('light')
+  expect(dark.has(0xf5f5f5)).toBe(true)
+  expect(dark.has(0x939393)).toBe(false)
+  expect(light.has(0xf5f5f5)).toBe(true) // the inside
+  expect(light.has(0x939393)).toBe(true) // the edge: 60% of the white
+  expect(light.has(0xf48fb1)).toBe(true) // the pink of the ears is not pale: untouched
+  // a bright yellow is as faint on white as white is: the plain chick gets the same edge
+  await cardOf($, 'animal chick')
+  const chick = await inks('light')
+  expect([chick.has(0xffd54f), chick.has(0x99802f)]).toEqual([true, true]) // inside, and 60% of it at the edge
+  expect((await inks('dark')).has(0x99802f)).toBe(false)
+})
+
+test('the golden coat: the last row of the shop for 300 stars, a part of the skin with golden and plain, a colour that things to wear leave alone; on a light theme its yellow gets the edge', async ($, on) => {
+  const k = home(on, {}, { species: 'bunny', born: 'bunny', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.disk.pet = { coins: 310, affection: 310, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const look = async () => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const cells = new Uint32Array(Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells as string), c => c.charCodeAt(0)).buffer)
+    const keys = (await ui.findAll({ type: 'Button' })).map((b: any) => b.key)
+    await ui.unmount()
+    return { inks: new Set([...cells].filter((_, i) => i % 3 !== 0)), keys }
+  }
+  const press = async (key: string) => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key }); await k.clock.advance(1); await ui.unmount() }
+  const WHITE = 0xf5f5f5, GOLD = 0xffcb14, GLINT = 0xfff6cf // the bunny's white, the same under the golden coat, and the pale glint on it
+
+  // not owned: sold apart from the things to wear, after them, and nothing of it on the pet
+  expect(await cardOf($, 'shop')).toMatch(/\n  sombrero +a sombrero +70  head\n\n  golden +a golden coat +300  coat\n\n  penguin +penguin +100  animal\n/)
+  expect(await cardOf($, 'wear golden')).toMatch(/^Not yours yet: golden\./)
+  const plain = await look()
+  expect([plain.inks.has(WHITE), plain.inks.has(GOLD), plain.keys.includes('skin')]).toEqual([true, false, false])
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the bunny, /)
+
+  // bought: 300 stars and no affection, on at once, on the card and in the shop
+  expect(await cardOf($, 'shop golden')).toBe('Bought a golden coat for 300 stars, 10 left. Miro wears it now, coat: /pet wear golden takes it off.')
+  expect(k.disk.pet).toMatchObject({ coins: 10, affection: 310, owned: ['golden'] })
+  expect(prefsOf(k.disk).wear).toBe('golden')
+  const golden = await look()
+  expect([golden.inks.has(WHITE), golden.inks.has(GOLD), golden.inks.has(GLINT), plain.inks.has(GLINT)]).toEqual([false, true, true, false])
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the golden bunny, .*(\n.*)*\n10 stars; owns a golden coat\. \/pet shop\n  wears coat: a golden coat$/m)
+  expect(await cardOf($, 'shop')).toMatch(/\n\n  golden +a golden coat +300  coat +yours, worn\n\n(.*\n)+\nMiro wears coat: a golden coat\.\n/)
+  expect(await cardOf($, 'buy golden')).toMatch(/^You already have a golden coat/)
+
+  // back to the usual colour and to golden again, by command and by the coat's button; the choice is kept
+  expect(await cardOf($, 'wear plain')).toBe('Miro wears nothing.')
+  expect(prefsOf(k.disk).wear).toBe('none plain')
+  expect((await look()).inks.has(GOLD)).toBe(false)
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the bunny, /)
+  expect(await cardOf($, 'skin')).toMatch(/^Miro's skin\n  coat  plain\n\/pet wear <item> puts it on/)
+  expect(await cardOf($, 'wear golden')).toBe('a golden coat goes on, coat.\nMiro wears coat: a golden coat.')
+  expect(await cardOf($, 'skin')).toMatch(/^Miro's skin\n  coat  a golden coat\n/)
+  expect(golden.keys).toContain('skin')
+  await press('skin')
+  expect((await look()).keys).toContain('slot-coat')
+  await press('slot-coat')
+  expect([prefsOf(k.disk).wear, (await look()).inks.has(GOLD)]).toEqual(['none plain', false])
+  await press('slot-coat')
+  expect([prefsOf(k.disk).wear, (await look()).inks.has(GOLD)]).toEqual(['golden', true])
+
+  // a colour, not a thing worn: taking everything off leaves it, and a thing put on goes over it
+  k.disk.pet = { ...k.disk.pet, owned: ['mug', 'golden'] }
+  await k.clock.advance(11_000)
+  expect(await cardOf($, 'wear mug')).toBe('a coffee mug goes on, accessory.\nMiro wears accessory: a coffee mug, coat: a golden coat.')
+  expect(await cardOf($, 'wear none')).toBe('Miro wears nothing; the golden coat stays.')
+  expect([prefsOf(k.disk).wear, (await look()).inks.has(GOLD)]).toEqual(['golden', true])
+
+  // every animal and stage has the tint; asleep it stays
+  for (const sp of Object.values(zoo.pack.animals) as any[]) expect(Object.keys(sp.tints.golden).length).toBeGreaterThan(0)
+
+  // a light theme: the bright gold would fade on white, so where it touches the background it takes the coat's own amber, never the mud a darkened yellow is
+  Object.assign(k, { theme: 'light' })
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const light = await look()
+  expect([light.inks.has(GOLD), light.inks.has(0xf09a00), light.inks.has(0x997a0c)]).toEqual([true, true, false])
+})
+
+test('a pet born golden has the coat for nothing: on from the start, plain by choice, never asked to pay', async ($, on) => {
+  const k = home(on, {}, { species: 'chick', born: 'chick', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.disk.pet = { variant: 'golden', coins: 400, affection: 400, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] } // a store of before the coat
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the golden chick, /)
+  expect(await cardOf($, 'shop')).toMatch(/\n  golden +a golden coat +300  coat +yours, worn\n/)
+  expect(await cardOf($, 'buy golden')).toMatch(/^You already have a golden coat/)
+  expect(k.disk.pet.coins).toBe(400)
+  expect(await cardOf($, 'wear plain')).toBe('Miro wears nothing.')
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the chick, /)
+  expect(await cardOf($, 'wear golden')).toBe('a golden coat goes on, coat.\nMiro wears coat: a golden coat.')
+})
+
+// a skin pack as a person's folder holds it: an animal, a hat and a coat (the example of docs/skins.md, cut short)
+const ROBOT = ['....DDDD....', '..BBBBBBBB..', '.BBBBBBBBBB.', '.BBkBBBBkBB.', '.BBBBBBBBBB.', '.BBBDDDDBBB.', '..BBBBBBBB..', '..DBBBBBBD..', '..BBBBBBBB..', '..DD....DD..']
+const PACK = { format: 1, id: 'example', name: 'Example', animals: { robot: { name: { en: 'robot', es: 'robot de lata' }, palette: { B: '#90a4ae', D: '#546e7a' }, states: { adult: { frames: [ROBOT] } } } }, items: { tophat: { part: 'head', name: { en: 'a top hat' }, fallback: [{ anchor: 'head', art: ['.uuuu.', '.RRRR.', 'uuuuuu'] }] } }, coats: { mint: { name: { en: 'a mint coat' }, ramp: ['#00796b', '#4db6ac', '#b2dfdb'] } } }
+const START = { cwd: '/w/cachito', surface: 'terminal', isInteractive: true } as const
+
+test('a skin pack in the person\'s folder: what it brings is theirs at once, for no stars, in /pet skins, /pet animal and the skin menu with the pack\'s name', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.disk.pet = { coins: 12, affection: 400, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
+  k.skins = { 'example.json': PACK, 'notes.txt': 'not a pack' }
+  await $.session.start(START)
+  expect(k.skinReads).toEqual(['/home/me/.claude/cachito-skins/example.json']) // only the .json files are read
+
+  expect(await cardOf($, 'skins')).toBe([
+    'Skin packs in /home/me/.claude/cachito-skins: 1 loaded.',
+    '  example.json  Example (example)  animals: robot; items: tophat; coats: mint',
+    'What a pack brings is yours at once and costs no stars: /pet skin shows the things, /pet animal the animals.',
+    'Format, an example to copy and how to try it: https://github.com/silirim/cachito-pet/blob/main/docs/skins.md',
+  ].join('\n'))
+
+  // the animal: listed with its pack, picked for nothing, drawn; not a thing of the shop
+  expect(await cardOf($, 'animal')).toBe('Pick one of: fox, robot (Example).\nOthers, 100 stars each, once: penguin, chick, dog, bunny, cactus. /pet shop <animal> unlocks one.')
+  expect(await cardOf($, 'animal robot')).toBe('Cachito is now a robot (Example).')
+  expect(prefsOf(k.disk).species).toBe('robot')
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the (\w+ )?robot \(Example\),/)
+  expect(await cardOf($, 'shop')).not.toMatch(/robot|tophat|mint/)
+  expect(await cardOf($, 'shop robot')).toMatch(/^Nothing called robot in the shop\./)
+  expect(k.disk.pet.coins).toBe(12) // no stars taken, none given
+  expect(k.disk.pet.owned).toEqual([])
+  expect(k.disk.pet.animals ?? []).toEqual([])
+  const look = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; const keys = (await ui.findAll({ type: 'Button' })).map(x => x.text); await ui.unmount(); const d = new Uint32Array(Uint8Array.from(atob(String(r.cells)), ch => ch.charCodeAt(0)).buffer); const inks = new Set([...d].filter((_, i) => i % 3 !== 0)); return { inks, keys, columns: r.columns, rows: r.rows } }
+  const robot = await look()
+  expect([robot.inks.has(0x90a4ae), robot.inks.has(0x546e7a), robot.keys.includes('skin')]).toEqual([true, true, true])
+
+  // the things: in /pet skin with the pack's name, put on by choice, the hat set by the fallback over the robot's head
+  expect(await cardOf($, 'skin')).toBe("Miro's skin\n  head    –\n  coat    plain\n  animal  robot (Example)\n/pet wear <item> puts it on, or takes it off when it is on; /pet wear none takes everything off; /pet skin shows each part. One thing on each part: head, face, body, feet, accessory. A coat is a colour: /pet wear plain takes it off, /pet wear golden puts the golden one on.")
+  expect(await cardOf($, 'wear tophat')).toBe('a top hat (Example) goes on, head.\nMiro wears head: a top hat (Example).')
+  const hat = await look()
+  expect([hat.inks.has(0x42a5f5), hat.inks.has(0xef5350), robot.inks.has(0x42a5f5)]).toEqual([true, true, false])
+  expect(await cardOf($, 'wear mint')).toBe('a mint coat (Example) goes on, coat.\nMiro wears head: a top hat (Example), coat: a mint coat (Example).')
+  const mint = await look()
+  expect([mint.inks.has(0x90a4ae), mint.inks.has(0x42a5f5)]).toEqual([false, true]) // the body takes the coat's colours, the hat keeps its own
+  expect(await cardOf($, 'wear plain')).toBe('Miro wears head: a top hat (Example).')
+  expect((await look()).inks.has(0x90a4ae)).toBe(true)
+  // the skin menu on the band: a button for each part the pack gave a thing for, and the animal
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await ui.press({ key: 'skin' }); await k.clock.advance(1); await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['head', 'coat', 'animal', 'done'])
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ').replace(/\n/g, ' ')).toContain('head: a top hat (Example), coat: plain, animal: robot (Example)')
+  await ui.unmount()
+  // a shipped thing on the pack's animal, and the pack's hat on a shipped one: both are drawn
+  k.disk.pet.owned = ['shades']; k.state = {}
+  await $.session.start(START)
+  await cardOf($, 'wear shades')
+  expect((await look()).inks.has(0x263238)).toBe(true)
+  await cardOf($, 'animal fox')
+  const fox = await look()
+  expect([fox.inks.has(0x42a5f5), fox.inks.has(0x263238), fox.inks.has(0xf57c00)]).toEqual([true, true, true])
+})
+
+test('a pack that is not sound is left out whole and told by /pet skins; no folder, a link, a file too big: the band is drawn all the same', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  await $.session.start(START)
+  expect(await cardOf($, 'skins')).toBe('No skin packs. A pack is one .json file in /home/me/.claude/cachito-skins: put it there and run /pet skins.\nFormat, an example to copy and how to try it: https://github.com/silirim/cachito-pet/blob/main/docs/skins.md')
+
+  const bad = structuredClone(PACK) as any
+  bad.animals.robot.palette.B = 'red'; bad.items.tophat.part = 'tail'
+  k.skins = { 'a-broken.json': bad, 'b-half.json': '{ "format": 1,', 'c-link.json': 'link', 'd-huge.json': 600 * 1024, 'e-clash.json': { ...PACK, id: 'clash', animals: undefined, coats: undefined, items: { mug: PACK.items.tophat } }, 'f-good.json': { ...PACK, animals: undefined, coats: undefined } }
+  const said = await cardOf($, 'skins') // read anew, with no restart
+  expect(said.split('\n').slice(0, 12)).toEqual([
+    'Skin packs in /home/me/.claude/cachito-skins: 1 loaded, 5 left out.',
+    '  a-broken.json  left out, nothing of it is used:',
+    '      animals.robot.palette.B: a colour is written #rrggbb',
+    '      items.tophat.part: must be one of head, face, body, feet, accessory',
+    '  b-half.json    left out, nothing of it is used:',
+    expect.stringMatching(/^      file: not JSON/),
+    '  c-link.json    left out, nothing of it is used:',
+    '      file: not a regular file (a link is not followed)',
+    '  d-huge.json    left out, nothing of it is used:',
+    '      file: larger than 512 KiB',
+    '  e-clash.json   left out, nothing of it is used:',
+    '      items.mug: the name "mug" is taken already',
+  ])
+  expect(said).toContain('  f-good.json    Example (example)  items: tophat')
+  expect(k.skinReads.some(p => /c-link|d-huge/.test(p))).toBe(false) // neither was opened
+  // nothing of a refused pack is there: no robot, though its file also held a sound hat
+  expect(await cardOf($, 'animal robot')).toMatch(/^No animal called robot\.\nPick one of: fox\./)
+  expect(await cardOf($, 'wear tophat')).toContain('a top hat (Example) goes on')
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Raster' })).toBeTruthy()
+  await ui.unmount()
+
+  // a stranger's pack: its file name and what it says wrong are shown with no escape sequence and no control (U+009B is CSI in one character)
+  const ESC = '\u001b[2J\u001b]0;owned\u0007', C1 = '\u009b31m'
+  k.skins = { [`evil${ESC}${C1}.json`]: { ...PACK, [`x${ESC}${C1}`]: 1 }, [`half${C1}.json`]: `{ "format": ${ESC}${C1}`, [`good${ESC}.json`]: { ...PACK, animals: undefined, coats: undefined } }
+  const hostile = await cardOf($, 'skins')
+  expect(hostile.split('\n').slice(0, 6)).toEqual([
+    'Skin packs in /home/me/.claude/cachito-skins: 1 loaded, 2 left out.',
+    '  evil 31m.json  left out, nothing of it is used:',
+    '      pack: unknown field "x 31m"',
+    '  good.json      Example (example)  items: tophat',
+    '  half 31m.json  left out, nothing of it is used:',
+    expect.stringMatching(/^      file: not JSON \(/),
+  ])
+  expect(/[\p{Cc}\p{Cf}\p{Co}\p{Cs}\p{Zl}\p{Zp}]/u.test(hostile.replace(/\n/g, ''))).toBe(false)
+
+  // the folder cannot be listed at all: no pack, and the pet is there
+  k.skins = null
+  expect(await cardOf($, 'skins')).toMatch(/^No skin packs\./)
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the (\w+ )?fox,/)
+})
+
+test('an animal of a pack that is gone: the pet is the animal it was born as again, says so gently once, and is back when the pack is', async ($, on) => {
+  // a pet shown as an animal no installed pack has (the two bonus animals of earlier versions are such now)
+  const k = home(on, {}, { species: 'robot', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  await $.session.start(START)
+  expect(prefsOf(k.disk)).toMatchObject({ species: 'fox', born: 'fox', missing: 'robot' })
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the (\w+ )?fox,/)
+  await k.clock.advance(600)
+  const texts = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map(x => x.text).join(' | '); await ui.unmount(); return t }
+  expect(await texts()).toMatch(/My other look came from a skin pack that is\nnot here now, so I am a fox again\. \| Put the pack back and I change back\. \/pet\nskins shows the packs\./)
+  await k.clock.advance(21_000)
+  expect(await texts()).not.toContain('other look')
+  await $.session.start(START) // said once: the next start is silent
+  await k.clock.advance(600)
+  expect(await texts()).not.toContain('other look')
+
+  // the pack is put in the folder: the robot is back, with no word and no star spent
+  k.skins = { 'example.json': PACK }
+  expect(await cardOf($, 'skins')).toContain('1 loaded')
+  expect(prefsOf(k.disk)).toMatchObject({ species: 'robot', born: 'fox', missing: '' })
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the (\w+ )?robot \(Example\),/)
+
+  // born as such an animal, and no pack: a shipped animal is rolled once and kept, and the old one still comes back with its pack
+  k.skins = {}
+  forget(k.disk); k.disk.prefs = { species: 'yeti', born: 'yeti', seed: 7, name: 'Miro', asked: true, voiceAsked: true }; k.state = {}
+  await $.session.start(START)
+  const now = prefsOf(k.disk)
+  expect(Object.keys(zoo.pack.animals)).toContain(now.species)
+  expect(now).toMatchObject({ born: now.species, missing: 'yeti' })
+  k.state = {}
+  await $.session.start(START)
+  expect(prefsOf(k.disk).species).toBe(now.species) // not rolled again
+  // picking another animal by hand is a choice: the old one is not brought back over it
+  k.disk.pet = { ...k.disk.pet, animals: ['dog'] }
+  await cardOf($, 'animal dog')
+  expect(prefsOf(k.disk)).toMatchObject({ species: 'dog', missing: '' })
+})
+
+test('under the bench no pack is read, and a pet whose animal is of a pack keeps it in the store', async ($, on) => {
+  const k = home(on, {}, { species: 'robot', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  k.skins = { 'example.json': PACK }
+  await $.session.start({ ...START, isInteractive: false })
+  expect(k.skinReads).toEqual([])
+  expect(await cardOf($, 'skins')).toBe('No skin packs: under the bench none is read.')
+  expect(await cardOf($, 'animal robot')).toMatch(/^No animal called robot\.\nPick one of: (?!.*robot)/)
+  expect(prefsOf(k.disk)).toMatchObject({ species: 'robot', born: 'fox' })
+  expect(prefsOf(k.disk).missing).toBeUndefined()
+})
+
+
+test('the shop: stars buy things to wear, the catalogue says what is owned, and what is worn is drawn on every stage and under a note', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.disk.pet = { coins: 25, affection: 25, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const raster = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = JSON.stringify((await ui.find({ type: 'Raster' }))!.props.cells); await ui.unmount(); return r }
+  /** The drawing with the item on, and with it off, at the same instant. */
+  const both = async (item: string) => { const worn = await raster(); await cardOf($, `wear ${item}`); const off = await raster(); await cardOf($, `wear ${item}`); return [worn, off] }
+
+  expect(SHOP.map(i => [i.id, i.slot, i.name])).toEqual(Object.entries(zoo.pack.items).map(([id, i]) => [id, i.part, i.name.en])) // every item of the catalogue has its drawing, in the same order, with the same part and name
+  const shop = await cardOf($, 'shop')
+  expect(shop).toMatch(/^CACHITO SHOP · you have 25 stars$/m)
+  for (const i of SHOP) expect(shop).toMatch(new RegExp(`^  ${i.id} +${i.name} +${i.price}  ${i.slot}$`, 'm')) // each thing with its part, named as the skin menu names it
+  expect(shop).not.toMatch(/crown|beside|neck/) // the crown is not sold
+  expect(shop).not.toMatch(/Miro wears/) // nothing owned: nothing to tell
+  expect(shop).toContain('Stars: 1 a turn (the first 30 of a day), 2 a cuddle (the first 3 of a day), 5 at the first use of a day.')
+  expect(shop).not.toMatch(/streak|bonus|lucky|timer|!/i)
+
+  // too dear, unknown, not owned: said plainly, nothing taken
+  expect(await cardOf($, 'buy sombrero')).toMatch(/^a sombrero costs 70 stars and you have 25\. Stars come with use: /)
+  expect(await cardOf($, 'buy yacht')).toMatch(/^Nothing called yacht in the shop\.\n\nCACHITO SHOP/)
+  expect(await cardOf($, 'shop yacht')).toMatch(/^Nothing called yacht in the shop\.\n\nCACHITO SHOP/) // /pet shop <item> buys, /pet buy is its other name
+  expect(await cardOf($, 'buy')).toMatch(/^Pick one: \/pet shop <item>\.\n\nCACHITO SHOP/)
+  expect(shop).toMatch(/^\/pet shop <item> buys one\./m)
+  expect(shop).not.toMatch(/\/pet buy/) // the help names one way only
+  expect(await cardOf($, 'wear mug')).toMatch(/^Not yours yet: mug\. You have: nothing yet\./)
+  expect(k.disk.pet.coins).toBe(25)
+  const bare = await raster()
+
+  // bought: paid in coins and not in affection, owned, worn at once
+  expect(await cardOf($, 'buy mug')).toBe('Bought a coffee mug for 12 stars, 13 left. Miro wears it now, accessory: /pet wear mug takes it off.')
+  expect(k.disk.pet).toMatchObject({ coins: 13, affection: 25, owned: ['mug'] })
+  expect(prefsOf(k.disk).wear).toBe('mug')
+  expect(await cardOf($, 'buy mug')).toMatch(/^You already have a coffee mug/)
+  expect(await cardOf($, 'shop')).toMatch(/^  mug +a coffee mug +12  accessory +yours, worn$/m)
+  expect(await cardOf($, 'shop')).toMatch(/\n\nMiro wears accessory: a coffee mug\.\n\n\/pet shop/)
+  expect(await cardOf($)).toMatch(/^13 stars; owns a coffee mug\. \/pet shop\n  wears accessory: a coffee mug$/m)
+  expect(await raster()).not.toBe(bare) // on the baby
+
+  // on the adult and on the crowned one; a hat takes the part of the crown
+  const stages = [bare]
+  for (const grown of [RULES.grownAt, RULES.bloomAt]) {
+    k.disk.pet = { ...k.disk.pet, ...grown, owned: ['mug', 'cap'] }
+    await k.clock.advance(11_000) // the next look at the store
+    const [worn, off] = await both('mug')
+    expect(worn).not.toBe(off)
+    expect(stages).not.toContain(off)
+    stages.push(off!)
+  }
+  expect(await cardOf($, 'wear')).toMatch(/^Miro's skin\n  head       the crown\n  accessory  a coffee mug\n\/pet wear <item> puts it on/) // grown to the last stage: the crown is on by itself
+  expect(await cardOf($, 'wear cap')).toBe('a travel cap goes on, head, in place of the crown.\nMiro wears head: a travel cap, accessory: a coffee mug.') // the mug stays where it is
+  const capped = await raster()
+  k.disk.pet = { ...k.disk.pet, ...RULES.grownAt }
+  await k.clock.advance(11_000)
+  expect(await raster()).toBe(capped) // the adult in a cap: the same drawing
+
+  // more than one thing at once, one for each part; a second thing for a part takes it; the same thing asked again comes off
+  k.disk.pet = { ...k.disk.pet, owned: SHOP.map(i => i.id) }
+  await k.clock.advance(11_000)
+  const drawn = [capped]
+  const fresh = async () => { const r = await raster(); expect(drawn).not.toContain(r); drawn.push(r!) } // each change is seen in the drawing
+  expect(await cardOf($, 'wear shades')).toBe('sunglasses goes on, face.\nMiro wears head: a travel cap, face: sunglasses, accessory: a coffee mug.')
+  await fresh()
+  expect(await cardOf($, 'wear scarf')).toBe('a red scarf goes on, body.\nMiro wears head: a travel cap, face: sunglasses, body: a red scarf, accessory: a coffee mug.')
+  expect(prefsOf(k.disk).wear).toBe('cap shades scarf mug')
+  await fresh()
+  expect(await cardOf($, 'wear sombrero')).toBe('a sombrero goes on, head, in place of a travel cap.\nMiro wears head: a sombrero, face: sunglasses, body: a red scarf, accessory: a coffee mug.')
+  await fresh()
+  expect(await cardOf($, 'wear lamp')).toBe('a desk lamp goes on, accessory, in place of a coffee mug.\nMiro wears head: a sombrero, face: sunglasses, body: a red scarf, accessory: a desk lamp.')
+  await fresh()
+  const shop4 = await cardOf($, 'shop')
+  for (const id of ['sombrero', 'shades', 'scarf', 'lamp']) expect(shop4).toMatch(new RegExp(`^  ${id} .* yours, worn$`, 'm'))
+  for (const id of ['cap', 'mug', 'headphones']) expect(shop4).toMatch(new RegExp(`^  ${id} .* yours$`, 'm'))
+  expect(await cardOf($)).toMatch(/^  wears head: a sombrero, face: sunglasses, body: a red scarf, accessory: a desk lamp$/m)
+  expect(await cardOf($, 'skin')).toBe("Miro's skin\n  head       a sombrero\n  face       sunglasses\n  body       a red scarf\n  feet       –\n  accessory  a desk lamp\n/pet wear <item> puts it on, or takes it off when it is on; /pet wear none takes everything off; /pet skin shows each part. One thing on each part: head, face, body, feet, accessory. A coat is a colour: /pet wear plain takes it off, /pet wear golden puts the golden one on.")
+  expect(await cardOf($, 'wear')).toBe(await cardOf($, 'skin'))
+  expect(await cardOf($, 'wear scarf')).toBe('a red scarf comes off.\nMiro wears head: a sombrero, face: sunglasses, accessory: a desk lamp.') // a second time: off
+  await fresh()
+  expect(await cardOf($, 'wear off shades')).toBe('sunglasses comes off.\nMiro wears head: a sombrero, accessory: a desk lamp.')
+  expect(await cardOf($, 'wear off shades')).toBe('sunglasses is not on.\nMiro wears head: a sombrero, accessory: a desk lamp.')
+  expect(prefsOf(k.disk).wear).toBe('sombrero lamp')
+  expect(await cardOf($, 'wear off yacht')).toMatch(/^Not yours yet: yacht\./)
+  expect(await cardOf($, 'wear off lamp')).toBe('a desk lamp comes off.\nMiro wears head: a sombrero.')
+  expect(await cardOf($, 'wear sombrero')).toBe('a sombrero comes off.\nMiro wears nothing.')
+  expect(prefsOf(k.disk).wear).toBe('none')
+  expect(await cardOf($)).toMatch(/^  wears nothing\. \/pet wear <item>$/m)
+  expect(await raster()).toBe(stages[1]) // the bare adult again
+  await cardOf($, 'wear shades'); await cardOf($, 'wear cap')
+  expect(await cardOf($, 'wear none')).toBe('Miro wears nothing.') // all of it off at once
+  expect(prefsOf(k.disk).wear).toBe('none')
+
+  // under a note too: the demo's dizzy pet, with the mug and without
+  await cardOf($, 'wear mug')
+  await cardOf($, 'demo')
+  await k.clock.advance(5 * 5_000 + 2_500) // egg, the three stages, the cheer: now it is dizzy
+  const [worn, off] = await both('mug')
+  expect(worn).not.toBe(off)
+  expect(stages).not.toContain(off)
+
+  // an accessory stands on the ground next to the pet: the frame is wider by the columns it takes, the same in every mood and asleep
+  // (where it is not drawn), so the pet does not jump; something worn on the body leaves the frame as it was
+  const columns = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const c = (await ui.find({ type: 'Raster' }))!.props.columns; await ui.unmount(); return c }
+  const mug = Math.max(...marksFor('mug', 'fox', 'adult').map((m: any) => m[1])) - (zoo.width - 1)
+  expect(mug).toBe(8) // six wide, and an empty column between it and a cup of the headphones, which on the grown fox reach one column out of the body
+  expect(await columns()).toBe(zoo.width + 2 + mug) // dizzy
+  await k.clock.advance(30_000) // the demo is over
+  expect(await columns()).toBe(zoo.width + 2 + mug)
+  await k.clock.advance(6 * 60_000) // asleep
+  expect(await columns()).toBe(zoo.width + 2 + mug)
+  await cardOf($, 'wear cap')
+  expect(await columns()).toBe(zoo.width + 2 + mug) // a cap with the mug: the mug still widens it
+  await cardOf($, 'wear off mug')
+  expect(await columns()).toBe(zoo.width + 2)
+
+  // the feet: sneakers stay on the row of the feet, the skateboard lies under them. The frame is one text row taller for it, awake and
+  // asleep, the bubble comes down with the pet's eyes, and an accessory stands on the ground the board is on
+  const size = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; const tail = (await ui.find({ type: 'Box', key: 'tail' }))?.props.marginTop ?? null; await ui.unmount(); return [r.columns, r.rows, tail] }
+  await cardOf($, 'wear none')
+  expect(await size()).toEqual([zoo.width + 2, 6, 2]) // asleep with nothing on
+  await cardOf($, 'pet') // awake
+  expect(await cardOf($, 'wear sneakers')).toBe('sneakers goes on, feet.\nMiro wears feet: sneakers.')
+  expect(await size()).toEqual([zoo.width + 2, 6, 2])
+  const shod = await raster()
+  expect(await cardOf($, 'wear skateboard')).toBe('a skateboard goes on, feet, in place of sneakers.\nMiro wears feet: a skateboard.')
+  expect(await size()).toEqual([zoo.width + 2, 7, 3])
+  expect(await raster()).not.toBe(shod)
+  await cardOf($, 'wear mug')
+  expect((await size()).slice(0, 2)).toEqual([zoo.width + 2 + mug, 7])
+  await k.clock.advance(6 * 60_000) // asleep: the board is not drawn, the frame keeps its size
+  expect((await size()).slice(0, 2)).toEqual([zoo.width + 2 + mug, 7])
+  // on every animal, grown and small, neither reaches above the row of the feet: the face stays free
+  for (const name of Object.keys(BUILTIN.species)) for (const body of ['adult', 'baby'] as const) {
+    const rows = (id: string) => marksFor(id, name, body).map(m => m[0])
+    expect([name, body, Math.min(...rows('sneakers')), Math.max(...rows('sneakers'))]).toEqual([name, body, zoo.height - 1, zoo.height - 1])
+    expect([name, body, Math.min(...rows('skateboard'))]).toEqual([name, body, zoo.height])
+    const eyes = Math.max(...rows('shades')) // the sunglasses sit on the eyes
+    expect(eyes).toBeLessThan(zoo.height - 2)
+  }
+  // the mug is not red like the scarf and the headphones, and on the grown fox no pixel of it touches a cup of the headphones
+  const fox = { mug: marksFor('mug', 'fox', 'adult'), headphones: marksFor('headphones', 'fox', 'adult') } as Record<string, any[][]>
+  expect(new Set(fox.mug!.map(m => m[2]))).toEqual(new Set(['q', 'y', 'i']) as any)
+  expect(fox.mug!.some(([r, c]) => fox.headphones!.some(([r2, c2]) => Math.abs(r! - r2!) <= 1 && Math.abs(c! - c2!) <= 1))).toBe(false)
+})
+
+test('the crown is the head\'s own thing: on by itself at the last stage, one of the turns of the head, off for a hat or by choice', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  const day = dayOf(Date.UTC(2026, 10, 12, 12))
+  k.disk.pet = { coins: 0, affection: RULES.grownAt.affection, days: RULES.grownAt.days, day, owned: [] }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const look = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = JSON.stringify((await ui.find({ type: 'Raster' }))!.props.cells); const keys = (await ui.findAll({ type: 'Button' })).map((b: any) => b.key); const said = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text).join('\n'); await ui.unmount(); return { r, keys, said } }
+  const press = async (key: string) => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key }); await k.clock.advance(1); await ui.unmount() }
+  const adult = await look()
+  expect(adult.keys).not.toContain('skin') // grown, nothing owned: nothing to pick
+  expect(await cardOf($, 'skin')).toBe('Nothing to wear yet. /pet shop shows what there is.')
+
+  // the last stage: the crown, with nothing written and nothing bought
+  k.disk.pet = { ...k.disk.pet, affection: RULES.bloomAt.affection, days: RULES.bloomAt.days, owned: ['cap', 'scarf'] }
+  await k.clock.advance(11_000)
+  elsewhere(k.disk, { wear: 'scarf' }) // chosen before it grew
+  await k.clock.advance(11_000)
+  const crowned = await look()
+  expect(crowned.r).not.toBe(adult.r)
+  expect(crowned.keys).toContain('skin')
+  expect(await cardOf($, 'skin')).toMatch(/^Miro's skin\n  head  the crown\n  body  a red scarf\n/)
+  expect(await cardOf($)).toMatch(/^  wears head: the crown, body: a red scarf$/m)
+  expect(await cardOf($)).toMatch(/owns a red scarf, a travel cap\./) // owned are the things bought
+  expect(await cardOf($, 'shop')).not.toMatch(/^  crown/m) // not for sale
+  expect(await cardOf($, 'buy crown')).toMatch(/^Nothing called crown in the shop\./)
+
+  // the head's button: the crown, the cap, nothing, the crown again
+  await press('skin')
+  expect((await look()).keys).toEqual(['slot-head', 'slot-body', 'skin-done'])
+  expect((await look()).said).toContain('head: the crown, body: a red scarf')
+  await press('slot-head')
+  expect(prefsOf(k.disk).wear).toBe('cap scarf')
+  const capped = await look()
+  expect(capped.r).not.toBe(crowned.r)
+  await press('slot-head')
+  expect(prefsOf(k.disk).wear).toBe('scarf nohead')
+  expect((await look()).said).toContain('head: –, body: a red scarf')
+  await press('slot-head')
+  expect(prefsOf(k.disk).wear).toBe('crown scarf')
+  await press('skin-done')
+  expect((await look()).r).toBe(crowned.r)
+
+  // by name too, and everything off takes the crown with it; the bare head is the grown pet's
+  expect(await cardOf($, 'wear crown')).toBe('the crown comes off.\nMiro wears body: a red scarf.')
+  expect(await cardOf($, 'wear scarf')).toBe('a red scarf comes off.\nMiro wears nothing.')
+  expect((await look()).r).toBe(adult.r)
+  expect(await cardOf($, 'wear crown')).toBe('the crown goes on, head.\nMiro wears head: the crown.')
+  expect(await cardOf($, 'wear none')).toBe('Miro wears nothing.')
+  expect(prefsOf(k.disk).wear).toBe('none nohead')
+  expect((await look()).r).toBe(adult.r)
+  // a pet not yet at that stage has no crown to put on
+  k.disk.pet = { ...k.disk.pet, affection: RULES.grownAt.affection }
+  expect(await cardOf($, 'wear crown')).toMatch(/^Not yours yet: crown\. You have: scarf, cap\./)
+})
+
+test('many chats, one of them with an older copy: a chat writes only the preference the person changed in it, never a copy of them all', async ($, on) => {
+  const first = { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, wear: 'mug', lang: 'en', hidden: false, diet: false, style: false, cuddles: 2, cuddled: 5, voice: false, personality: '', hatched: 0 }
+  const k = home(on, {}, first)
+  k.disk.pet = { coins: 0, affection: 0, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['shades', 'mug', 'lamp'] }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  expect(await cardOf($)).toMatch(/^  wears accessory: a coffee mug$/m) // this chat has read the preferences: the mug is on
+  const prefKeys = () => [...new Set(k.sets.filter(key => key === 'prefs' || key.startsWith('pref.')))].sort()
+  expect(prefKeys()).toEqual([]) // a store that has every preference: reading writes none
+
+  // another chat puts the sunglasses on while this one counts a cuddle: its write lands between this chat's read and its write
+  k.meanwhile = () => elsewhere(k.disk, { wear: 'shades mug' })
+  await cardOf($, 'pet')
+  k.meanwhile = null
+  expect(prefsOf(k.disk).wear).toBe('shades mug')
+  expect(prefKeys()).toEqual(['pref.cuddled', 'pref.cuddles']) // the cuddle and its time, nothing else
+
+  // every other choice made elsewhere meanwhile is kept the same way, whatever this chat changes
+  const there = { wear: 'shades lamp', lang: 'pt', style: true, diet: true, name: 'Zoe', species: 'bunny', voice: true, cuddles: 9 }
+  for (const [args, key] of [['hide', 'hidden'], ['show', 'hidden'], ['lang es', 'lang'], ['name Ada', 'name'], ['animal dog', 'species'], ['comments off', 'voice'], ['wear lamp', 'wear'], ['pet', 'cuddles']] as const) {
+    k.sets.length = 0
+    elsewhere(k.disk, there)
+    k.meanwhile = () => elsewhere(k.disk, Object.fromEntries(Object.entries(there).filter(([name]) => name !== key))) // and again while this chat is at it
+    await cardOf($, args)
+    k.meanwhile = null
+    const { [key]: _mine, ...others } = there as Record<string, unknown>
+    expect(prefsOf(k.disk)).toMatchObject(others)
+    expect(prefKeys().filter(name => name !== `pref.${key}` && !(key === 'cuddles' && name === 'pref.cuddled') && !(key === 'voice' && name === 'pref.voiceAsked'))).toEqual([])
+  }
+  expect(k.disk.prefs).toEqual({ voiceAsked: true, ...first }) // the one object of the earlier versions: read, never written
+
+  // the row of the parts is open here, and the other chat buys a cap and puts it on: a press on `accessory` changes that part alone,
+  // over what the store holds now, not over what this chat saw when the row opened
+  elsewhere(k.disk, { wear: 'shades mug' })
+  await k.clock.advance(11_000)
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await ui.press({ key: 'skin' }); await k.clock.advance(1); await ui.unmount()
+  k.disk.pet = { ...k.disk.pet, owned: ['shades', 'mug', 'cap', 'lamp'] }
+  elsewhere(k.disk, { wear: 'cap shades mug' })
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await ui.press({ key: 'slot-accessory' }); await k.clock.advance(1); await ui.unmount()
+  expect(prefsOf(k.disk).wear).toBe('cap shades lamp')
+
+  // a store that cannot be read for a moment: nothing this chat remembers is put in its place, only the choice made now is written
+  elsewhere(k.disk, { wear: 'cap shades', style: false })
+  k.sets.length = 0
+  k.lost = true
+  await cardOf($, 'hide')
+  k.lost = false
+  expect(prefKeys()).toEqual(['pref.hidden'])
+  expect(prefsOf(k.disk)).toMatchObject({ wear: 'cap shades', style: false, hidden: true, name: 'Zoe', species: 'bunny' })
+
+  // the chat reloaded over what an earlier version left in the session: every preference in one object, the wear of that time, no language.
+  // Its first read, a cuddle and a turn of the head write their own keys and leave the rest
+  k.state = { ...k.state, prefs: { value: { hidden: false, wear: 'mug', species: 'fox', born: 'fox', diet: false, style: true, seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], personality: '', hatched: 0, asked: true, cuddles: 2, cuddled: 5 }, version: 99 } }
+  elsewhere(k.disk, { wear: 'cap shades mug', hidden: false })
+  k.sets.length = 0
+  expect(await cardOf($)).toMatch(/^  está usando cabeça: um boné de viagem, rosto: óculos de sol, acessório: uma caneca de café$/m) // the store's, in the language chosen elsewhere
+  expect(prefKeys()).toEqual([])
+  await cardOf($, 'pet')
+  expect(prefKeys()).toEqual(['pref.cuddled', 'pref.cuddles'])
+  expect(prefsOf(k.disk)).toMatchObject({ wear: 'cap shades mug', style: false, name: 'Zoe', species: 'bunny', lang: 'pt' })
+  expect(k.sets).not.toContain('prefs')
+})
+
+test('E20: a store that cannot be read when a chat opens: no pet is made up and none is drawn, nothing is written, and the real pet is there as soon as the store reads', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: false, wear: 'mug', lang: 'en' })
+  k.disk.prefs.voiceAsked = false
+  k.disk.diary = { lines: [], first: 5 }
+  k.lost = true
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  // nothing of a pet on screen, however many times it is drawn: not a different animal and name each time
+  for (let i = 0; i < 3; i++) {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect([await ui.find({ type: 'Raster' }), (await ui.findAll({ type: 'Text' })).length, (await ui.findAll({ type: 'Button' })).length]).toEqual([undefined, 0, 0])
+    await ui.unmount()
+    await k.clock.advance(600)
+  }
+  // every command says so in a line, and does nothing: no choice is taken that could not be kept
+  for (const args of ['', 'wear none', 'name Bob', 'comments on', 'hide', 'lang es', 'pet']) expect(await cardOf($, args)).toBe("The pet's store cannot be read right now: nothing is shown or changed until it can be.")
+  expect(k.sets).toEqual([]) // not asked, not voiceAsked, not a preference, not a pet, not a mark
+  // the store reads again: the real pet, with what it had
+  k.lost = false
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the fox/)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Raster' })).toBeTruthy()
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toContain('Miro')
+  await ui.unmount()
+  expect(prefsOf(k.disk)).toMatchObject({ name: 'Miro', species: 'fox', wear: 'mug' })
+  // /pet diary clear with a store that reads and cannot be written: said, not thrown
+  ;(k as any).ro = true
+  expect(await cardOf($, 'diary clear')).toBe('The diary could not be cleared: the store cannot be written now.')
+  expect(k.disk.diary).toEqual({ lines: [], first: 5 })
+})
+
+test('E21: a phrase that had its time does not come back when the mod is reloaded in a chat that goes on', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const open = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const b = !!(await ui.find({ type: 'Box', key: 'bubble' })); await ui.unmount(); return b }
+  expect(await open()).toBe(true) // the greeting
+  await k.clock.advance(5_000)
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true }) // a reload while it is up: it stays, for what is left of its time
+  expect(await open()).toBe(true)
+  await k.clock.advance(40_000)
+  expect(await open()).toBe(false)
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true }) // a hot reload fires session.start again, over the same session state
+  expect(await open()).toBe(false)
+  await k.clock.advance(2_000)
+  expect(await open()).toBe(false)
+})
+
+// What a chat already open holds in $.state, and what the store holds, when the mod is reloaded over each earlier version we shipped.
+const OLD_PET = { // up to the shop: health, ko, efficient sessions
+  variant: null, life: { input: 9000, cacheRead: 8000 }, health: 0, turn: 12, cleanStreak: 2, efficientSessions: 17, bestSessionHit: 0.97, ko: true, drowned: 3, flowerDebt: 2, lastCheerAt: 1000, pending: [{ kind: 'evolve', value: 0 }],
+}
+const OLD_CHAT = { // the same pet inside a chat: a note, a cheer and a queued one that no longer exist, a session of that time
+  ...OLD_PET, issues: [{ kind: 'heavy', untilTurn: 14, until: 5000, detail: '90' }], cheer: { kind: 'unlock', at: 1000, value: 1 }, queued: { kind: 'record', value: 0 },
+  session: { reads: { '/a': 1 }, blind: { 'npm test': 2 }, requests: 7, input: 100, cacheRead: 90, lastUsageAt: 900, expectRebuild: false, turnHadIssue: true, issueCount: 3, contextPct: 40, context: 90_000, lean: false, cheeredHighHit: true },
+  base: OLD_PET,
+}
+const RELOADS: Record<string, { prefs: any, anim: any, pet: any }> = {
+  'with the budget, before the name': { prefs: { hidden: false, wear: 'shades', species: 'fox', born: 'fox', diet: true, style: false, budget: 50_000 }, anim: { n: 3, rare: -1, demo: '', sleep: false }, pet: OLD_CHAT },
+  'with the two traits': { prefs: { hidden: false, wear: 'sombrero', species: 'fox', born: 'fox', diet: false, style: true, seed: 7, name: 'Miro', trait: 'dry', trait2: 'shy', personality: '', hatched: 0, asked: true }, anim: { n: 3, rare: -1, demo: '', sleep: false, egg: 0 }, pet: { ...OLD_CHAT, health: 30, ko: false, cheer: { kind: 'revive', at: 1000 } } },
+  'with health and ko, the statistics and the cuddles': { prefs: { hidden: false, wear: '', species: 'fox', born: 'fox', diet: false, style: false, seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], personality: '', hatched: 0, asked: true, cuddles: 2, cuddled: 5 }, anim: { n: 3, rare: -1, demo: '', sleep: false, egg: 0, love: 0 }, pet: { ...OLD_CHAT, session: { ...OLD_CHAT.session, talk: { kind: 'greet', at: 900, greet: 'first' }, lastTalkAt: 900, turns: 4, fails: {}, sit: 4 } } },
+  'broken': { prefs: { species: 7, stats: 'x', cuddles: null }, anim: 'x', pet: { session: 5, issues: 5, cheer: 5, owned: 5, base: 5, health: 'x' } },
+}
+for (const [version, held] of Object.entries(RELOADS)) test(`a reload over the state of an earlier version (${version}): the band and the card are drawn, and every command works`, async ($, on) => {
+  const k = home(on, {}, typeof held.prefs.species === 'string' ? held.prefs : { species: 'fox', born: 'fox', seed: 7, name: 'Miro', asked: true })
+  k.disk.pet = OLD_PET
+  const stored = structuredClone(k.disk.prefs)
+  k.state = Object.fromEntries(Object.entries(held).map(([key, value]) => [key, { value, version: 1 }])) // the chat was open: the session's memory is that version's
+  on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 0, cache_read_input_tokens: 90_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+  const band = async () => {
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({ ...BAND, surface })
+      const said = (await ui.findAll({ type: 'Text' })).map(x => x.text).join(' | ')
+      expect(said).toMatch(/\w+  ★ \d+/) // the band is there: a hook that throws draws nothing
+      expect(said).not.toMatch(/undefined|NaN|null|out cold|worn|low health|unlocked/)
+      if (surface === 'terminal') expect(await ui.find({ type: 'Raster' })).toBeTruthy()
+      await ui.unmount()
+    }
+  }
+  const card = async () => {
+    const text = await cardOf($)
+    expect(text).toMatch(/^\w+, Cachito the (\w+ )?fox, (baby|adult|crown)   [♥♡]{5} (happy|calm)$/m)
+    expect(text).toMatch(/^affection \d+ over \d+ days? of use/m)
+    expect(text).toMatch(/^\d+ stars?; owns /m)
+    expect(text).not.toMatch(/undefined|NaN|null|health|\/100|efficient|out cold/)
+    return text
+  }
+  // the first thing a reload does is draw, before any event of the session: what it reads is that version's state, untouched
+  await band()
+  await card()
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await band()
+  await card()
+  expect(await cardOf($, 'shop')).toMatch(/^CACHITO SHOP · you have \d+ stars?$/m)
+
+  // the chat goes on as any other: a turn, a cuddle, something bought and worn, the demo
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ;
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  await band()
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await ui.press({ key: 'pet' })
+  await ui.press({ key: 'skin' })
+  await ui.unmount()
+  await cardOf($, 'pet')
+  expect(await cardOf($, 'pet')).toMatch(/petted \d+ times/)
+  expect(await cardOf($, 'buy mug')).toBe(`Bought a coffee mug for 12 stars, 0 left. ${prefsOf(k.disk).name} wears it now, accessory: /pet wear mug takes it off.`) // the first use of the day, one turn, three cuddles
+  await band()
+  await cardOf($, 'demo')
+  for (let i = 0; i < 12; i++) { await k.clock.advance(5_000); await band() }
+
+  // the store is today's: the old counters are gone, what the efficient sessions had unlocked is owned, the budget is not kept
+  expect(Object.keys(k.disk.pet).sort()).toEqual(['affection', 'coins', 'cuddledAt', 'day', 'dayCuddles', 'dayTurns', 'days', 'giftAt', 'lastCheerAt', 'life', 'owned', 'turn', 'variant'].concat('animals', 'lately').sort())
+  expect(k.disk.pet).toMatchObject({ owned: ['shades', 'mug', 'scarf', 'sombrero'], coins: 0, affection: 12, days: 1 })
+  expect(Object.keys(k.disk).filter(key => key.startsWith('pref.') && !KNOWN.includes(key.slice(5)))).toEqual([]) // no key for a budget or a trait
+  expect(k.disk.prefs).toEqual(stored) // that version's object is as it was: this one writes each preference under its own key
+  expect(prefsOf(k.disk).wear).toMatch(/mug/)
+  expect(await card()).toMatch(/owns sunglasses, a coffee mug, a red scarf, a sombrero\./)
+})
+
+// The voice. The model is simulated: `reply` is what the next call resolves, `calls` what was asked.
+const USAGE = { input_tokens: 300, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+const NONE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+function voiceKit($: any, on: any, prefs: object = {}) {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [91, 45, 12, 70, 38], asked: true, ...prefs })
+  const v = { calls: [] as any[], reply: { isAnswered: true, text: 'Three failures, then green. Noted.', usage: USAGE } as any, boxAfter: undefined as string | undefined, fail: false, said: '', context: 100, onCall: null as (() => void) | null }
+  on('model.complete', (_: any, e: any) => { v.calls.push(e); v.onCall?.(); if (v.boxAfter !== undefined) k.box = v.boxAfter; return { value: v.reply } })
+  on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 5, isLink: false } }))
+  on('tool.call', () => (v.fail ? { result: { stdout: 'SECRET OUTPUT', stderr: 'boom', interrupted: false }, isError: true } : { result: { stdout: 'SECRET OUTPUT', stderr: '', interrupted: false } }) as any)
+  on('turn.step', async function* () { return { answer: v.said, toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: v.context, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+  // the call is never awaited by the mod: give it the time to come back
+  const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(r => (globalThis as any).setTimeout(r, 2)) }
+  const turn = async (work: () => Promise<unknown> = async () => {}, answer = 'All done: the tests pass now.') => {
+    await $.prompt.submit({ text: 'the secret plan', wait: false, origin: 'user' } as any)
+    await work()
+    await $.turn.complete({ answer, reason: 'answer' } as any)
+    await settle()
+  }
+  const texts = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text); await ui.unmount(); return t as string[] }
+  return Object.assign(k, { v, settle, turn, texts })
+}
+
+test('comments off, as installed: no call to a model, whatever happens, and the card says so', async ($, on) => {
+  const k = voiceKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  k.v.fail = true
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't1' } as any))
+  await $.command.run({ command: 'pet', args: 'pet' } as any)
+  await k.settle()
+  expect(k.v.calls).toEqual([])
+  expect(k.disk.voice).toBeUndefined()
+  expect(await cardOf($)).toMatch(/\ncomments off: fixed lines only, nothing sent\. \/pet comments on lets a small model write them, on your tokens/)
+  expect(await cardOf($, 'comments')).toMatch(/^Comments off: the pet says its fixed lines, and nothing is sent anywhere for it\..*spends tokens of your own account: about \$0\.00007 a line: an estimate.*never more than 40 lines a day, about \$0\.00280\. The dollars are an estimate: the tokens are the ones each call reports, priced at Haiku 5\.5's list price, and the alias haiku may lead to another model with another price\.$/)
+})
+
+test('comments on: it says what it costs and sends; a line at the end of a turn made of counts and names only, counted with its real tokens', async ($, on) => {
+  const k = voiceKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const says = await cardOf($, 'comments on')
+  expect(says).toMatch(/^Comments on\. They spend tokens of your own account: each line is one request to a small model \(the alias haiku/)
+  expect(says).toMatch(/Sent to the model: the pet's name, animal, five statistics and language; why it speaks; the names of the tools used in the turn with their counts \(the tools of your MCP servers too, by their names\); the program names of the commands that failed; how many files changed; the last 600 characters of the assistant's reply \(during a turn, of what it wrote last in it, and how many minutes the turn has lasted\); the pet's own last 2 lines, so that it does not repeat itself \(they are kept in the store and go back to the model in later chats too\); at most 3 lines of its diary/)
+  expect(says).toMatch(/Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant\. But the end of the assistant's reply is sent as it is/)
+  expect(says).toMatch(/Cost: about \$0\.00007 a line: an estimate, replaced by the measured figure after the first line\./)
+  expect(says).toMatch(/at most one line every 10 minutes; without that wait after a failed command, a turn that changed 5 files or more, or a cuddle: each of those waits 30, 30 and 20 seconds since the last line for the same reason\. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too\. Also during a turn that lasts longer than 10 minutes, under the same wait\. Never more than 40 lines a day, about \$0\.00280, over all your chats\./)
+  expect(says).toMatch(/Today: 0 of 40 lines, \$0\.00000: 40 left\. \/pet comments off stops them\.$/)
+  expect(prefsOf(k.disk).voice).toBe(true)
+  expect(k.v.calls).toEqual([]) // turning it on asks nothing
+
+  await k.turn(async () => {
+    await $.tool.call({ tool: 'Read', file_path: '/w/private/keys.txt', tool_use_id: 'r1' } as any)
+    await $.tool.call({ tool: 'Bash', command: 'TOKEN=abc deploy --key hunter2', tool_use_id: 'b1' } as any)
+    await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'b2' } as any)
+    await $.tool.call({ tool: 'Edit', file_path: '/w/private/app.js', tool_use_id: 'e1' } as any)
+  }, `${'x'.repeat(700)} All done: the tests pass now.`)
+  expect(k.v.calls.length).toBe(1)
+  const ask = k.v.calls[0]
+  expect(ask).toMatchObject({ model: 'haiku', maxTokens: 30, effort: 'low', timeoutMs: 4000 })
+  expect(ask.system).toMatch(/^You are Miro, a small pixel fox /)
+  expect(ask.system).toMatch(/\nYour body: pointed ears, paws, a bushy tail.*Speak only of parts you have\./) // its animal, so it names no part it lacks
+  expect(ask.prompt).not.toMatch(/last lines/) // nothing said yet
+  expect(ask.system).toMatch(/WIT 91, CURIOSITY 45, CALM 12, RIGOR 70, WARMTH 38\./)
+  expect(ask.system).toMatch(/First of all you are dry and deadpan, you understate\. Then rigorous, you count and check\. Your weak point: you startle easily\./)
+  expect(ask.system).toMatch(/React to the moment in the first person.*Do not report it/)
+  expect(ask.system).toMatch(/never more than 8\. Plain English\. No file names, no paths, no quoted text, no quotation marks, no exclamation marks, no emoji, no advice\. Never unkind to the person\./)
+  expect(ask.prompt).toMatch(/^What just happened \(background only, none of it is to be repeated\):\n- the turn ended\n- tools used: Bash 2, Read 1, Edit 1\n- commands that failed: none\n- files changed: 1\n- the assistant's reply ended: x+ All done: the tests pass now\.\n\nWhat you remember of your time with this person:\n- the diary begins \(today\)\nYou may hint at one of these when it fits, or at none\. Never list them\.\n\nNow your one line: /)
+  expect(ask.prompt.split('reply ended: ')[1].split('\n')[0].length).toBe(600)
+  expect(JSON.stringify(ask)).not.toMatch(/secret plan|SECRET OUTPUT|hunter2|TOKEN|keys\.txt|app\.js|private/)
+  expect(await k.texts()).toContain('Three failures, then green. Noted.')
+  // the real tokens of the call, at Haiku 5.5's list price: 300 in at $0.10 and 20 out at $0.50 per million
+  expect(k.disk.voice).toMatchObject({ today: 1, lines: 1, input: 300, output: 20 })
+  expect(Math.round(k.disk.voice.usd * 1e9)).toBe(40_000)
+  expect(Math.round(k.disk.voice.todayUsd * 1e9)).toBe(40_000)
+  expect(await cardOf($)).toMatch(/\ncomments on: 1 of 40 lines today, \$0\.00004 today, \$0\.00004 in all/)
+  expect(await cardOf($, 'comments')).toMatch(/Cost: \$0\.00004 a line, measured over the 1 line paid so far \(300 tokens in and 20 out each\)\./)
+
+  // the wait: the next turn ends within 10 minutes and asks nothing; the fixed line is back with the prompt
+  await k.clock.advance(60_000)
+  await k.turn()
+  expect(k.v.calls.length).toBe(1)
+  expect(await k.texts()).not.toContain('Three failures, then green. Noted.')
+  // a failed command skips the wait, and only the program's name is sent
+  k.v.fail = true
+  k.v.reply = { isAnswered: true, text: '"Deploy fell over twice!! 🎉 I counted both of them carefully, and then once more to be sure."\nSecond line', usage: USAGE }
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'cd /srv && TOKEN=abc deploy --key hunter2', tool_use_id: 'b3' } as any))
+  expect(k.v.calls.length).toBe(2)
+  expect(k.v.calls[1].prompt).toMatch(/\n- a command or a test failed in this turn\n- tools used: Bash 1\n- commands that failed: deploy 1\n- files changed: 0\n/)
+  expect(JSON.stringify(k.v.calls[1])).not.toMatch(/hunter2|TOKEN|srv/)
+  expect(k.v.calls[1].prompt).toMatch(/\n\nYour last lines, oldest first: Three failures, then green\. Noted\.\nDo not repeat them/) // what it said last goes back, so the next line differs
+  // too long: dropped whole, never cut. The fixed line stays, and the call is counted as paid and as dropped
+  expect((await k.texts()).join('|')).not.toMatch(/Deploy fell|counted/)
+  expect(k.disk.voice).toMatchObject({ today: 2, lines: 2, dropped: 1 })
+  expect(await cardOf($, 'comments')).toMatch(/A line that comes back wider than 60 columns on screen \(a Chinese character takes two\) is not shown, and is paid for all the same: 1 of 2 so far\./)
+  // quotation marks, an emoji and exclamation marks are taken out of a line that fits
+  k.v.reply = { isAnswered: true, text: '"Deploy" fell over, \'twice\'!! 🎉\nSecond line', usage: USAGE }
+  // B8: a second failure within 30 s of the last line about one asks nothing: no volley
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'deploy', tool_use_id: 'b4a' } as any))
+  expect(k.v.calls.length).toBe(2)
+  await k.clock.advance(31_000)
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'deploy', tool_use_id: 'b4' } as any))
+  expect(await k.texts()).toContain('Deploy fell over, twice.')
+  k.v.fail = false
+  // a turn that changed 5 files skips the wait too
+  k.v.reply = { isAnswered: true, text: 'Five files in one go.', usage: USAGE }
+  await k.turn(async () => { for (let i = 0; i < 5; i++) await $.tool.call({ tool: 'Write', file_path: `/w/f${i}.js`, tool_use_id: `w${i}` } as any) })
+  expect(k.v.calls.length).toBe(4)
+  expect(k.v.calls[3].prompt).toMatch(/\n- this turn changed many files\n- tools used: Write 5\n- commands that failed: none\n- files changed: 5\n/)
+  // files changed by a shell command are not seen: such a turn is an ordinary one, and waits
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'for i in 1 2 3 4 5 6; do echo x > f$i.txt; done', tool_use_id: 'b5' } as any))
+  expect(k.v.calls.length).toBe(4)
+  // and so does a cuddle: the fixed line answers the command at once, the voice's is in the bubble when it comes
+  k.v.reply = { isAnswered: true, text: 'A pat, logged with thanks.', usage: USAGE }
+  expect(await cardOf($, 'pet')).toMatch(/^Miro: (noted\. carry on|fine\. one more, then work|pat received, in good order|a little to the left\. there)  \(petted once/)
+  await k.settle()
+  expect(k.v.calls.length).toBe(5)
+  expect(k.v.calls[4].prompt).toMatch(/\n- the person just petted you\n/)
+  expect(k.v.calls[4].prompt).toMatch(/\nYour last lines, oldest first: Deploy fell over, twice\. \/ Five files in one go\.\n/) // the two newest shown; the dropped one is not among them
+  expect(k.disk.voice.last).toEqual(['Five files in one go.', 'A pat, logged with thanks.'])
+  expect(await k.texts()).toContain('A pat, logged with thanks.')
+  // an ordinary turn again: silent until 10 minutes after the last line, then it speaks
+  await k.clock.advance(9 * 60_000)
+  await k.turn()
+  expect(k.v.calls.length).toBe(5)
+  await k.clock.advance(60_000)
+  await k.turn()
+  expect(k.v.calls.length).toBe(6)
+  expect(k.disk.voice).toMatchObject({ today: 6, lines: 6, input: 1800, output: 120, dropped: 1 })
+})
+
+test('comments on, and the call fails, is cut short or says nothing usable: the fixed line stays, and the call stays counted in the day, as it was before it went out', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  k.v.fail = true
+  const failing = () => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't' } as any)
+  for (const reply of [
+    { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: NONE },
+    { isAnswered: false, reason: 'aborted', usage: NONE }, // slower than the 4 seconds allowed
+  ]) {
+    k.v.reply = reply
+    const before = await k.texts()
+    await k.turn(failing)
+    expect(k.disk.voice).toMatchObject({ today: k.v.calls.length, lines: k.v.calls.length, usd: 0, input: 0 }) // counted, at no cost
+    expect((await k.texts()).length).toBe(before.length) // no line was added to the bubble
+    await k.clock.advance(31_000)
+  }
+  expect(k.v.calls.length).toBe(2)
+  // a reply with nothing to show is paid for, so it is counted, and nothing is shown
+  k.v.reply = { isAnswered: true, text: '🎉!!', usage: USAGE }
+  await k.turn(failing)
+  expect(k.v.calls.length).toBe(3)
+  expect(k.disk.voice).toMatchObject({ today: 3, lines: 3, input: 300 })
+  expect((await k.texts()).join('|')).not.toMatch(/🎉|!/)
+  expect((await k.texts()).join('|')).toMatch(/npm failed 3 times in a row/) // the fixed note is what the bubble holds
+})
+
+test('comments on: the cap of the day stops it, a new day starts the count again, and it never speaks while the person types', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  const T0 = Date.UTC(2026, 10, 12, 12)
+  k.disk.voice = { day: dayOf(T0), today: RULES.voiceCapDay, todayUsd: 0.0016, lines: 90, usd: 0.0036, input: 27000, output: 1800, at: T0 - 3_600_000 }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  k.v.fail = true
+  const failing = () => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't' } as any)
+  await k.turn(failing)
+  await $.command.run({ command: 'pet', args: 'pet' } as any)
+  await k.settle()
+  expect(k.v.calls).toEqual([]) // 40 lines today: not one more, not even for a failure or a cuddle
+  expect(await cardOf($)).toMatch(/\ncomments on: 40 of 40 lines today, \$0\.00160 today, \$0\.00360 in all/)
+  expect(await cardOf($, 'comments')).toMatch(/\nToday: 40 of 40 lines, \$0\.00160: none left, they come back tomorrow\. \/pet comments off stops them\.$/)
+  // the next day: what the store counted belongs to the day before
+  k.disk.voice.day--
+  k.box = 'I am typing'
+  await k.turn(failing)
+  expect(k.v.calls).toEqual([]) // the person is typing: nothing is asked
+  k.box = ''
+  await k.turn(failing)
+  expect(k.v.calls.length).toBe(1)
+  expect(k.disk.voice).toMatchObject({ today: 1, lines: 91 })
+  // a line that comes back while the person types waits for an empty box
+  k.v.reply = { isAnswered: true, text: 'Held until you were done.', usage: USAGE }
+  k.v.boxAfter = 'typing now'
+  await k.clock.advance(31_000)
+  await k.turn(failing)
+  expect(k.v.calls.length).toBe(2)
+  expect(await k.texts()).not.toContain('Held until you were done.')
+  k.box = ''; k.v.boxAfter = undefined
+  await k.clock.advance(6_000) // past the line of the cuddle above, which holds the bubble for 5 s
+  await k.settle()
+  expect(await k.texts()).toContain('Held until you were done.')
+})
+
+test('under the bench the voice is off, even when the person had it on', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  k.env.CACHITO_BENCH = '/tmp/bench'
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  k.v.fail = true
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't' } as any))
+  await $.command.run({ command: 'pet', args: 'pet' } as any)
+  await k.settle()
+  expect(k.v.calls).toEqual([])
+  expect(await cardOf($, 'comments on')).toBe('Comments off: under the bench they are never used.')
+  expect(await cardOf($)).toMatch(/\ncomments off:/)
+})
+
+test('the voice is asked for once, at the first start of a pet born before: unanswered it stays off, and no later chat asks again', async ($, on) => {
+  const k = voiceKit($, on, { voiceAsked: false })
+  k.disk.voice = { lines: 10, usd: 0.001, input: 5000, output: 200 } // lines paid for earlier: the figure in the question is the measured one
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const Q = 'May I comment on your work? It uses a small\nmodel on your account, at most about\n$0.00400 a day, and sends it a short summary\nof the turn. Details: /pet comments'
+  expect(await k.texts()).toContain(Q)
+  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true]) // marked when it comes up
+  const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await desk.find({ type: 'Text', text: /★/ }))?.text).toContain(Q.replace(/\n/g, ' ')) // one line there, and no buttons: /pet comments on answers
+  await desk.unmount()
+  // a cuddle, a slash command and a reload leave it up; the next prompt sent takes it away, with the voice off
+  await $.command.run({ command: 'pet', args: 'pet' } as any)
+  expect((await k.texts()).join(' ')).not.toMatch(/May I/) // the cuddle's line passes in front for its 5 seconds, and the question is back after
+  await k.clock.advance(6_000)
+  expect(await k.texts()).toContain(Q)
+  await $.prompt.submit({ text: '/pet', command: { name: 'pet', args: '' }, wait: false, origin: 'user' } as any)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(await k.texts()).toContain(Q)
+  await k.turn()
+  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
+  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
+  expect(k.v.calls).toEqual([])
+  // the next chat, and a start over an emptied session: no second question
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
+  k.state = {}
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
+  expect(await cardOf($, 'comments on')).toMatch(/^Comments on\./) // still reachable
+  expect(prefsOf(k.disk).voice).toBe(true)
+})
+
+test('the question about the voice: "voice on" turns it on and keeps the answer, /pet comments answers it too, and who had it on is not asked', async ($, on) => {
+  const k = voiceKit($, on, { voiceAsked: false })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
+  await ui.press({ key: 'voice-on' })
+  await ui.unmount()
+  expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: true })
+  expect(k.toasts.at(-1)).toBe('Cachito: comments on. /pet comments off stops them, /pet comments says what they send and cost.')
+  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
+  expect(k.v.calls).toEqual([]) // the answer asks no model
+  await k.turn()
+  expect(k.v.calls.length).toBe(1) // and from the next turn it speaks
+})
+
+test('the question about the voice goes when /pet comments off is typed; a pet that already speaks is never asked', async ($, on) => {
+  const k = voiceKit($, on, { voiceAsked: false })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect((await k.texts()).join(' ')).toMatch(/May I comment/)
+  await cardOf($, 'comments off')
+  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
+  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
+
+  // chosen before this version: not asked, and the choice stays
+  elsewhere(k.disk, { voice: true, voiceAsked: false })
+  k.state = {}
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
+  expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: true })
+})
+
+test('under the bench nobody is asked about the voice, and the person\'s preferences are not touched', async ($, on) => {
+  const k = voiceKit($, on, { voiceAsked: false })
+  k.env.CACHITO_BENCH = '/tmp/bench'
+  const before = JSON.stringify(prefsOf(k.disk))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
+  await k.turn()
+  expect(JSON.stringify(prefsOf(k.disk))).toBe(before)
+  expect(k.v.calls).toEqual([])
+})
+
+// The languages. `home` gives a person at the prompt; its `env` is the system's.
+test('a newborn takes the language of the system when it is one of ours, LC_ALL before LANG; a pet born before keeps English; /pet lang picks and it is kept', async ($, on) => {
+  const k = home(on, {})
+  k.env.LANG = 'es_ES.UTF-8'
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(prefsOf(k.disk).lang).toBe('es') // written at birth: the choice is in the preferences
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('un huevo. algo se mueve dentro')
+  await ui.unmount()
+  await k.clock.advance(9_000)
+  const asked = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await asked.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/^\S+  ★ 0 · ¿Puedo comentar tu trabajo\?/)
+  expect((await asked.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['acariciar', 'comentarios sí', 'en silencio'])
+  await asked.press({ key: 'voice-off' })
+  expect(k.toasts.at(-1)).toBe('Cachito se queda callado. /pet comments on lo cambia.')
+  await asked.unmount()
+  expect(await cardOf($, 'lang')).toBe('Idioma: español. /pet lang <en|es|pt|zh> lo cambia.')
+  expect(await cardOf($, 'lang it')).toBe('No hay idioma it. Hay: en, es, pt, zh.') // not one of ours: said, and nothing changes
+  expect(prefsOf(k.disk).lang).toBe('es')
+  expect(await cardOf($, 'lang zh')).toBe('Cachito 现在说简体中文。')
+  expect(prefsOf(k.disk).lang).toBe('zh')
+  // a chat that starts later, whatever the system says now, speaks the language chosen
+  k.env.LANG = 'pt_BR.UTF-8'
+  k.state = {}
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(await cardOf($, 'lang')).toBe('语言：简体中文。/pet lang <en|es|pt|zh> 可以切换。')
+  expect(await cardOf($, 'lang en')).toBe('Cachito now speaks English.')
+})
+
+for (const [env, lang] of [[{ LC_ALL: 'pt_BR.UTF-8', LANG: 'es_ES.UTF-8' }, 'pt'], [{ LC_ALL: '', LANG: 'zh_CN.UTF-8' }, 'zh'], [{ LANG: 'it_IT.UTF-8' }, 'en'], [{}, 'en'], [{ LANG: 'zh_TW.UTF-8' }, 'en']] as const) test(`born under ${JSON.stringify(env)}: ${lang}`, async ($, on) => {
+  const k = home(on, {})
+  Object.assign(k.env, env)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(prefsOf(k.disk).lang).toBe(lang)
+})
+
+test('a pet born before the languages keeps English under any system, and a language chosen in another chat reaches this one', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [91, 45, 12, 70, 38], asked: true })
+  k.env.LANG = 'zh_CN.UTF-8'
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(prefsOf(k.disk).lang).toBe('en')
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the fox, baby/)
+  elsewhere(k.disk, { lang: 'pt' }) // another chat ran /pet lang pt
+  expect(await cardOf($)).toMatch(/^Miro, Cachito: raposa, filhote   ♡♡♡♡♡ (feliz|calmo)\npersonalidade: Fala seco e curto, e pula a cada linha vermelha\.\n  HUMOR       █████████░  91  ponto forte\n/)
+})
+
+test('the card, the shop and the short replies are in the language; command names and item ids are not, and the columns line up by width on screen', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [91, 45, 12, 70, 38], asked: true, lang: 'zh' })
+  k.disk.pet = { coins: 60, affection: 3, days: 2, owned: ['mug'], animals: ['dog'] }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const card = await cardOf($)
+  expect(card).toMatch(/^Miro，Cachito，狐狸，幼年   .{5} (开心|平静)\n性格：说话干脆利落，却见到红字就一惊。\n  机智 █████████░  91  最强\n  好奇 █████░░░░░  45\n  沉稳 █░░░░░░░░░  12  弱点\n/)
+  expect(card).toMatch(/\n\d+ 颗星；拥有咖啡杯。\/pet shop\n  装扮：配饰 咖啡杯\nlean 未开：\/pet lean on 会加入风格。.*\n点评未开：.*\/pet comments on/)
+  expect(card).not.toMatch(/[!！]|undefined|\{\w+\}/)
+  const shop = await cardOf($, 'shop')
+  expect(shop.split('\n')[0]).toMatch(/^CACHITO 商店 · 你有 \d+ 颗星$/)
+  // every price ends in the same column on screen, though the names differ in letters: 墨西哥草帽 is five characters and ten columns
+  const rows = shop.split('\n').filter(r => /^  \w+ +\S+ +\d+/.test(r))
+  expect(rows.length).toBe(SOLD.length + RULES.animals.length) // the things to wear, the coat, and the animals
+  expect(shop).toMatch(/\n  sombrero .*\n\n  golden +金色毛色 +300  毛色\n\n/) // the coat in a row of its own, last
+  const col = (r: string) => { const upTo = r.slice(0, r.search(/\d+(?=  \S+(  已拥有.*)?$)/)); return [...upTo].reduce((n, ch) => n + (/[⺀-鿿＀-｠]/.test(ch) ? 2 : 1), 0) + /\d+/.exec(r.slice(upTo.length))![0].length }
+  expect(new Set(rows.map(col)).size).toBe(1)
+  expect(shop).toMatch(/\n  mug +咖啡杯 +\d+  配饰  已拥有，穿戴中\n/)
+  expect(shop).toMatch(/\n\nMiro 现在的装扮：配饰 咖啡杯。\n\n\/pet shop <item> 购买。\/pet wear <item> 戴上，已经戴着就取下；\/pet wear none 全部取下。每个部位一件。/)
+  expect(await cardOf($, 'buy shades')).toMatch(/^花 \d+ 颗星买了墨镜，还剩 \d+ 颗星。Miro 已经戴上（脸部）：\/pet wear shades 可以取下。$/)
+  expect(await cardOf($, 'skin')).toMatch(/^Miro 的装扮\n  脸部  墨镜\n  配饰  咖啡杯\n  动物  狐狸\n\/pet wear <item> 戴上/)
+  expect(await cardOf($, 'wear shades') + await cardOf($, 'wear shades')).toMatch(/Miro 现在的装扮：脸部 墨镜，配饰 咖啡杯。$/) // one colon, not two in a row
+  expect(await cardOf($, 'wear off mug')).toBe('取下了咖啡杯。\nMiro 现在的装扮：脸部 墨镜。')
+  expect(await cardOf($, 'wear none')).toBe('Miro 什么都没戴。')
+  expect(await cardOf($, 'wear sombrero')).toMatch(/^还不是你的：sombrero。你有：shades, mug。/)
+  expect(await cardOf($, 'animal')).toMatch(/^请选一个：fox, dog。\n其他动物每只 100 颗星，只需解锁一次：penguin, chick, bunny, cactus。\/pet shop <animal> 解锁。$/)
+  expect(await cardOf($, 'animal dog')).toBe('Cachito 现在是小狗了。')
+  expect(await cardOf($, 'name')).toMatch(/^它叫 Miro。\/pet name <名字> 可以改/)
+  expect(await cardOf($, 'pet')).toMatch(/^Miro: (收到。继续吧|行。再来一下就干活|抚摸已收到，一切正常|往左一点。对，就这儿)  \(摸了 1 次，\+\d+ 颗星\)$/)
+  expect(await cardOf($, 'hide')).toBe('Cachito 已隐藏。/pet show 让它回来。')
+  expect(await cardOf($, 'show')).toBe('Cachito 回来了。')
+  // Spanish, on the same pet
+  await cardOf($, 'lang es')
+  expect(await cardOf($)).toMatch(/^Miro, Cachito: perro, cría .*\ncarácter: Lo dice seco y corto, y se sobresalta con cada línea roja\.\n  INGENIO    █████████░  91  punto fuerte\n(.*\n)+una caricia, la última ahora mismo\n/)
+  expect(await cardOf($, 'shop')).toMatch(/^TIENDA DE CACHITO · tienes \d+ estrellas\n\n  shades      gafas de sol +\d+  cara       tuyo\n  mug         una taza de café +\d+  accesorio  tuyo\n/)
+})
+
+test('the bubble in Chinese: wrapped and bordered by width on screen, two columns a character, and the keys translated', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [91, 45, 12, 70, 38], asked: true, lang: 'zh' })
+  on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false } }) as any)
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 5, isLink: false } }))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const bubble = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const b = (await ui.find({ type: 'Box', key: 'bubble' }))!; const out = { width: b.props.width as number, lines: (b.children as { children: string[] }[]).map(x => x.children[0]!), buttons: (await ui.findAll({ type: 'Button' })).map(x => x.text), link: (await ui.find({ type: 'Link' }))?.text }; await ui.unmount(); return out }
+  // the greeting: 'Miro: ' and thirteen characters, 6 + 26 columns, where the letters alone would say 19
+  const hello = await bubble()
+  expect(hello.lines).toEqual(['Miro: 今天的第一场对话。又开始了'])
+  expect(hello.width).toBe(6 + 26 + 4)
+  expect(hello.buttons).toEqual(['摸摸']) 
+  // a note: the advice is 17 characters and a stop, 36 columns, one line; in letters it would be 18
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+  const note = await bubble()
+  expect(note.lines).toEqual(['重复读取，内容没变：a.txt', '只是提醒。按钮会让助手用已有的内容。'])
+  expect(note.width).toBe(36 + 4)
+  expect(note.buttons).toEqual(['摸摸', '修复'])
+  expect(note.link).toBe('指南')
+  // a line of 26 characters is 52 columns: it wraps after 22, and the border hugs 44
+  elsewhere(k.disk, { voiceAsked: false })
+  k.state = {}
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ask = await bubble()
+  expect(ask.lines[0]!.split('\n')).toEqual(['我可以点评你的工作吗？会用你账户上的小模型，', '每天最多约 $0.00280，并发给它一段本轮的简短', '摘要。详情：/pet comments'])
+  expect(ask.width).toBe(48)
+  expect(ask.buttons.slice(-2)).toEqual(['开启点评', '保持安静'])
+})
+
+test('comments on in another language: the model is told the language, and a reply is held to its width on screen, not its letters', async ($, on) => {
+  const k = voiceKit($, on, { voice: true, lang: 'zh' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  k.v.reply = { isAnswered: true, text: '这次改得真利落，我数了两遍都没问题。', usage: USAGE } // 18 characters, 36 columns
+  await k.turn()
+  expect(k.v.calls[0].system).toMatch(/Plain Simplified Chinese: the line is in Simplified Chinese.*for instance: /s)
+  expect(k.v.calls[0].prompt).toMatch(/in about ten characters, in Simplified Chinese\./)
+  expect((await k.texts()).join(' | ')).toMatch(/这次改得真利落，我数了两遍都没问题。/)
+  // 31 characters are 62 columns: over the limit of 60, though only 31 letters. Dropped, paid for, and counted as dropped
+  await k.clock.advance(11 * 60_000)
+  k.v.reply = { isAnswered: true, text: '好'.repeat(31), usage: USAGE }
+  await k.turn()
+  expect((await k.texts()).join(' | ')).not.toMatch(/好好好/)
+  expect(k.disk.voice).toMatchObject({ lines: 2, dropped: 1 })
+})
+
+// The diary. `home` starts on 12 November 2026 at noon UTC; a day later is the next day anywhere.
+const DAY = 86_400_000
+const bubbleOf = async ($: any) => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const b = await ui.find({ type: 'Box', key: 'bubble' }); const lines = ((b?.children ?? []) as { children: string[] }[]).map(x => x.children[0]!.replace(/\n/g, ' ')); await ui.unmount(); return lines }
+
+test('the diary is written by the mod itself, in the store: the first day, a cuddle milestone, the first thing bought, time at work; only times, numbers and names', async ($, on) => {
+  const k = voiceKit($, on)
+  forget(k.disk) // a newborn
+  await $.session.start({ cwd: '/home/me/secret-client/cachito', surface: 'terminal', isInteractive: true })
+  expect(k.disk.diary.lines).toEqual([{ at: k.clock.now(), kind: 'first' }])
+  expect(k.disk.diary.folders).toEqual({ cachito: 1 }) // the folder's name, never its path
+  await k.clock.advance(9_000)
+  // a turn with a command that fails and a file read: none of it reaches the diary
+  k.v.fail = true
+  await k.turn(async () => { await $.tool.call({ tool: 'Bash', command: 'npm test --token=hunter2' } as any); await $.tool.call({ tool: 'Read', file_path: '/home/me/secret-client/notes.txt' } as any) })
+  await k.clock.advance(10 * 60_000)
+  await k.turn()
+  expect(k.disk.diary.today.ms).toBe(10 * 60_000 + 9_000) // at work since the chat opened: the hatching, then ten minutes between two turns
+  elsewhere(k.disk, { cuddles: 9 })
+  k.disk.pet = { ...k.disk.pet, coins: 99 }
+  k.state = {}
+  await $.session.start({ cwd: '/home/me/secret-client/cachito', surface: 'terminal', isInteractive: true })
+  await cardOf($, 'pet')
+  await cardOf($, 'buy mug')
+  await cardOf($, 'buy scarf')
+  expect(k.disk.diary.lines.map((l: any) => [l.kind, l.n ?? l.name])).toEqual([['first', undefined], ['cuddles', 10], ['bought', 'mug']])
+  const kept = JSON.stringify(k.disk.diary)
+  expect(kept).not.toMatch(/npm|hunter2|secret|notes|SECRET|boom|plan|tests pass|home\/me/)
+  for (const l of k.disk.diary.lines) expect(Object.keys(l).filter(x => !['at', 'kind', 'n', 'name'].includes(x))).toEqual([])
+  // /pet diary shows all of it; /pet diary clear empties it
+  const page = await cardOf($, 'diary')
+  expect(page).toMatch(new RegExp(`^CACHITO DIARY · 3 of 40 lines\\n\\n${dated(k.clock.now())}  first day together\\n.*  10 cuddles\\n.*  first thing bought: a coffee mug\\n\\ncounted for the habits: chats opened by folder: cachito 2; .*; at work today: 10 min\\nOnly times, counts and folder names, kept on this machine`))
+  expect(await cardOf($, 'diary clear')).toBe('The diary is empty now.')
+  expect(k.disk.diary.lines).toEqual([])
+  expect(await cardOf($, 'diary')).toMatch(/^The diary is empty\. The pet writes it by itself/)
+  expect(k.v.calls).toEqual([]) // zero tokens: no model was asked for any of it
+})
+
+test('no diary without a person at the prompt', async ($, on) => {
+  const k = voiceKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: false })
+  await k.turn()
+  await cardOf($, 'pet')
+  expect(k.disk.diary).toBeUndefined()
+})
+
+test('no diary under the bench, even with a person at the prompt', async ($, on) => {
+  const k = voiceKit($, on)
+  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  await cardOf($, 'pet')
+  expect(k.disk.diary).toBeUndefined()
+  expect(await cardOf($, 'diary')).toBe('No diary: under the bench none is kept.')
+})
+
+test('a memory of the diary is said in place of a plain greeting, at most once a day, in the language and the character; the offer to resume goes first', async ($, on) => {
+  const k = voiceKit($, on, { lang: 'es' })
+  // a diary a month old today, begun in this folder at this hour: written by the engine, as the mod would have
+  const T0 = k.clock.now() - 30 * DAY
+  let d = diaryOpened(diaryOf(undefined), { now: T0, folder: 'w', born: true })
+  for (let i = 1; i < 30; i++) d = diaryOpened(d, { now: T0 + i * DAY, folder: 'w' })
+  k.disk.diary = d
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(await bubbleOf($)).toEqual(['un mes de nosotros. no me lo esperaba']) // Miro's wit speaks
+  expect(k.disk.diary.lines.at(-1).kind).toBe('month')
+  // the same day, another chat: the ordinary greeting, no second memory
+  await $.session.end({ reason: 'exit', sessionId: 'me' } as any)
+  k.state = {}
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const again = await bubbleOf($)
+  expect(again.join(' ')).not.toMatch(/un mes/)
+  expect(k.v.calls).toEqual([]) // fixed lines: no model
+})
+
+test('the day after, a habit that is true now is the memory: here again at the usual hour, said as the pet\'s character says it', async ($, on) => {
+  const k = voiceKit($, on, { lang: 'es' })
+  const T0 = k.clock.now() - 31 * DAY
+  let d = diaryOpened(diaryOf(undefined), { now: T0, folder: 'w', born: true })
+  for (let i = 1; i < 31; i++) d = diaryOpened(d, { now: T0 + i * DAY, folder: 'w' })
+  k.disk.diary = { ...d, told: d.lastDay, toldKind: 'month' } // the month was said yesterday
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const band = ['de madrugada', 'por la mañana', 'por la tarde', 'por la noche'][bandOf(k.clock.now())]
+  expect(await bubbleOf($)).toEqual([`otra vez aquí ${band}. previsible`])
+  expect(k.disk.diary).toMatchObject({ toldKind: 'band' })
+  // a chat with something to pick up keeps its offer, and no memory is spent on it
+  const k2 = k.disk.diary.told
+  expect(k2).toBe(d.lastDay + 1)
+  expect(k.v.calls).toEqual([])
+})
+
+test('comments on: two or three lines of the diary go to the model as memories, and /pet comments on says so and says what /pet say sends', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  const T0 = k.clock.now() - 8 * DAY
+  let d = diaryOpened(diaryOf(undefined), { now: T0, folder: 'w', born: true })
+  for (let i = 1; i < 8; i++) d = diaryOpened(d, { now: T0 + i * DAY, folder: 'w' })
+  k.disk.diary = { ...d, told: Math.floor(k.clock.now() / DAY) + 1 } // nothing to say aloud today
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  const sent = k.v.calls[0].prompt as string
+  expect(sent).toMatch(/\n\nWhat you remember of your time with this person:\n(- .* \((today|yesterday|\d+ days ago|a habit)\)\n){2,3}You may hint at one of these when it fits, or at none\. Never list them\.\n/)
+  expect(sent).toMatch(/- works most often in w \(a habit\)\n/)
+  expect(sent.match(/\n- .*\((today|yesterday|\d+ days ago|a habit)\)/g)!.length).toBeLessThanOrEqual(3)
+  const says = await cardOf($, 'comments on')
+  expect(says).toMatch(/at most 3 lines of its diary, as memories it may hint at \(times, counts, a folder's name: \/pet diary shows all of it\)\. When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it\.\n\/pet say <text> speaks to the pet: what you write after it \(its first 300 characters\) is sent to the same model, which answers in the bubble with one line\. It is a request of its own, not a turn of the chat, and counts in the day's lines\.\nNever sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant\. But the end of the assistant's reply is sent as it is: those 600 characters can hold a path, a name or a piece of code the assistant wrote there\./)
+})
+
+// /pet say as the person types it: the prompt is submitted as the command, and the mod answers it there
+const sayTo = ($: any, text: string) => $.prompt.submit({ text: `/pet say ${text}`.trimEnd(), command: { name: 'pet', args: `say ${text}`.trimEnd() }, wait: false, origin: 'user' } as any)
+
+test('/pet say with comments on: what was written goes to the small model with character, language and memories; the answer is one line in the bubble, counted in the day; nothing enters the chat or is kept', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  k.v.reply = { isAnswered: true, text: 'Tired too. Stay a while.', usage: USAGE }
+  const r = await sayTo($, 'long day,   are you tired?')
+  await k.settle()
+  expect(r).toEqual({ drop: 'Said to Miro, not to the chat: the answer comes in the bubble.' }) // dropped: no row of the chat, no turn
+  expect(k.v.calls.length).toBe(1)
+  expect(k.v.calls[0].model).toBe('haiku')
+  expect(k.v.calls[0].system).toMatch(/^You are Miro, a small pixel fox .*WIT 91.*\nThe person speaks to you\..*You are a pet, not an assistant: you give no technical advice and you do no work\./s)
+  expect(k.v.calls[0].prompt).toMatch(/^The person says to you: long day, are you tired\?\n.*\n\nNow your one line in answer, in about six words\. One line only, and nothing after it\. No file or command names, no advice, no task done\.$/s)
+  expect(k.v.calls[0].prompt).toMatch(/What you remember of your time with this person:\n- the diary begins \(today\)\n/) // a pet older than its diary
+  expect(await bubbleOf($)).toEqual(['Tired too. Stay a while.'])
+  expect(k.disk.voice).toMatchObject({ lines: 1, today: 1, last: ['Tired too. Stay a while.'] })
+  expect(JSON.stringify(k.disk)).not.toMatch(/are you tired/) // what was written is kept nowhere
+  // it stays 12 seconds, then the bubble is the pet's own again
+  await k.clock.advance(13_000)
+  expect((await bubbleOf($)).join(' ')).not.toMatch(/Tired too/)
+  // asked to do work, it is the model that answers in character: the request says so, and the answer is shown as it comes
+  k.v.reply = { isAnswered: true, text: 'Not my job. Ask the big one.', usage: USAGE }
+  await k.clock.advance(6_000)
+  await sayTo($, 'fix the failing test in src/app.js')
+  await k.settle()
+  expect(k.v.calls[1].system).toMatch(/Asked to do a task, to write, fix or explain something, you say in your own way that this is the job of the assistant in the chat, not yours: in six words too, with no reason given\./)
+  expect(await bubbleOf($)).toEqual(['Not my job. Ask the big one.'])
+  // a reply too wide, or naming a file, is not shown: a fixed line in its character, and the call is paid and counted
+  k.v.reply = { isAnswered: true, text: 'Open src/app.js and change the second line, then run it again please', usage: USAGE }
+  await k.clock.advance(6_000)
+  await sayTo($, 'and now?')
+  await k.settle()
+  expect(await bubbleOf($)).toEqual(['words failed me. literally'])
+  expect(k.disk.voice).toMatchObject({ lines: 3, dropped: 1 })
+  // in another language: the model is told, and the fixed lines follow
+  await cardOf($, 'lang zh')
+  k.v.reply = { isAnswered: true, text: '我在呢。慢慢说。', usage: USAGE }
+  await k.clock.advance(6_000)
+  await sayTo($, '你好')
+  await k.settle()
+  expect(k.v.calls[3].prompt).toMatch(/^The person says to you: 你好\n.*in about ten characters, in Simplified Chinese\./s)
+  expect(await bubbleOf($)).toEqual(['我在呢。慢慢说。'])
+  // nothing after it: a word on how to use it, and no call
+  await k.clock.advance(6_000)
+  const empty = await sayTo($, '')
+  await k.settle()
+  expect(empty).toMatchObject({ drop: '请在后面写点什么：/pet say <文字>。' }) // one message, in place of the prompt: no toast beside it
+  expect(k.toasts).toEqual([])
+  expect(k.v.calls.length).toBe(4)
+})
+
+test('/pet say with comments off: a fixed line in its character saying that talking needs the comments on and what that means; no model is asked', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await sayTo($, 'hello there')
+  await k.settle()
+  expect(await bubbleOf($)).toEqual(['no comments, no conversation. rules', 'To talk, turn them on: /pet comments on. What you write then goes to a small model, on your tokens.'])
+  expect(k.v.calls).toEqual([])
+  expect(k.disk.voice).toBeUndefined()
+  expect(JSON.stringify(k.disk)).not.toMatch(/hello there/)
+  await cardOf($, 'lang es')
+  await sayTo($, 'hola')
+  await k.settle()
+  expect((await bubbleOf($))[1]).toBe('Para hablar, actívalos: /pet comments on. Lo que escribas irá a un modelo pequeño, con tus tokens.')
+  // run as a command by another mod, not typed: answered the same way, and no text is returned to the chat
+  expect(await $.command.run({ command: 'pet', args: 'say hello' } as any)).toEqual({})
+})
+
+test('/pet say counts in the day\'s cap: at the cap the pet says so in its character and no call is made; a failed call leaves a fixed line and is not counted', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  const today = Math.floor((k.clock.now() - new Date(k.clock.now()).getTimezoneOffset() * 60_000) / DAY)
+  k.disk.voice = { day: today, today: RULES.voiceCapDay - 1, todayUsd: 0.001, lines: 60, usd: 0.003, input: 30000, output: 1200, at: k.clock.now() - 1000 }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await sayTo($, 'one more?') // the last line of the day: no wait since the line before, unlike a comment at the end of a turn
+  await k.settle()
+  expect(k.v.calls.length).toBe(1)
+  expect(k.disk.voice.today).toBe(RULES.voiceCapDay)
+  await sayTo($, 'and another?')
+  await k.settle()
+  expect(k.v.calls.length).toBe(1)
+  expect(await bubbleOf($)).toEqual(['comments sold out today. restock tomorrow']) // said plainly: finished for today, back tomorrow
+  // a call that does not come back
+  k.disk.voice = { ...k.disk.voice, today: 0 }
+  k.v.reply = { isAnswered: false, text: '', usage: NONE }
+  await sayTo($, 'hello?')
+  await k.settle()
+  expect(await bubbleOf($)).toEqual(['words failed me. literally'])
+  expect(k.disk.voice.today).toBe(0)
+})
+
+test('comments during a long turn: after 10 minutes one line about the turn so far, then one every 10 minutes at most, under the wait and the cap of the lines at the end of a turn; never while the person types', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const step = async () => { for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; }
+  const wait = async (ms: number) => { await k.clock.advance(ms); await k.settle() }
+  const submit = () => $.prompt.submit({ text: 'the secret plan', wait: false, origin: 'user' } as any)
+  await submit()
+  await $.tool.call({ tool: 'Bash', command: 'TOKEN=abc deploy --key hunter2', tool_use_id: 'b1' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/w/private/app.js', tool_use_id: 'e1' } as any)
+  await step() // a step that only called tools: the assistant wrote nothing yet
+  await wait(9 * 60_000 + 40_000)
+  expect(k.v.calls).toEqual([]) // not a long turn yet
+  k.v.reply = { isAnswered: true, text: 'Still at it. So am I.', usage: USAGE }
+  await wait(30_000)
+  expect(k.v.calls.length).toBe(1)
+  expect(k.v.calls[0].prompt).toMatch(/^What is happening \(background only, none of it is to be repeated\):\n- the assistant is still at work on the same request: the turn has not ended\n- it has lasted: 10 minutes so far, and the person is waiting\n- tools used so far: Bash 1, Edit 1\n- commands that failed so far: none\n- files changed so far: 1\n\nWhat you remember/)
+  expect(k.v.calls[0].prompt).not.toMatch(/last wrote|reply ended/) // no end of a reply while there is none
+  expect(JSON.stringify(k.v.calls[0])).not.toMatch(/secret plan|SECRET OUTPUT|hunter2|TOKEN|app\.js|private/)
+  expect(await k.texts()).toContain('Still at it. So am I.') // in the bubble while the turn goes on
+  expect(k.disk.voice).toMatchObject({ today: 1, lines: 1 })
+  // the next one no sooner than 10 minutes later, with the end of what the assistant wrote meanwhile
+  k.v.said = 'Half of it is done. Now the whole suite.'
+  await step()
+  k.v.reply = { isAnswered: true, text: 'Twenty minutes. I counted.', usage: USAGE }
+  await wait(9 * 60_000 + 30_000)
+  expect(k.v.calls.length).toBe(1)
+  await wait(40_000)
+  expect(k.v.calls.length).toBe(2)
+  expect(k.v.calls[1].prompt).toMatch(/\n- it has lasted: 20 minutes so far, and the person is waiting\n.*\n- files changed so far: 1\n- the assistant last wrote: Half of it is done\. Now the whole suite\.\n/s)
+  expect(await k.texts()).toContain('Twenty minutes. I counted.')
+  // never while the person types: it waits for an empty box
+  k.box = 'I am typing'
+  await wait(10 * 60_000 + 20_000)
+  expect(k.v.calls.length).toBe(2)
+  k.box = ''
+  await wait(10_000)
+  expect(k.v.calls.length).toBe(3)
+  // the wait is the one of the lines at the end of a turn: the turn ends right after, and nothing more is asked
+  await $.turn.complete({ answer: 'All done.', reason: 'answer' } as any)
+  await k.settle()
+  expect(k.v.calls.length).toBe(3)
+})
+
+test('comments during a long turn: nothing between turns, nothing over the cap of the day, and a line of another chat counts for the wait', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const wait = async (ms: number) => { await k.clock.advance(ms); await k.settle() }
+  // no turn is running: the clock alone says nothing
+  await wait(11 * 60_000)
+  expect(k.v.calls).toEqual([])
+  // the cap of the day holds a long turn too
+  await $.prompt.submit({ text: 'the secret plan', wait: false, origin: 'user' } as any)
+  k.disk.voice = { day: dayOf(k.clock.now()), today: RULES.voiceCapDay, todayUsd: 0.0016, lines: 90, usd: 0.0036, input: 27000, output: 1800, at: 0 }
+  await wait(11 * 60_000)
+  expect(k.v.calls).toEqual([])
+  // and a line another chat got meanwhile counts for the wait: one line every 10 minutes over all the chats
+  k.disk.voice = { ...k.disk.voice, today: 3, at: k.clock.now() }
+  await wait(9 * 60_000 + 30_000)
+  expect(k.v.calls).toEqual([])
+  await wait(40_000)
+  expect(k.v.calls.length).toBe(1)
+  expect(k.v.calls[0].prompt).toMatch(/\n- it has lasted: 21 minutes so far/)
+  expect(k.disk.voice).toMatchObject({ today: 4, lines: 91 })
+})
+
+test('the outline offer keeps the comment of the turn under it; a cuddle passes in front of both for 5 seconds, with the comment about it when one comes, and then they are back', async ($, on) => {
+  const k = voiceKit($, on, { voice: true, style: true }) // lean on: a long chat is calm, and the offer is the bubble
+  k.v.context = 70_000
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.clock.advance(4 * 60_000) // past the greeting: the offer waits 3 minutes after another line
+  k.v.reply = { isAnswered: true, text: 'Long road, good pace.', usage: USAGE }
+  await k.turn(async () => { for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; })
+  const OFFER = ['long chat: shall we put our thoughts in order?', 'Outline asks for where we are, where we are going, what is left.']
+  expect(k.v.calls.length).toBe(1) // the offer does not stop the comment from being asked
+  expect(await bubbleOf($)).toEqual([...OFFER, 'Long road, good pace.']) // and it is the last line, under the offer
+  // a cuddle: the comment about it takes the whole bubble, over the offer
+  k.v.reply = { isAnswered: true, text: 'A pat. Filed under good.', usage: USAGE }
+  expect(await cardOf($, 'pet')).toMatch(/^Miro: .+  \(petted once, \+2 stars\)$/)
+  await k.settle()
+  expect(k.v.calls.length).toBe(2)
+  expect(await bubbleOf($)).toEqual(['A pat. Filed under good.'])
+  await k.clock.advance(4_000)
+  expect(await bubbleOf($)).toEqual(['A pat. Filed under good.'])
+  // then what was there before is back, and the cuddle's line is gone for good
+  await k.clock.advance(2_000)
+  expect(await bubbleOf($)).toEqual([...OFFER, 'Long road, good pace.'])
+  // while the person types no model is asked: the fixed line passes in front all the same
+  k.box = 'typing'
+  const fixed = String(await cardOf($, 'pet')).replace(/^Miro: (.+)  \(.*$/, '$1')
+  await k.settle()
+  expect(k.v.calls.length).toBe(2)
+  expect(await bubbleOf($)).toEqual([fixed])
+  k.box = ''
+  await k.clock.advance(6_000)
+  // the cap of the day reached: the cuddle says so in its character, in the command's reply and in the bubble, and asks nothing
+  k.disk.voice = { ...k.disk.voice, today: RULES.voiceCapDay }
+  const CAPPED = ['thanks. no comments today, back tomorrow', 'pat noted. comments sold out till tomorrow', 'a pat? my comments ran out today. tomorrow', 'mm. comments are done today. more tomorrow', 'pat counted. no comments left till tomorrow', 'love it. my comments come back tomorrow']
+  const said = String(await cardOf($, 'pet')).replace(/^Miro: (.+)  \(.*$/, '$1')
+  await k.settle()
+  expect(CAPPED.slice(1)).toContain(said)
+  expect(await bubbleOf($)).toEqual([said])
+  expect(k.v.calls.length).toBe(2)
+  await cardOf($, 'lang es')
+  expect(await cardOf($, 'pet')).toMatch(/^Miro: (caricia anotada\. comentarios, hasta mañana|contada\. comentarios: cero hasta mañana)  \(/)
+  // /pet comments says how many are left
+  expect(await cardOf($, 'comments')).toMatch(/\nToday: 40 of 40 lines, \$\d\.\d+: none left, they come back tomorrow\./)
+  k.disk.voice = { ...k.disk.voice, today: 3 }
+  expect(await cardOf($, 'comments')).toMatch(/\nToday: 3 of 40 lines, \$\d\.\d+: 37 left\./)
+  // with the comments off a cuddle at any count is a cuddle: the cap is nothing to speak of
+  await cardOf($, 'lang en')
+  k.disk.voice = { ...k.disk.voice, today: RULES.voiceCapDay }
+  await cardOf($, 'comments off')
+  expect(CAPPED).not.toContain(String(await cardOf($, 'pet')).replace(/^Miro: (.+)  \(.*$/, '$1'))
+})
+
+test('the bubble is not always there: a phrase stays about 12 seconds, longer with a button of its own, a question until the next prompt; then only the pet is left, with its name, its stars and its own buttons', async ($, on) => {
+  const k = voiceKit($, on)
+  const T0 = Date.UTC(2026, 10, 12, 12)
+  k.disk.pet = { coins: 3, affection: 3, days: 1, day: dayOf(T0), owned: [] }
+  k.disk.chats = { other: { cwd: '/w/cachito', at: T0 - 20 * 60_000, done: false } } // a chat left here mid-turn: the greeting asks
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const look = async (surface = 'terminal') => {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const open = !!(await ui.find({ type: 'Box', key: 'bubble' })), texts = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text as string), keys = (await ui.findAll({ type: 'Button' })).map((x: any) => x.key as string)
+    await ui.unmount()
+    return { open, texts, keys }
+  }
+  // a question waits for its answer: still there after a minute, gone when the person writes the next prompt
+  await k.clock.advance(60_000)
+  let b = await look()
+  expect([b.open, b.keys]).toEqual([true, ['pet', 'fix']])
+  expect(b.texts.join(' ')).toMatch(/pick it up\?/)
+  await k.turn()
+  await k.clock.advance(1_000)
+  b = await look()
+  // nothing new to say: the plain line of a calm chat does not open the bubble
+  expect(b.open).toBe(false)
+  expect(b.texts).toEqual(['Miro  ★ 4', '·']) // the name and the stars, the dot before the buttons, and no phrase
+  expect(b.keys).toEqual(['pet']) // the pet's own buttons stay
+  expect((await look('desktop')).texts).toEqual(['Miro  ★ 4'])
+
+  // a phrase with a button of its own (a re-read, with its fix and its guide): there after 19 seconds, gone after 31
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+  b = await look()
+  expect([b.open, b.keys]).toEqual([true, ['pet', 'fix']])
+  expect(b.texts.join(' ')).toMatch(/re-read/)
+  expect((await look('desktop')).texts.join(' ')).toMatch(/^Miro  ★ 4  .*re-read/)
+  await k.clock.advance(19_000)
+  expect((await look()).open).toBe(true)
+  await k.clock.advance(12_000)
+  b = await look()
+  expect([b.open, b.keys, b.texts]).toEqual([false, ['pet'], ['Miro  ★ 4', '·']])
+  // the same phrase is not new: it stays away
+  await k.clock.advance(5_000)
+  expect((await look()).open).toBe(false)
+
+  // a cuddle's line has its own seconds, then the bubble goes again
+  await cardOf($, 'pet')
+  expect((await look()).open).toBe(true)
+  await k.clock.advance(6_000)
+  expect((await look()).open).toBe(false)
+})
+
+test('a calm pet moves a little: a gesture now and then, never two within 8 seconds, never while a phrase is up; a golden coat has its glint and a sparkle now and then', async ($, on) => {
+  const k = voiceKit($, on)
+  const T0 = Date.UTC(2026, 10, 12, 12)
+  k.disk.pet = { ...RULES.grownAt, coins: 3, day: dayOf(T0), owned: [] }
+  k.disk.chats = { other: { cwd: '/w/cachito', at: T0 - 20 * 60_000, done: false } }
+  {
+    await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+    const shot = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; const open = !!(await ui.find({ type: 'Box', key: 'bubble' })); await ui.unmount(); return { cells: String(r.cells), rows: Number(r.rows), open } }
+    /** One look every half second: the drawings seen, and when the drawing was not the still one. */
+    const watch = async (seconds: number, still: string) => { const moved: number[] = [], seen = new Set<string>(); for (let i = 0; i < seconds * 2; i++) { await k.clock.advance(500); const s = await shot(); seen.add(s.cells); if (s.rows !== rows) moved.push(i) } return { moved, seen } } // a gesture is drawn on the taller canvas; a blink is not, and is not counted
+    const still = (await shot()).cells, rows = (await shot()).rows
+    // the greeting asks and holds the bubble: for a whole minute the pet does not move
+    expect((await shot()).open).toBe(true)
+    expect((await watch(60, still)).moved).toEqual([])
+    // the question is answered by a prompt: the bubble goes, and the gestures come
+    await k.turn()
+    const calm = await watch(150, still)
+    const starts = calm.moved.filter((i, n) => n === 0 || i - calm.moved[n - 1]! > 1)
+    expect(starts.length).toBeGreaterThanOrEqual(5) // one every 8 to 20 seconds
+    expect(starts.length).toBeLessThanOrEqual(150 / 8)
+    for (let n = 1; n < starts.length; n++) expect(starts[n]! - starts[n - 1]!).toBeGreaterThanOrEqual(16) // 8 seconds, in half seconds
+    expect(calm.seen.size).toBeGreaterThanOrEqual(4) // more than one gesture: looks, ears, a hop
+    expect(calm.moved.length).toBeLessThan(150 * 2 * 0.25) // rare and short: still most of the time
+
+    // every animal has gestures drawn for the baby, the adult and the crowned one, each frame with where the body sits
+    for (const [name, sp] of Object.entries(BUILTIN.species) as [string, any][]) for (const st of ['baby', 'adult', 'crown']) {
+      const idle = Object.entries(sp.states[st].idle) as [string, any][]
+      expect(idle.length, `${name} ${st}`).toBeGreaterThan(0)
+      for (const [g, v] of idle) { expect(['left', 'right', 'up', 'ears', 'hop']).toContain(g); expect(v.frames.length).toBeLessThanOrEqual(3); expect(v.at.length).toBeGreaterThan(0) }
+    }
+
+    // the golden coat: the glint is always on it, a sparkle lights up next to it now and then and goes
+    k.disk.pet = { ...k.disk.pet, owned: ['golden'] }
+    await k.clock.advance(11_000)
+    const inks = async () => { const c = new Uint32Array(Uint8Array.from(atob((await shot()).cells), ch => ch.charCodeAt(0)).buffer); return new Set([...c].filter((_, i) => i % 3 !== 0)) }
+    let lit = 0, glint = 0
+    for (let i = 0; i < 120; i++) { await k.clock.advance(500); const s = await inks(); if (s.has(0xffd54f)) lit++; if (s.has(0xfff6cf)) glint++ }
+    expect(glint).toBe(120)
+    expect(lit).toBeGreaterThanOrEqual(4) // a sparkle every 5 to 13 seconds, a second long
+    expect(lit).toBeLessThanOrEqual(30)
+  }
+})
+
+test('news of another chat with the comments on: the small model is told the folder and the times, and says it in the pet\'s character; when it fails the fixed line is said', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  const T0 = Date.UTC(2026, 10, 12, 12), MIN = 60_000
+  k.disk.pet = { coins: 3, affection: 3, days: 1, day: dayOf(T0), owned: [] }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  k.v.reply = { isAnswered: true, text: 'The vodmax chat is done. I heard it sigh.', usage: USAGE }
+  k.disk.chats = { ...k.disk.chats, other: { cwd: '/home/me/secret-client/vodmax', at: T0 + 1_000, done: true, took: 7 * MIN } }
+  await k.clock.advance(10_000)
+  await k.settle()
+  expect(k.v.calls.length).toBe(1)
+  expect(k.v.calls[0].prompt).toMatch(/the one in the folder vodmax, finished the job it was on\n- that job took about 7 minutes, and it ended just now/)
+  expect(k.v.calls[0].prompt).toMatch(/tell the person that the chat in vodmax is done/)
+  expect(k.v.calls[0].prompt).not.toMatch(/secret-client|the secret plan/) // the last part of the folder's path, and nothing of either chat
+  expect((await k.texts()).join(' ').replace(/\s+/g, ' ')).toContain('The vodmax chat is done. I heard it sigh.')
+  expect(k.disk.voice.today).toBe(1) // counted in the day
+
+  // the call fails: the fixed line, with the folder and since when
+  k.v.reply = { isAnswered: false, text: '', usage: NONE }
+  await k.clock.advance(6 * MIN)
+  await k.turn() // the chat is in use
+  k.disk.chats = { ...k.disk.chats, third: { cwd: '/w/notes', at: T0 + 6 * MIN, done: true, took: 2 * MIN } }
+  await k.clock.advance(10_000)
+  await k.settle()
+  expect((await k.texts()).join(' ').replace(/\s+/g, ' ')).toMatch(/the chat in notes finished its job (just now|\d+ min ago)/)
+})
+
+test('animals cost stars: the one a pet is born as is free, each other is unlocked once for 100 stars in the shop and kept, and the person goes freely among the ones they have, by /pet animal or the skin menu', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.disk.pet = { coins: 150, affection: 150, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const look = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const keys = (await ui.findAll({ type: 'Button' })).map((b: any) => b.key as string), texts = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text as string), r = JSON.stringify((await ui.find({ type: 'Raster' }))!.props.cells); await ui.unmount(); return { keys, texts, r } }
+  const press = async (key: string) => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key }); await k.clock.advance(1); await ui.unmount() }
+
+  // one animal, its own: nothing to pick, and the shop lists the six apart, each with its price, the one shown marked
+  expect((await look()).keys).not.toContain('skin')
+  expect(await cardOf($, 'animal')).toBe('Pick one of: fox.\nOthers, 100 stars each, once: penguin, chick, dog, bunny, cactus. /pet shop <animal> unlocks one.')
+  const shop = await cardOf($, 'shop')
+  expect(shop).toMatch(/\n  golden +a golden coat +300  coat\n\n  penguin +penguin +100  animal\n  chick +chick +100  animal\n  dog +dog +100  animal\n  bunny +bunny +100  animal\n  fox +fox +100  animal +yours, shown\n  cactus +cactus +100  animal\n\n/)
+  expect(shop).not.toMatch(/axolotl/) // the rare one is not sold
+  expect(shop).toContain('Animals: the one your pet was born as is free; each other is unlocked once and stays yours. /pet shop <animal> unlocks, /pet animal <name> switches.')
+  // not unlocked: /pet animal does not spend stars, it says how
+  expect(await cardOf($, 'animal dog')).toBe('The dog is not yours yet: 100 stars unlock it, once, and you have 150. /pet shop dog unlocks it.')
+  expect(prefsOf(k.disk).species).toBe('fox')
+  expect(await cardOf($, 'shop axolotl')).toMatch(/^Nothing called axolotl in the shop\./)
+  expect(await cardOf($, 'animal axolotl')).toBe('The axolotl is not for sale: only a pet born as one is one.\nPick one of: fox.\nOthers, 100 stars each, once: penguin, chick, dog, bunny, cactus. /pet shop <animal> unlocks one.') // E22: why, in a line
+
+  // unlocked in the shop: paid once, shown at once, kept
+  const fox = (await look()).r
+  expect(await cardOf($, 'shop dog')).toBe('Unlocked the dog for 100 stars, 50 left: it is yours for good, and Cachito is one now. /pet animal <name> switches among yours.')
+  expect(k.disk.pet).toMatchObject({ coins: 50, affection: 150, animals: ['dog'] })
+  expect(prefsOf(k.disk).species).toBe('dog')
+  expect((await look()).r).not.toBe(fox)
+  expect(await cardOf($, 'buy dog')).toBe('The dog is yours already. /pet animal dog switches to it.')
+  expect(await cardOf($, 'shop fox')).toBe('The fox is yours already. /pet animal fox switches to it.') // the one it was born as: never paid
+  expect(await cardOf($, 'shop bunny')).toMatch(/^The bunny costs 100 stars and you have 50\. Stars come with use: /)
+  expect(k.disk.pet.coins).toBe(50)
+  expect(await cardOf($, 'shop')).toMatch(/\n  dog +dog +100  animal +yours, shown\n  bunny +bunny +100  animal\n  fox +fox +100  animal +yours\n/)
+
+  // free among the ones owned: by command, and by the animal part of the skin menu
+  expect(await cardOf($, 'animal fox')).toBe('Cachito is now a fox.')
+  expect(await cardOf($, 'animal dog')).toBe('Cachito is now a dog.')
+  expect(k.disk.pet.coins).toBe(50)
+  expect(await cardOf($, 'animal')).toMatch(/^Pick one of: fox, dog\.\nOthers, 100 stars each, once: penguin, chick, bunny, cactus\./)
+  expect(await cardOf($, 'skin')).toMatch(/^Miro's skin\n  animal  dog\n\/pet wear <item>/)
+  expect((await look()).keys).toContain('skin')
+  await press('skin')
+  const open = await look()
+  expect(open.keys).toEqual(['slot-animal', 'skin-done'])
+  expect(open.texts.join(' ')).toMatch(/animal: dog/)
+  await press('slot-animal')
+  expect(prefsOf(k.disk).species).toBe('fox')
+  await press('slot-animal')
+  expect(prefsOf(k.disk).species).toBe('dog')
+})
+
+test('a pet of before the prices shown as another animal than its own keeps both; a pet born as the rare one keeps it and sees it in the shop with no price', async ($, on) => {
+  const k = home(on, {}, { species: 'bunny', born: 'axolotl', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.disk.pet = { coins: 20, affection: 20, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  expect(k.disk.pet).toMatchObject({ coins: 20, animals: ['bunny'] }) // kept for nothing
+  expect(await cardOf($, 'animal')).toMatch(/^Pick one of: axolotl, bunny\.\nOthers, 100 stars each, once: penguin, chick, dog, fox, cactus\./)
+  expect(await cardOf($, 'animal axolotl')).toBe('Cachito is now a axolotl.')
+  expect(await cardOf($, 'animal bunny')).toBe('Cachito is now a bunny.')
+  expect(await cardOf($, 'shop')).toMatch(/\n  bunny +bunny +100  animal +yours, shown\n  fox +fox +100  animal\n  cactus +cactus +100  animal\n  axolotl +axolotl +–  animal +yours\n\n/)
+})
+
+// ---- What four independent reviews found on 13/11/2026: each fault as a test ----
+
+test('B7: with the band hidden no line is asked of the model: not for a failure, a long turn, a cuddle or /pet say', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await cardOf($, 'hide')
+  k.v.fail = true
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't1' } as any))
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await k.clock.advance(11 * 60_000); await k.settle() // a turn that lasts
+  await cardOf($, 'pet'); await k.settle()
+  await $.prompt.submit({ text: '/pet say hello', command: { name: 'pet', args: 'say hello' }, wait: false, origin: 'user' } as any); await k.settle()
+  expect(k.v.calls).toEqual([])
+  expect(k.disk.voice).toBeUndefined()
+  expect(await cardOf($)).toMatch(/\ncomments on: /) // still the person's choice: the card says so
+  // shown again, it speaks again
+  await cardOf($, 'show')
+  await k.clock.advance(60_000)
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't2' } as any))
+  expect(k.v.calls.length).toBeGreaterThan(0)
+})
+
+test('B8: a line is counted in the store before its call goes out, so the cap holds while a call is on its way; a store that cannot be written means no call', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  const T0 = Date.UTC(2026, 10, 12, 12)
+  k.disk.voice = { day: dayOf(T0), today: RULES.voiceCapDay - 1, lines: 39, at: T0 - 3_600_000 }
+  const during: any[] = []
+  k.v.onCall = () => { during.push(structuredClone(k.disk.voice)) }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  k.v.fail = true
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't1' } as any))
+  expect(k.v.calls.length).toBe(1)
+  expect(during[0]).toMatchObject({ today: RULES.voiceCapDay, lines: 40, at: T0, by: { fail: T0 } }) // already the 40th while the model is asked
+  expect(during[0].input ?? 0).toBe(0) // its use is added after
+  expect(k.disk.voice).toMatchObject({ today: RULES.voiceCapDay, lines: 40, input: 300, output: 20 })
+  // another chat that reads the store during the call is at the cap: nothing more today, whatever the reason
+  await k.clock.advance(60_000)
+  await cardOf($, 'pet'); await k.settle()
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't2' } as any))
+  expect(k.v.calls.length).toBe(1)
+  // the count cannot be written: the cap could not be held, so the model is not asked
+  k.disk.voice = { day: dayOf(T0), today: 0, lines: 40 }
+  ;(k as any).ro = true
+  await k.clock.advance(60_000)
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't3' } as any))
+  expect(k.v.calls.length).toBe(1)
+})
+
+/** The columns a band's tree takes at its widest, from what was drawn: the name, the bubble, the buttons, the drawing. */
+async function drawnWidth($: any, props: object) {
+  const ui = await $.ui.mount({ ...BAND, props: { hasSurvey: false, ...props }, surface: 'terminal' })
+  const r = await ui.find({ type: 'Raster' }), bubble = await ui.find({ type: 'Box', key: 'bubble' }), tail = await ui.find({ type: 'Box', key: 'tail' })
+  const found = await ui.findAll({ type: 'Button' }), buttons = found.map((x: any) => String(x.text))
+  const OWN = ['skin', 'pet'] // the pet's own buttons: in the row of the name; the others are under the bubble
+  const own = found.filter((x: any) => OWN.includes(String(x.key))).map((x: any) => String(x.text)), under = found.filter((x: any) => !OWN.includes(String(x.key))).map((x: any) => String(x.text))
+  const texts = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text))
+  const ui0head = ui.find({ type: 'Box', key: 'head' }), besideBox = await ui.find({ type: 'Box', key: 'beside' })
+  await ui0head
+  await ui.unmount()
+  const w = (t: string) => [...t].reduce((n: number, ch: string) => n + (/[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1), 0)
+  const span = (list: string[]) => list.reduce((n: number, b: string) => n + w(b), 0) + 2 * Math.max(0, list.length - 1)
+  const headBox = await ui0head, head = String((headBox?.children as any[] | undefined)?.find((x: any) => x.type === 'Text')?.children[0] ?? texts.find((t: string) => t.includes('★')) ?? ''), keys = span(under) // the row of the name: with little room it may be the name alone, with no star
+  const row = w(head) + (own.length ? 5 + span(own) : 0) // the row of the name: the head, the dot with two cells each side, the pet's own buttons
+  const cols = r ? Number((r as any).props.columns) : 0
+  const aside = !!r && !bubble && !!besideBox // the row of the name is beside the drawing
+  const lines = texts.flatMap((t: string) => t.split('\n')).map(w)
+  const total = !r ? Math.max(0, ...lines) : bubble ? Math.max(row, Number((bubble as any).props.width), keys) + 2 + cols : !texts.includes(head) ? cols : aside ? row + 1 + cols : Math.max(row, cols)
+  return { total, raster: !!r, bubble: !!bubble, buttons, own, aside, head, texts }
+}
+
+test('E18: the band fits the width it is given: the bubble narrows, then the buttons go, then only the pet, then one row of text', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  const T0 = Date.UTC(2026, 10, 12, 12)
+  const ALL = ['shades', 'mug', 'scarf', 'cap', 'lamp', 'headphones', 'backpack', 'suitcase', 'sombrero', 'sneakers', 'skateboard', 'golden']
+  k.disk.pet = { coins: 2000, affection: 600, days: 30, day: dayOf(T0), owned: ALL }
+  on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const WIDTHS = [40, 60, 80, 100]
+  const fits = async (what: string) => { for (const bodyColumns of WIDTHS) { const d = await drawnWidth($, { bodyColumns }); expect([what, bodyColumns, d.total <= bodyColumns], JSON.stringify(d)).toEqual([what, bodyColumns, true]) } }
+  // a greeting in the bubble, with every thing on in turn: the accessories and the skateboard make the drawing wider and taller
+  for (const wear of ['none', ...ALL.filter(id => id !== 'golden'), 'suitcase skateboard', 'cap scarf sneakers lamp golden', 'sombrero skateboard backpack golden']) {
+    k.disk['pref.wear'] = wear
+    await k.clock.advance(10_500) // the choice made in "another chat" reaches this one
+    await fits(`wearing ${wear}`)
+  }
+  // the bubble is still there at every one of these widths, narrower: the same words on more lines
+  k.disk['pref.wear'] = 'none'; await k.clock.advance(10_500)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any); k.state = {}
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  const wide = await drawnWidth($, { bodyColumns: 100 }), narrow = await drawnWidth($, { bodyColumns: 40 })
+  expect([wide.bubble, narrow.bubble]).toEqual([true, true])
+  expect([wide.head, narrow.head, narrow.own]).toEqual(['Miro  ★ 2000', 'Miro', ['skin', 'pet']]) // in the row of the name the stars gave way, the pet's buttons are all there
+  expect(narrow.texts.join(' ').replace(/\s+/g, ' ')).toBe(wide.texts.join(' ').replace(/\s+/g, ' ').replace('Miro ★ 2000', 'Miro'))
+  expect(narrow.texts.join('\n').split('\n').length).toBeGreaterThan(wide.texts.join('\n').split('\n').length)
+  // the skin menu open, in English and in Chinese
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key: 'skin' }); await k.clock.advance(1); await ui.unmount()
+  await fits('skin menu')
+  await cardOf($, 'lang zh'); await fits('skin menu, Chinese')
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key: 'skin-done' }); await k.clock.advance(1); await ui.unmount()
+  await fits('Chinese')
+  await cardOf($, 'lang en')
+  // narrower still: first the pet's own buttons go, then the bubble, then the drawing itself
+  const at = async (bodyColumns: number, more = {}) => drawnWidth($, { bodyColumns, ...more })
+  const b34 = await at(34)
+  expect([b34.bubble, b34.raster, b34.total <= 34]).toEqual([true, true, true])
+  const b24 = await at(24)
+  expect([b24.bubble, b24.raster, b24.head, b24.own, b24.total <= 24]).toEqual([false, true, 'Miro', ['skin', 'pet'], true]) // only the pet, with its name and its buttons: the stars gave way to them
+  const b16 = await at(16)
+  expect([b16.raster, b16.head, b16.own, b16.total <= 16]).toEqual([true, 'Miro', ['skin'], true]) // the name over the drawing: beside it there is no room
+  const b10 = await at(10)
+  expect([b10.raster, b10.texts.length, b10.total <= 10]).toEqual([false, 1, true]) // one row of text, cut to the width
+  // a band that may not be as tall as the drawing: the row of text too; one too low for the bubble: the pet alone
+  expect((await at(100, { maxRows: 3 })).raster).toBe(false)
+  const low = await at(100, { maxRows: 4 }), enough = await at(100, { maxRows: 6 })
+  expect([low.raster, enough.raster, enough.bubble]).toEqual([false, true, true])
+  // with no width given (an engine that does not say) everything is drawn as before
+  const free = await drawnWidth($, {})
+  expect([free.bubble, free.buttons]).toEqual([true, ['skin', 'pet']])
+})
+
+test('E19: with the bubble closed the buttons skin and pet are in the row of the name, beside the pet: no row of buttons under it, and no [-] of ours beside the engine\'s', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  k.disk.pet = { coins: 4, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['mug'] }
+  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await (await $.ui.mount({ ...BAND, surface: 'terminal' })).unmount() // the greeting is up
+  await k.clock.advance(40_000) // and had its time
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Box', key: 'bubble' })).toBeFalsy()
+  expect(await ui.find({ type: 'Box', key: 'keys' })).toBeFalsy() // no row of buttons at all
+  const row = (await ui.find({ type: 'Box', key: 'head' }))!
+  expect((row.children as any[]).map(x => [x.type, x.type === 'Text' ? x.children[0] : x.props.label])).toEqual([['Text', 'Miro  ★ 4'], ['Text', '·'], ['Button', 'skin'], ['Button', 'pet']]) // Miro  ★ 4  ·  skin  pet
+  expect([row.props.flexDirection, row.props.gap]).toEqual(['row', 2])
+  // the engine draws its own [-] at the right end of the band: none of ours, at any width, with the bubble open or closed, or two are seen
+  for (const props of [{}, { bodyColumns: 200 }, { bodyColumns: 60 }, { bodyColumns: 30 }]) {
+    const all = await $.ui.mount({ ...BAND, props: { hasSurvey: false, ...props }, surface: 'terminal' })
+    expect(JSON.stringify(await all.drawn())).not.toContain('[-]')
+    expect((await all.findAll({ type: 'Button' })).map((x: any) => String(x.key))).toEqual(['skin', 'pet'])
+    await all.unmount()
+  }
+  const tree = JSON.stringify(await ui.drawn())
+  await ui.unmount()
+  const order = ['Miro  ★ 4', '"skin"', '"pet"', '"Raster"'].map(x => tree.indexOf(x))
+  expect(order.every(i => i >= 0)).toBe(true)
+  expect([...order].sort((x, y) => x - y)).toEqual(order) // the name, its buttons, and then the drawing: one row with the pet
+  // a band exactly as tall as the drawing loses nothing: the buttons are beside the pet, not under it
+  const tight = await drawnWidth($, { bodyColumns: 100, maxRows: 6 })
+  expect([tight.raster, tight.bubble, tight.buttons]).toEqual([true, false, ['skin', 'pet']])
+  // narrower, the row of the name gives way: the stars first, and only then one button at a time, pet, then skin, which
+  // stay as long as there is room for them beside the name; the name stays
+  // (under the width where the name and the stars fit beside the drawing the row goes above it, where it has the whole width again)
+  const seen: string[] = []
+  for (let bodyColumns = 60; bodyColumns >= 14; bodyColumns--) {
+    const d = await drawnWidth($, { bodyColumns })
+    expect([bodyColumns, d.total <= bodyColumns, d.head.startsWith('Miro')], JSON.stringify(d)).toEqual([bodyColumns, true, true])
+    if (!d.raster) break // under the width of the drawing: one row of text
+    const what = `${d.aside ? 'beside' : 'above'}: ${[d.head, ...d.own].join(' ')}`
+    if (seen.at(-1) !== what) seen.push(what)
+  }
+  expect(seen).toEqual([
+    'beside: Miro  ★ 4 skin pet', 'beside: Miro skin pet', 'beside: Miro skin', 'beside: Miro  ★ 4', // with no button left the stars are back
+    'above: Miro  ★ 4 skin pet', 'above: Miro skin pet',
+  ])
+})
+
+test('E23: the question about the comments: on a surface with no buttons it says how to answer; a cuddle over it leaves no answer buttons under the cuddle; asked with the band hidden it is not marked as asked', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en', hidden: true })
+  k.disk.prefs.voiceAsked = false
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(prefsOf(k.disk).voiceAsked).toBe(false) // nobody could see it: not burnt
+  await cardOf($, 'show')
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(prefsOf(k.disk).voiceAsked).toBe(true)
+  const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await desk.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/May I comment on your work\?.*Answer with \/pet comments on or \/pet comments off\.$/)
+  await desk.unmount()
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
+  await ui.unmount()
+  await cardOf($, 'pet') // a cuddle: its line is over the question for 5 seconds
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/May I comment/)
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet'])
+  await ui.unmount()
+  await k.clock.advance(6_000)
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet']) // the question is back, with its buttons
+  await ui.unmount()
+})
+
+test('a pack animal with a larger body (an imported Codex pet): drawn at its own size, things of the shop set on it by its anchors, the band still fits the width, credits in /pet skins', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  k.disk.pet = { coins: 0, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['shades', 'mug', 'skateboard', 'cap'] }
+  const W = 20, H = 22, row = (y: number) => y < 2 ? '.'.repeat(W) : y === 8 ? '...AAAkAAAAAAkAAA...' : `...${'A'.repeat(W - 6)}...`
+  const big = Array.from({ length: H }, (_, y) => row(y))
+  k.skins = { 'codex-duck.json': { format: 1, id: 'codex-duck', name: 'Pixel Duck', credits: { author: 'Some One', license: 'CC BY 4.0', source: 'https://example.org/duck' }, animals: { duck: { name: { en: 'Pixel Duck' }, size: [W, H], palette: { A: '#e0e8f0' }, states: { adult: { frames: [big] }, sleep: { frames: [big] } } } } } }
+  await $.session.start(START)
+  expect(await cardOf($, 'skins')).toContain('  codex-duck.json  Pixel Duck (codex-duck)  animals: duck\n                   author: Some One, license: CC BY 4.0, source: https://example.org/duck')
+  await cardOf($, 'animal duck')
+  const raster = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; await ui.unmount(); const d = new Uint32Array(Uint8Array.from(atob(String(r.cells)), ch => ch.charCodeAt(0)).buffer); return { columns: Number(r.columns), rows: Number(r.rows), inks: new Set([...d].filter((_, i) => i % 3 !== 0)) } }
+  await cardOf($, 'wear none')
+  expect(await raster()).toMatchObject({ columns: W, rows: H / 2 }) // bare, the body alone: 20 columns by 11 rows of text
+  await cardOf($, 'wear shades')
+  const worn = await raster()
+  expect([worn.columns, worn.rows, worn.inks.has(0x263238)]).toEqual([W + 2, (H + 2) / 2, true]) // with a thing on: one spare column each side and two rows above the head, and the sunglasses are drawn
+  await cardOf($, 'wear mug'); await cardOf($, 'wear skateboard'); await cardOf($, 'wear cap')
+  const all = await raster()
+  expect([all.columns > W + 2, all.rows, all.inks.has(0x26c6da), all.inks.has(0xab47bc), all.inks.has(0x42a5f5)]).toEqual([true, (H + 2) / 2 + 1, true, true, true]) // the mug beside it, the skateboard under it, the cap over it
+  for (const bodyColumns of [40, 60, 80, 100]) { const d = await drawnWidth($, { bodyColumns }); expect([bodyColumns, d.total <= bodyColumns, d.raster], JSON.stringify(d)).toEqual([bodyColumns, true, true]) }
+  expect((await drawnWidth($, { bodyColumns: 100, maxRows: 8 })).raster).toBe(false) // a band lower than the drawing: the row of text
+  await k.clock.advance(6 * 60_000) // asleep: it wears nothing, and the frame keeps its size
+  expect((await raster()).rows).toBe((H + 2) / 2 + 1)
+})
+
+test('E22: commands: capitals do not matter, a word that is no command says so in a line, /pet help lists the commands there are and only those, and a wrong argument is told', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  k.disk.pet = { coins: 120, affection: 25, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['mug', 'golden'] }
+  on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
+  on('process.run', () => ({ value: { exitCode: 0, stdout: 'ok', stderr: '' } }) as any)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const first = async (a: string) => (await cardOf($, a)).split('\n')[0]
+  // capitals in the verb and in its argument
+  expect(await first('WEAR Mug')).toMatch(/^a coffee mug (goes on, accessory|comes off)\.$/)
+  expect(await first('Wear PLAIN')).toMatch(/^Miro wears/)
+  expect(await first('wear Golden')).toBe('a golden coat goes on, coat.')
+  expect(await first('Shop')).toBe('CACHITO SHOP · you have 120 stars')
+  expect(await first('ANIMAL Fox')).toBe('Cachito is now a fox.')
+  expect(await first('Lang ES')).toBe('Cachito ahora habla español.')
+  expect(await first('LANG en')).toBe('Cachito now speaks English.')
+  expect(await first('Hide')).toBe('Cachito is hidden. /pet show brings it back.')
+  expect(await first('SHOW')).not.toMatch(/^No \/pet/)
+  expect(prefsOf(k.disk).hidden).toBe(false)
+  // a name keeps its capitals
+  await cardOf($, 'NAME McDuff')
+  expect(prefsOf(k.disk).name).toBe('McDuff')
+  // no such command: one line, with where the commands are; never the card in silence
+  for (const [typed, verb] of [['frobnicate', 'frobnicate'], ['/pet', '/pet'], ['Budgetx 5', 'budgetx'], ['weer mug', 'weer']]) expect(await cardOf($, typed)).toBe(`No /pet ${verb}. /pet help lists the commands.`)
+  expect(await cardOf($, `x${'\u001b[31m'}y`)).toBe('No /pet xy. /pet help lists the commands.')
+  expect(await first('')).toMatch(/^McDuff, Cachito the/) // the card is /pet alone
+  // an argument that is not understood
+  expect(await cardOf($, 'lang fr')).toBe('No language fr. There are: en, es, pt, zh.')
+  expect(await cardOf($, 'lean maybe')).toBe('/pet lean takes on or off, not maybe.')
+  expect(await cardOf($, 'comments loud')).toBe('/pet comments takes on or off, not loud.')
+  expect(await first('animal axolotl')).toBe('The axolotl is not for sale: only a pet born as one is one.')
+  expect(await first('animal dog')).toMatch(/^The dog is not yours yet: 100 stars unlock it/)
+  expect(await first('animal unicorn')).toBe('No animal called unicorn.')
+  expect(await first('wear unicorn')).toMatch(/unicorn/)
+  expect(await first('shop unicorn')).toBe('Nothing called unicorn in the shop.')
+  expect(await cardOf($, 'say')).toBe('Write something after it: /pet say <text>.')
+  expect(await cardOf($, 'wear')).toMatch(/A coat is a colour: \/pet wear plain takes it off, \/pet wear golden puts the golden one on\.$/)
+  // /pet help: every command it lists exists, and every command there is is listed
+  const help = await cardOf($, 'help')
+  const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
+  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'lang', 'diary', 'audit', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
+  for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
+  for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
+  // the short answers are said in the pet's language: adoption, the demo, the budget that is gone, the receipt's errors
+  await cardOf($, 'lang es')
+  expect(await cardOf($, 'adopt')).toBe('No hay ningún /buddy en tu configuración de Claude Code: nada que adoptar.')
+  expect(await cardOf($, 'demo')).toMatch(/^Demo de Cachito: .* \(5 s cada uno\)\.$/)
+  expect(await cardOf($, 'budget 5')).toMatch(/^El presupuesto de contexto se quitó/)
+  expect(await cardOf($, 'audit abc')).toBe('/pet audit [días]: los días son un número entero de 1 a 3650, no abc. Sin número, todas tus sesiones.')
+  expect(await cardOf($, 'audit')).toMatch(/^El recibo no pudo empezar: `node` no está en el PATH/)
+  expect(await cardOf($, 'nada')).toBe('No existe /pet nada. /pet help muestra los comandos.')
+  // typed with a capital, /pet Say is still for the pet alone: dropped, never a turn of the chat
+  const r = await $.prompt.submit({ text: '/pet Say hola', command: { name: 'pet', args: 'Say hola' }, wait: false, origin: 'user' } as any) as any
+  expect(r.drop).toBeTruthy()
+})
+
+test('which chat needs me: beside the name how many other chats work, wait or ask; a word when one needs the person; /pet chats lists them; off turns it all off', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  const T0 = Date.UTC(2026, 10, 12, 12), MIN = 60_000
+  let verdict = 'ask'
+  on('tool.check', () => ({ decision: verdict }) as any)
+  await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
+  const bubble = async () => (await k.texts()).join(' ').replace(/\s+/g, ' ')
+  // only this chat: nothing beside the name and the stars
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await k.clock.advance(10_500)
+  expect(await head()).toMatch(/^Miro  ★ \d+$/)
+  expect(await cardOf($, 'chats')).toBe('Your open chats\n  here  working, just now  (this chat)\nNo other chat is open.\nFolder names and times only, nothing of what is in a chat. /pet chats off turns the board off.')
+  // four other chats: one at work, one waiting for the person, one stopped on a permission, one that died without a word
+  const now = () => Number(k.disk['chat.me'].beat)
+  const others = () => {
+    k.disk['chat.busy'] = { cwd: '/home/me/work/vodmax', at: now() - 4 * MIN, done: false, beat: now() }
+    k.disk['chat.idle'] = { cwd: '/home/me/work/notes', at: now() + 1_000, done: true, took: 3 * MIN, beat: now() + 1_000 } // its turn ended after this chat opened
+    k.disk['chat.stuck'] = { cwd: '/home/me/secret-client/api', at: now() - 6 * MIN, done: false, asking: now() - 20_000, beat: now() }
+    k.disk['chat.dead'] = { cwd: '/home/me/work/old', at: now() - 3 * MIN, done: false, beat: now() - 10 * MIN }
+  }
+  others()
+  await k.clock.advance(10_500)
+  expect(await head()).toMatch(/^Miro  ★ \d+  ·  1 working · 1 waiting · 1 asking$/)
+  // with the count the row of the name is never wider than the band. What gives way: the count first, then the stars, then the pet's own button, and the name last
+  const gave: string[] = []
+  for (let bodyColumns = 100; bodyColumns >= 14; bodyColumns--) {
+    const d = await drawnWidth($, { bodyColumns })
+    expect([bodyColumns, d.total <= bodyColumns], JSON.stringify(d)).toEqual([bodyColumns, true])
+    if (!d.raster) break // under the width of the drawing: one row of text
+    const what = `${d.own.join(' ')}|${d.head.includes('working') ? 'count' : d.head.includes('★') ? 'stars' : d.head === 'Miro' ? 'name' : 'cut'}`
+    if (gave.at(-1) !== what) gave.push(what)
+  }
+  expect(gave).toEqual(['pet|count', 'pet|stars', 'pet|name', '|stars', 'pet|stars', 'pet|name']) // beside the drawing, then over it, where the row has the whole width again
+  // the one that may wait for an OK is told first, with its folder's name and nothing else of it
+  expect(await bubble()).toContain('the chat in api may be waiting for your OK')
+  expect(await bubble()).not.toMatch(/secret-client/)
+  // then the one whose long turn ended: not over the first piece of news, but when its five minutes are over, and not lost meanwhile
+  await k.clock.advance(10_500)
+  expect(await bubble()).not.toMatch(/finished its job/)
+  await k.clock.advance(RULES.peerGapMs / 2)
+  await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any) // the person is still here: a pet asleep tells nothing
+  await k.clock.advance(RULES.peerGapMs / 2 - 15_000)
+  const seen: string[] = []
+  for (let i = 0; i < 8; i++) { await k.clock.advance(5_000); seen.push(await bubble()) } // it stays about 12 seconds: looked at while it is up
+  expect(seen.join(' | ')).toMatch(/the chat in notes finished its job \d+ min ago/)
+  others(); await k.clock.advance(10_500)
+  const list = await cardOf($, 'chats')
+  expect(list.split('\n')).toEqual([
+    'Your open chats',
+    expect.stringMatching(/^  here    working, (just now|\d+ min ago)  \(this chat\)$/),
+    expect.stringMatching(/^  notes   waiting for you, (just now|\d+ min ago)$/),
+    expect.stringMatching(/^  api     may be waiting for your OK, (just now|\d+ min ago)$/),
+    expect.stringMatching(/^  vodmax  working, \d+ min ago$/),
+    'Folder names and times only, nothing of what is in a chat. /pet chats off turns the board off.',
+  ])
+  expect(list).not.toMatch(/  old |secret|home\//) // the dead one is closed, and no path is shown
+  expect(k.v.calls).toEqual([]) // comments off: not one token
+  // they go quiet: after chatDeadMs with no sign of life the others are closed, and the count goes
+  await k.clock.advance(RULES.chatDeadMs + 11_000)
+  expect(await head()).toMatch(/^Miro  ★ \d+$/)
+  expect(k.disk['chat.me'].beat).toBeGreaterThan(T0 + RULES.chatDeadMs) // while this chat kept saying it is alive, every 20 seconds
+  // this chat: a call the agent must ask leave for. Nothing for a few seconds (a rule or a classifier answers at once), then "asking"
+  await ($ as any).tool.check({ tool: 'Bash', input: { command: 'rm -rf build' }, tool_use_id: 'p1', approver: 'person' })
+  await k.clock.advance(2_000)
+  expect(k.disk['chat.me'].asking).toBeUndefined()
+  await k.clock.advance(4_000)
+  expect(k.disk['chat.me']).toMatchObject({ done: false, asking: expect.any(Number) })
+  expect(JSON.stringify(k.disk['chat.me'])).not.toMatch(/rm|build|Bash/) // that it waits, never for what
+  // the person answers: the call starts, and the chat is at work again
+  await $.tool.call({ tool: 'Bash', command: 'rm -rf build', tool_use_id: 'p1' } as any)
+  expect(k.disk['chat.me'].asking).toBeUndefined()
+  // a call that is allowed at once, or one the person cannot be asked about, is never a wait
+  verdict = 'allow'
+  await ($ as any).tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'p2', approver: 'person' })
+  await k.clock.advance(8_000)
+  expect(k.disk['chat.me'].asking).toBeUndefined()
+  // the turn ends: waiting for the person; the session ends: closed for the others at once
+  await $.turn.complete({ answer: 'done', reason: 'answer' } as any)
+  expect(k.disk['chat.me']).toMatchObject({ done: true })
+  // off: no count, no news, and the mark is the least there ever was (no sign of life: the others take the chat for closed)
+  others()
+  expect(k.disk['chat.me'].beat).toBeGreaterThan(0)
+  // the answer says both sides of it: the others no longer see this chat, and this chat no longer sees them
+  expect(await cardOf($, 'chats off')).toBe('The board of the chats is off. From now on your other chats no longer see this chat: they take it for closed. And this chat no longer sees them: no count beside the name, no news, no list. /pet chats on turns it back on.')
+  expect(k.disk['chat.me'].beat).toBeUndefined() // at once: no sign of life in its mark, so the others take it for closed from this moment
+  for (const [lang, said] of [['es', /tus otros chats ya no ven este chat: lo dan por cerrado\. Y este chat ya no los ve/], ['pt', /as suas outras conversas já não veem esta: dão-na por fechada\. E esta já não as vê/], ['zh', /你的其他对话看不到本对话：它们把它当作已关闭。本对话也看不到它们/]] as const) { await cardOf($, `lang ${lang}`); expect(await cardOf($, 'chats off')).toMatch(said) }
+  await cardOf($, 'lang en')
+  await k.clock.advance(10_500)
+  expect(await head()).toMatch(/^Miro  ★ \d+$/)
+  expect(await cardOf($, 'chats')).toMatch(/^The board of the chats is off/)
+  await $.prompt.submit({ text: 'again', wait: false, origin: 'user' } as any)
+  expect(k.disk['chat.me'].beat).toBeUndefined()
+  expect(prefsOf(k.disk).chats).toBe(false)
+  expect(await cardOf($, 'chats on')).toMatch(/^The board of the chats is on/)
+  expect(k.disk['chat.me'].beat).toBeGreaterThan(0) // seen again by the others, at once
+  await $.turn.complete({ answer: 'done', reason: 'answer' } as any)
+  await $.session.end({ reason: 'exit', sessionId: 'me' } as any)
+  expect(k.disk['chat.me']).toMatchObject({ closed: true })
+  expect(JSON.stringify(Object.fromEntries(Object.entries(k.disk).filter(([key]) => key.startsWith('chat.me'))))).not.toMatch(/again|rm -rf|build|Bash/) // nothing of a prompt, a command or a tool
+})
+
+test('which chat needs me: with the comments on the small model may say the news, under the same cap; with the band hidden nothing is asked; under the bench no chat leaves a mark; marks too old leave the store', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  const MIN = 60_000, T0 = Date.UTC(2026, 10, 12, 12)
+  k.disk['chat.ancient'] = { cwd: '/w/x', at: T0 - RULES.marksMs - MIN, done: true, beat: T0 - RULES.marksMs - MIN }
+  k.disk['chat.recent'] = { cwd: '/w/y', at: T0 - 5 * 86_400_000, done: true, beat: T0 - 5 * 86_400_000 }
+  await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
+  expect([k.disk['chat.ancient'], !!k.disk['chat.recent']]).toEqual([undefined, true]) // older than 30 days: gone at a start
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  const now = Number(k.disk['chat.me'].beat)
+  k.v.reply = { isAnswered: true, text: 'Someone is knocking over in api.', usage: USAGE }
+  k.disk['chat.stuck'] = { cwd: '/home/me/secret-client/api', at: now - 6 * MIN, done: false, asking: now - 20_000, beat: now }
+  await k.clock.advance(10_500); await k.settle()
+  expect(k.v.calls.length).toBe(1)
+  expect(k.v.calls[0].prompt).toMatch(/the one in the folder api, has stopped in the middle of its work\n- it seems to be waiting for the person to allow something/)
+  expect(JSON.stringify(k.v.calls[0])).not.toMatch(/secret-client|home\/me/)
+  expect((await k.texts()).join(' ')).toContain('Someone is knocking over in api.')
+  expect(k.disk.voice).toMatchObject({ today: 1, by: { peer: expect.any(Number) } }) // counted in the day like any comment
+  // hidden: the mark is still kept, the count is not shown, and nothing is asked of the model
+  await cardOf($, 'hide')
+  k.disk['chat.stuck2'] = { cwd: '/w/other', at: now, done: false, asking: now + 70_000, beat: now + 80_000 }
+  await k.clock.advance(90_000); await k.settle()
+  expect(k.v.calls.length).toBe(1)
+})
+
+test('which chat needs me: under the bench no chat leaves a mark and there is no board', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await k.clock.advance(30_000)
+  expect(Object.keys(k.disk).filter(key => key.startsWith('chat'))).toEqual([])
+  expect(await cardOf($, 'chats')).toBe('No board of the chats: under the bench no chat leaves a mark.')
+})

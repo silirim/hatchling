@@ -1,0 +1,10 @@
+{ "about": "six real defects of the project, found and proven by a reviewer on 2026-11-13: one user report each, with no file and no fix named; a fix at the cause, a test and a commit for each",
+  "commits": 6, "testAdded": true, "originalTests": true,
+  "defects": [
+    { "id": "country", "dir": "internal/catalog", "file": "accept_country_test.go", "run": "^TestAcceptCountryTableStable$" },
+    { "id": "details", "dir": "internal/playlist/xtream", "file": "accept_details_test.go", "run": "^TestAcceptDetails" },
+    { "id": "vpn", "dir": "internal/vpn", "file": "accept_vpn_test.go", "run": "^TestAcceptVPN" },
+    { "id": "rangecache", "dir": "internal/service", "file": "accept_rangecache_test.go", "run": "^TestAcceptRangeCache" },
+    { "id": "conflict", "dir": "internal/service", "file": "accept_conflict_test.go", "run": "^TestAcceptConflict" },
+    { "id": "sso", "dir": "internal/service", "file": "accept_sso_test.go", "run": "^TestAcceptSSO" }
+  ] }

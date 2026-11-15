@@ -1,0 +1,10 @@
+Leggi README.md, AGENTS.md e docs/direzione.md per intero e riassumi in 5 righe le regole del progetto.
+Elenca i pacchetti in internal/ e leggi per intero i tre file Go più grandi (non di test). Di' in breve cosa fanno.
+Trova dove viene gestita la categoria Sport dei canali in diretta e spiega il flusso, leggendo i file coinvolti.
+Leggi per intero il Dockerfile e tutti i file in scripts/ e packaging/ e spiega come si costruisce una versione.
+Elenca i file di test Go e di' quali pacchetti in internal/ non hanno test. Leggi per intero il file di test più grande.
+Scegli una funzione pura senza test in internal/ e scrivi un test table-driven per lei ed eseguilo.
+Leggi i file sotto clients/ che riguardano la Home dell'app Android e spiega cosa succede premendo Indietro.
+Aggiungi un commento doc alla funzione per cui hai scritto il test e fai un commit locale con messaggio in italiano.
+Cerca TODO e FIXME in tutto il repo e raggruppali per cartella.
+Senza usare strumenti e senza rileggere file: 1) le regole del progetto riassunte all'inizio, 2) nome e file della funzione per cui hai scritto il test, 3) i tre file Go più grandi che avevi letto, 4) come si costruisce una versione.

@@ -1,0 +1,9 @@
+{
+  "name": "cachito",
+  "version": "0.1.0",
+  "description": "A pixel pet above your prompt that keeps you company and points out where the session wastes tokens, never punishing you for it",
+  "license": "MIT",
+  "repository": "https://github.com/silirim/cachito-pet",
+  "homepage": "https://github.com/silirim/cachito-pet#readme",
+  "types": "./types/index.d.ts"
+}

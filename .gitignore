@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+# the types Claude Code writes when it loads the mod
+.claude-plugin/types/
+# not for the public repository: working notes, and the private skin packs
+docs/piano.md
+docs/fase0-verifiche.md
+packs-private/

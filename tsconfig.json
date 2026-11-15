@@ -1,0 +1,12 @@
+{
+  "extends": "./.claude-plugin/types/tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "hooks",
+    "types",
+    "lean/hooks"
+  ]
+}
