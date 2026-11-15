@@ -36,6 +36,8 @@ For someone checking our numbers: what a run is, what keeps the arms comparable,
 
 - The requests of the task, sent one at a time to one headless session, on a fresh clone of a public project at a fixed commit (pinned by its id, not by a tag). The agent, its tools and the tests get a minimal environment: the variables needed to find programs, the home folder and the account, and none of the rest of your shell's. The clone has no remote.
 - The arms: `clean` (no plugin), `observe` (Cachito as installed), `style` (the pet with what `/pet lean on` turns on), `leanonly` (the `cachito-lean` plugin alone, as installed: the same lines, no pet), and for comparison `caveman` and `ponytail`, each alone, loaded from the folder given with `--caveman <dir>` and `--ponytail <dir>`. An arm differs from `clean` only in what `ARMS` in `run.mjs` lists. The arms `diet` and `lean` (diet and style) of the past series are gone with the diet: those series can be run again only with the copy of the mod kept in their own folder (`<out>/mod`).
+- The arm `brief` is the objection "just write 'be brief'", measured: a plugin (`bench/arms/brief`) that adds one section to the system prompt, `Be brief.`, appended last and scoped to the session as `cachito-lean` appends its lines, so the two arms differ only in the text.
+  It is loaded alone from a copy kept in `<out>/brief`, and a run counts under the rule of every plugin arm: the session's `init` event lists that plugin and no other, and no hooks module failed to load.
 - The cost is the one the CLI reports (`total_cost_usd`), not an estimate.
 
 ## What keeps the arms comparable

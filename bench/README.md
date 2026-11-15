@@ -53,6 +53,7 @@ node bench/report.mjs <out dir>
 | `leanonly` | the cachito-lean plugin alone |
 | `style` | the pet with `/pet lean on` |
 | `caveman`, `ponytail` | that plugin alone |
+| `brief` | a plugin of two words, `Be brief.`, alone (`bench/arms/brief`) |
 
 Use one out dir for each task, model and effort. A stopped series resumes with the same command. A long series outlives the terminal only as its own service (`systemd-run --user ...`).
 

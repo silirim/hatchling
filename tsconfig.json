@@ -7,6 +7,7 @@
   "include": [
     "hooks",
     "types",
-    "lean/hooks"
+    "lean/hooks",
+    "bench/arms/brief/hooks"
   ]
 }

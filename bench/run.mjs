@@ -25,6 +25,8 @@ const ARMS = {
   // two other plugins, each alone, for comparison: their folders come from --caveman <dir> and --ponytail <dir>
   caveman: { plugin: 'caveman', env: { CAVEMAN_DEFAULT_MODE: 'caveman' } }, // it stays off in a headless session unless this is set
   ponytail: { plugin: 'ponytail', env: {} },
+  // "just write 'be brief'": a plugin of this folder (arms/brief) that adds one section, `Be brief.`, the way cachito-lean adds its lines
+  brief: { plugin: 'brief', env: {} },
 }
 // user settings (plugins, hooks, permissions) and MCP servers of the machine stay out; the sessions are not saved among the person's own
 const ISOLATE = ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence']
@@ -75,14 +77,16 @@ const TMP = { ...MODS, GOPROXY: 'off' }
 
 // the mod under test is copied once: the runs use that copy, and the copy stays as the record of what was tested
 // (lean/style.js is the style's text, which the pet takes from the cachito-lean plugin's folder; engine/stub is for a Node test only)
-const mod = join(out, 'mod'), leanMod = join(out, 'lean')
+const mod = join(out, 'mod'), leanMod = join(out, 'lean'), briefMod = join(out, 'brief')
 const own = (/** @type {string} */ p) => !/\.test\.[jt]sx?$/.test(p) && !p.includes('.claude-plugin/types') && !p.includes('engine/stub')
 for (const f of ['.claude-plugin/plugin.json', 'engine', 'hooks', 'types', 'sprites/zoo.js', 'lean/style.js']) cpSync(join(ROOT, f), join(mod, f), { recursive: true, filter: own })
 // the cachito-lean plugin is its folder and nothing else, as an install copies it
 cpSync(join(ROOT, 'lean'), leanMod, { recursive: true, filter: own })
-for (const d of [mod, leanMod]) execFileSync('claude', ['plugin', 'validate', d], { stdio: 'ignore' }) // a copy that does not load would run as `clean` without a word
+cpSync(join(HERE, 'arms/brief'), briefMod, { recursive: true, filter: own }) // the arm `brief`
+for (const d of [mod, leanMod, briefMod]) execFileSync('claude', ['plugin', 'validate', d], { stdio: 'ignore' }) // a copy that does not load would run as `clean` without a word
 dirs.cachito = mod
 dirs['cachito-lean'] = leanMod
+dirs.brief = briefMod
 /** @type {(d: string) => string[]} */ const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]).sort()
 const sha = (/** @type {(string | Buffer)[]} */ ...texts) => texts.reduce((h, t) => h.update(t), createHash('sha256')).digest('hex').slice(0, 16)
 const prompts = readFileSync(join(WORK, 'prompts.txt'), 'utf8').split('\n').filter(Boolean)
@@ -110,8 +114,8 @@ console.log(`at ${commit.slice(0, 7)}, before any run, with GOFLAGS="${TMP.GOFLA
 writeFileSync(join(out, 'manifest.json'), JSON.stringify({
   started: new Date().toISOString(), work, spec, goflags: TMP.GOFLAGS, umask: '022', baseline: { passing: BASE.tests.pass.length, unformatted: BASE.unformatted }, workHash: sha(...walk(WORK).map(f => readFileSync(f))), model, effort: effort ?? null, runs, arms: Object.fromEntries(arms.map(a => [a, armOf(a)])), task, ref, commit,
   claude: execFileSync('claude', ['--version'], { encoding: 'utf8' }).trim(), node: process.version, go, platform: process.platform,
-  others: Object.fromEntries(Object.entries(dirs).flatMap(([k, d]) => !k.startsWith('cachito') && d ? [[k, { dir: d, version: JSON.parse(readFileSync(join(d, '.claude-plugin/plugin.json'), 'utf8')).version }]] : [])),
-  prompts: sha(prompts.join('\n')), mod: sha(...walk(mod).map(f => readFileSync(f))), lean: sha(...walk(leanMod).map(f => readFileSync(f))), runner: sha(readFileSync(new URL(import.meta.url).pathname)),
+  others: Object.fromEntries(Object.entries(dirs).flatMap(([k, d]) => !k.startsWith('cachito') && k !== 'brief' && d ? [[k, { dir: d, version: JSON.parse(readFileSync(join(d, '.claude-plugin/plugin.json'), 'utf8')).version }]] : [])),
+  prompts: sha(prompts.join('\n')), mod: sha(...walk(mod).map(f => readFileSync(f))), lean: sha(...walk(leanMod).map(f => readFileSync(f))), brief: sha(...walk(briefMod).map(f => readFileSync(f))), runner: sha(readFileSync(new URL(import.meta.url).pathname)),
   flags: [...(effort ? ['--effort', effort] : []), ...ISOLATE, '--permission-mode', 'acceptEdits', '--allowedTools', ...ALLOW],
 }, null, 1))
 

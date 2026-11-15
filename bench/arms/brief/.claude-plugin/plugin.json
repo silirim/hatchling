@@ -1,0 +1,10 @@
+{
+  "name": "brief",
+  "version": "0.1.0",
+  "description": "A bench arm, not a plugin to install: two words in the system prompt, \"Be brief.\", added the way cachito-lean adds its lines",
+  "author": {
+    "name": "silirim",
+    "url": "https://github.com/silirim"
+  },
+  "license": "MIT"
+}
