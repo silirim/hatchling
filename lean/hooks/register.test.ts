@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { STYLE, STYLE_ID } from '../style.js'
+import { BENCH, STYLE, STYLE_ID } from '../style.js'
 
 const ASK = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
 const CORE = { id: 'intro', text: 'core', scope: 'shared' }
@@ -36,7 +36,8 @@ test('on as installed: the style is the last section, with nothing in the store;
   if (await absent($)) return
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(await k.sections()).toEqual([CORE, { id: STYLE_ID, text: STYLE, scope: 'session' }])
-  expect(await k.lean()).toMatch(/^Lean on: the style is in the system prompt of every request\. \/lean off takes it out\. In our bench the style cost 14\.8% less on one long task .*no saving was shown/)
+  expect(await k.lean()).toContain(`Lean on: the style is in the system prompt of every request. /lean off takes it out. ${BENCH}. Every run: bench/RESULTS.md in the repository.\n`)
+  expect(BENCH).toBe('In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving')
   expect(await k.lean()).toContain(STYLE)
   expect(JSON.stringify(store)).not.toMatch(/"off"/) // looking writes nothing
 

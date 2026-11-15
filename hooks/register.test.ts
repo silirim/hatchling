@@ -88,7 +88,7 @@ test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
   // the card: no saving claimed for this chat. Lean is the style, with the bench figure
   const card = JSON.stringify(await $.command.run({ command: 'pet', args: '' } as any))
   expect(card).toMatch(/Cachito the (\w+ )?\w+, baby/)
-  expect(card).toMatch(/lean on: the style\. In our bench it cost 14\.8% less on one long task\\n/)
+  expect(card).toMatch(/lean on: the style\. In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving\\n/)
   expect(card).toMatch(/\\ncomments off: fixed lines only, nothing sent\. \/pet comments on lets a small model write them, on your tokens"/)
   expect(card).not.toMatch(/diet|trimmed/)
   expect(card).not.toMatch(/saved|streak|drowned|about 14|!/)
@@ -97,7 +97,7 @@ test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
   expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'lean off' } as any))).toMatch(/Lean off\./)
   expect((await $.prompt.compose(ask)).sections.length).toBe(1)
   const off = JSON.stringify(await $.command.run({ command: 'pet', args: '' } as any))
-  expect(off).toMatch(/lean off: \/pet lean on adds the style\. In our bench it cost 14\.8% less on one long task\\n/)
+  expect(off).toMatch(/lean off: \/pet lean on adds the style\. In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving\\n/)
   await $.command.run({ command: 'pet', args: 'lean on' } as any)
 
   // a name that is no animal cannot be picked
@@ -260,7 +260,7 @@ test('over 30k the style waits: lean is the style alone, the note goes while it 
 
   // lean chosen: over 30k the style waits. No cheer, the bubble says so, the note is gone
   const chosen = await cmd('lean on')
-  expect(chosen).toMatch(/Lean chosen: this chat is already long, so the style starts at the next compaction or the next chat\..*In our bench the style alone \(the `style` arm of Series 4 in bench\/RESULTS\.md\) cost 14\.8% less on one long task \(Opus 5\.5, 8 runs, p 0\.0014\)\. On the two short tasks the style was never run alone, only with a lever that is gone since, and no saving was shown\./)
+  expect(chosen).toMatch(/Lean chosen: this chat is already long, so the style starts at the next compaction or the next chat\..*In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving\. Every run: bench\/RESULTS\.md in the repository\./)
   expect(chosen).not.toMatch(/about 14|!|diet/i)
   expect(await band()).toMatch(/long chat, lean chosen$/)
   expect(await band()).not.toMatch(/at work|lean off/)
@@ -679,7 +679,7 @@ test('with the cachito-lean plugin the style is on whatever /pet lean says: the 
   expect(await turn()).toBe(1) // the plugin's section, and the pet adds none: /pet lean was never given
   // a long chat, 70k: with the style in, no note
   expect(await band()).not.toMatch(/lean off|lean chosen/)
-  expect(await cmd('')).toMatch(/\nlean on: the style, by the cachito-lean plugin \(\/lean off takes it out\)\. In our bench it cost 14\.8% less on one long task/)
+  expect(await cmd('')).toMatch(/\nlean on: the style, by the cachito-lean plugin \(\/lean off takes it out\)\. In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving/)
   expect(await cmd('')).not.toMatch(/lean off:|lean chosen/)
   expect(await cmd('lean')).toMatch(/^Lean on: the cachito-lean plugin adds the style to the system prompt, whatever \/pet lean says\. \/lean off takes it out\./)
   expect(await cmd('lean off')).toMatch(/^Lean on: the cachito-lean plugin adds the style/) // the pet's own lever is off, and says who holds the style on

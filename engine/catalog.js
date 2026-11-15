@@ -42,7 +42,7 @@ export const CHEERS = /** @type {Record<string, (value?: number, lang?: string, 
 })
 
 // What /pet lean on adds to the system prompt: written once, in the cachito-lean plugin of this repository (lean/style.js).
-export { STYLE, STYLE_ID } from '../lean/style.js'
+export { BENCH, STYLE, STYLE_ID } from '../lean/style.js'
 
 // Calm lines rotate with the turn. Each one is true of its state: a short chat, or a long one with lean on.
 const SPOKEN = ['calm.short.0', 'calm.short.1', 'calm.short.2', 'calm.long.0', 'calm.long.1', 'calm.long.2', 'greet.first', 'greet.new', 'cheer.lean', 'cheer.evolve']

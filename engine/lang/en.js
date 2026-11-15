@@ -3,6 +3,8 @@
 // A list of six is one line said plainly, then by the wit, the curious, the calm, the rigorous and the warm one: each its own way,
 // short, sober, never an exclamation mark, and true of the same state. A line of the bubble is at most 44 columns.
 
+import { BENCH } from '../../lean/style.js'
+
 /** @type {Record<string, string | string[]>} */
 export default {
   name: 'English', // what the model is told to write in
@@ -51,7 +53,8 @@ export default {
   'loop.fix': 'A note only. Fix asks the agent to read the error first.',
   'heavy.say': 'long chat, lean off: {d}k tokens re-read per request',
   'heavy.none': 'over 60',
-  'heavy.fix': 'A note only. In our bench the style cost 14.8% less on a long task.',
+  'heavy.fix': 'A note only. In our bench the style cost less on long tasks.',
+  bench: BENCH, // written once, in lean/style.js
   'bloated.say': 'context {d}% full',
   'bloated.say.none': 'context almost full',
   'bloated.fix': 'Run /compact to keep room. It frees space, it is not a saving.',
@@ -220,9 +223,9 @@ export default {
   'card.points.none': '{points}; owns nothing yet. /pet shop',
   nothing: 'nothing yet',
   'card.lean.wait': 'lean chosen, the style starts at the next compaction or chat',
-  'card.lean.on': 'lean on: the style. In our bench it cost 14.8% less on one long task',
-  'card.lean.plugin': 'lean on: the style, by the cachito-lean plugin (/lean off takes it out). In our bench it cost 14.8% less on one long task',
-  'card.lean.off': 'lean off: /pet lean on adds the style. In our bench it cost 14.8% less on one long task',
+  'card.lean.on': 'lean on: the style. {bench}',
+  'card.lean.plugin': 'lean on: the style, by the cachito-lean plugin (/lean off takes it out). {bench}',
+  'card.lean.off': 'lean off: /pet lean on adds the style. {bench}',
   'gone.diet': '/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; the outputs it saved are still in ~/.claude/cachito-out. /pet lean, the style, is the lever that showed one.',
   'gone.weight': '/pet weight was taken out: /context in Claude Code already shows what every request carries. /pet audit still shows where the tokens went.',
   'card.comments.off': 'comments off: fixed lines only, nothing sent. /pet comments on lets a small model write them, on your tokens',

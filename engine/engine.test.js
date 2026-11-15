@@ -272,7 +272,7 @@ test('a long chat without lean is a note at every turn until lean is on, then th
   t += RULES.cheerGapMs
   let s = run([at({ type: 'sessionStart' }), ...heavyTurn(), ...heavyTurn()])
   const v = view(s, t)
-  assert.deepEqual([v.mood, v.issue?.kind, bubble(v).ask, bubble(v).fix], ['bloated', 'heavy', '/pet lean on', 'A note only. In our bench the style cost 14.8% less on a long task.'])
+  assert.deepEqual([v.mood, v.issue?.kind, bubble(v).ask, bubble(v).fix], ['bloated', 'heavy', '/pet lean on', 'A note only. In our bench the style cost less on long tasks.'])
   s = run([at({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0, lean: true }), at({ type: 'turnEnd' })], s)
   assert.deepEqual([view(s, t).issue, s.cheer?.kind], [null, 'lean'])
   assert.equal(run([at({ type: 'sessionStart' }), ...heavyTurn(), at({ type: 'lean', on: true })]).cheer?.kind, 'lean') // the command is answered at once

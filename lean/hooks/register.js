@@ -1,11 +1,11 @@
 // @ts-check
 // cachito-lean: the style in the system prompt, on as installed. No drawing, no pet; the store holds one key, and only after /lean off.
-import { STYLE, STYLE_ID } from '../style.js'
+import { BENCH as SHOWN, STYLE, STYLE_ID } from '../style.js'
 
 // Everything but the style's text and id lives inside `register`, and `$` is used where it is given: the function then stands alone,
 // and the pet's tests load it as written beside the pet (hooks/register.test.ts at the root, the test of the two plugins together).
 export function register(/** @type {import('claude-code').On} */ on) {
-  const BENCH = 'In our bench the style cost 14.8% less on one long task (Opus 5.5, 8 runs, p 0.0014); on short tasks no saving was shown. Every run: bench/RESULTS.md in the repository.'
+  const BENCH = `${SHOWN}. Every run: bench/RESULTS.md in the repository.`
   // switching re-sends the whole conversation once: in a long chat that costs more than the style saves for a long while,
   // so a switch waits for a moment when the cache is rebuilt anyway (a new chat, a compaction) or the chat is still small
   const SWITCH_UNDER = 30_000 // context tokens

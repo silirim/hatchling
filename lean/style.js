@@ -5,6 +5,10 @@
 // One id for both plugins: whichever composes second finds the section there and adds nothing.
 export const STYLE_ID = 'cachito:style'
 
+// What the bench showed of the style (bench/RESULTS.md, Series 4 to 7: the style alone, on two projects),
+// and the one place the figures are written in English: /lean, /pet lean, the pet's card and its note all say this sentence.
+export const BENCH = 'In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving'
+
 // A light "say it short, build little", and the habits the receipts show as costly.
 export const STYLE = `# Working lean
 - Answer first, in short plain sentences. No preamble, no recap of what you just did, no closing offer. Every fact, number, path, command and warning stays exact and complete.

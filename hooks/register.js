@@ -11,7 +11,7 @@ import { initialState, reduce, view, card, sync, adopt, shared, whole, program, 
 import { MODEL, tally, due, left, reserve, settle as settled, average, money, system, summary, news, reply, clean, tooLong, pathy, question } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page } from '../engine/diary.js'
 import { marks, greeting, finished, folder, counts, listing } from '../engine/company.js'
-import { bubble, cuddle as cuddleLine, ago, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
+import { bubble, cuddle as cuddleLine, ago, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
 import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX } from '../engine/persona.js'
 import { text, list as listOf, voicedAs, asLang, fromLocale } from '../engine/lang/index.js'
 import { cols, pad, wrap, tidy } from '../engine/width.js'
@@ -45,7 +45,6 @@ const HEART = 0x2665, HEART_RED = 0xe53935
 const TICK_MS = 500
 const GONE_SHOW_MS = 20_000 // how long the line about a pack that is gone stays
 const SKIN_MS = 20_000 // how long the row of the parts stays open after the last press
-// what the bench showed (bench/RESULTS.md, Series 4), said the same wherever a lever is described
 // how coins come, said the same in the shop and when one is short
 const earn = (/** @type {string} */ lang) => text(lang, 'earn', { turn: RULES.coinsTurn, turns: RULES.coinTurnsDay, cuddle: RULES.coinsCuddle, cuddles: RULES.coinCuddlesDay, first: RULES.coinsFirstUse })
 /** A count with its noun, one or many. */
@@ -64,7 +63,7 @@ const zooOf = (/** @type {string[]} */ animals, /** @type {{ born: string, speci
 const partOf = (/** @type {string} */ id) => WEARABLE.find(i => i.id === id)?.slot ?? ''
 // B9: the figure shown is an estimate, and says so wherever it is shown
 const PRICE_NOTE = `The dollars are an estimate: the tokens are the ones each call reports, priced at Haiku 5.5's list price, and the alias ${MODEL} may lead to another model with another price.`
-const STYLE_BENCH = 'In our bench the style alone (the `style` arm of Series 4 in bench/RESULTS.md) cost 14.8% less on one long task (Opus 5.5, 8 runs, p 0.0014). On the two short tasks the style was never run alone, only with a lever that is gone since, and no saving was shown.'
+const STYLE_BENCH = `${BENCH}. Every run: bench/RESULTS.md in the repository.`
 
 // the environment switches are for headless runs, where no command can be typed
 const STYLE_SWITCH_UNDER = 30_000 // context tokens under which switching the style mid-chat is cheap
@@ -1226,7 +1225,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (verb) return { text: say('cmd.unknown', { verb: tidy(verb, 24) }) } // a word that is no command says so, in one line: the card is /pet alone
     // lean is the style. Neither line claims a saving for this chat: the figures are the bench's, and are labelled so
     const isStyle = await styleOn($)
-    const lean = say(isStyle && !styleNext(true) ? 'card.lean.wait' : isStyle ? 'card.lean.on' : await otherStyle($) ? 'card.lean.plugin' : 'card.lean.off')
+    const lean = say(isStyle && !styleNext(true) ? 'card.lean.wait' : isStyle ? 'card.lean.on' : await otherStyle($) ? 'card.lean.plugin' : 'card.lean.off', { bench: say('bench') })
     const names = SOLD.filter(i => c.owned.includes(i.id)).map(i => itemName(L, i))
     const spoken = await voiceTally($)
     const comments = !(await voiceChosen($)) ? say('card.comments.off')
