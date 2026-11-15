@@ -112,7 +112,6 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet diary [clear]` | show or empty the diary |
 | `/pet share` | a colour picture to attach to a post, 800×420: the pet with what it wears, its name, animal, stage, character and stars; nothing about your work. Saved as `cachito-share/cachito-<name>.png` in your Claude Code config folder (`~/.claude`), written over each time. Node writes the PNG; without Node on the PATH the same picture is saved as an SVG |
 | `/pet lang <en\|es\|pt\|zh>` | the pet's language |
-| `/pet audit [days]` | where your sessions' money went, from your local transcripts |
 | `/pet adopt` | take your old `/buddy`'s name and personality: [privacy.md](privacy.md) |
 | `/pet hide`, `/pet show` | hide or show the band |
 | `/pet demo` | the egg again |

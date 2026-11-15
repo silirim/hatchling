@@ -8,12 +8,12 @@ The pet asks once, right after it hatches, with two buttons: `comments on` and `
 
 ## What it costs
 
-- Each line is one request to a small model (the alias `haiku`), through Claude Code's own client, on your account.
-- About $0.00007 a line: 567 tokens in and 19 out, the average of 12 live lines on 13 November 2026.
-- At most 40 lines a day over all your chats: about $0.003 a day.
-- The dollars are an estimate: the tokens each call reports, at Haiku 5.5's list price ($0.10 and $0.50 per million). If `haiku` leads to another model on your account, the cost differs.
+- Each line is one request to a small model (the alias `haiku`), through Claude Code's own client, on your own tokens.
+- About 600 tokens a line: 567 in and 19 out, the average of 12 live lines on 13 November 2026.
+- At most 40 lines a day over all your chats.
+- The cost is said in tokens, as each call reports them. In November 2026 that was under one cent a day at Haiku 5.5's list price. If `haiku` leads to another model on your account, the money differs.
 - A call that fails, or whose line is not shown, is paid and counted all the same.
-- `/pet comments` shows your measured average and the lines left today.
+- `/pet comments` shows your measured tokens a line, the lines left today, and the tokens spent today and in all.
 
 ## What is sent
 

@@ -8,7 +8,7 @@
 
 import { atom, read, update } from 'claude-code'
 import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
-import { MODEL, tally, due, left, reserve, settle as settled, average, money, system, summary, news, reply, clean, tooLong, pathy, question } from '../engine/voice.js'
+import { MODEL, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page } from '../engine/diary.js'
 import { marks, greeting, finished, folder, counts, listing } from '../engine/company.js'
 import { bubble, cuddle as cuddleLine, called, ago, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
@@ -62,8 +62,6 @@ const typed = (/** @type {string} */ id) => REG.species[id]?.pack ? `${id} (${RE
 /** The animals a pet can be shown as: the one it was born as (free, always its own), the ones unlocked, the ones of the installed skin packs, and the one it is shown as now, which a pet of before the prices keeps. */
 const zooOf = (/** @type {string[]} */ animals, /** @type {{ born: string, species: string }} */ p) => [...new Set([p.born, ...RULES.animals.filter(id => animals.includes(id)), ...packAnimals(), p.species])].filter(isAnimal)
 const partOf = (/** @type {string} */ id) => WEARABLE.find(i => i.id === id)?.slot ?? ''
-// B9: the figure shown is an estimate, and says so wherever it is shown
-const PRICE_NOTE = `The dollars are an estimate: the tokens are the ones each call reports, priced at Haiku 5.5's list price, and the alias ${MODEL} may lead to another model with another price.`
 const STYLE_BENCH = `${BENCH}. Every run: bench/RESULTS.md in the repository.`
 
 // the environment switches are for headless runs, where no command can be typed
@@ -316,7 +314,7 @@ async function settle(/** @type {any} */ $) {
 }
 let farewell = '', farewellSaid = '' // the animal of a pack that is gone: said once, gently, by the tick
 /**
- * Where `node` is, as an absolute path, for the receipt: looked for in the absolute folders of the PATH Claude Code was started
+ * Where `node` is, as an absolute path, for the picture of /pet share: looked for in the absolute folders of the PATH Claude Code was started
  * with, in their order. A relative entry, an empty one (the working folder), and a folder inside the project are passed over,
  * so a `node` someone left in the repository is never the one run. '' when there is none.
  */
@@ -411,7 +409,7 @@ async function askVoice(/** @type {any} */ $) {
   await setPrefs($, { voiceAsked: true })
   if (p.voice) return
   const t = (await voiceTally($)) ?? tally(undefined, await $.clock.now())
-  await update($, anim, a => ({ ...a, ask: question(RULES.voiceCapDay * average(t).usd, p.lang) }))
+  await update($, anim, a => ({ ...a, ask: question(t, p.lang) }))
 }
 /** The answer, from a button of the question or from /pet comments on|off: kept in the preferences, and the question goes. */
 async function setVoice(/** @type {any} */ $, /** @type {boolean} */ on) {
@@ -899,7 +897,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (!(await heldAnim($)).egg) await askVoice($).catch(() => {}) // a pet born before this version is asked once; a newborn after it hatched
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
-    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet audit [days], /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary, /pet share, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
+    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary, /pet share, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
     $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
     return next(e)
   })
@@ -1077,15 +1075,6 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const now = (await getPrefs($)).lang
       return { text: text(now, lang ? 'lang.now' : 'lang.is', { self: text(now, 'self') }) }
     }
-    if (verb === 'audit') {
-      // shortcut: needs Node installed, a build inside the mod's own sandbox if people without Node ask
-      if (arg !== undefined && !/^[1-9]\d{0,3}$/.test(arg) || Number(arg) > 3650) return { text: text(L0, 'audit.days', { arg: tidy(arg, 24) }) }
-      const node = await nodePath($)
-      if (!node) return { text: text(L0, 'audit.nonode') }
-      const r = await $.process.run([node, `${$.plugin.root}/engine/audit.js`, ...(arg ? ['--days', arg] : [])], { timeoutMs: 300_000 }).catch((/** @type {unknown} */ err) => String(/** @type {any} */ (err)?.message ?? err))
-      if (typeof r === 'string') return { text: /ENOENT|not found|no such file/i.test(r) ? text(L0, 'audit.nonode') : text(L0, 'audit.failed', { why: tidy(r, 200) }) }
-      return { text: r.exitCode === 0 ? r.stdout : `${text(L0, 'audit.error', { code: r.exitCode })}\n${tidy(r.stderr, 300)}` }
-    }
     if (verb === 'budget') return { text: text(L0, 'gone.budget') }
     // two commands of earlier versions, taken out: each says so, and why
     if (verb === 'weight') return { text: text((await getPrefs($)).lang, 'gone.weight') }
@@ -1105,18 +1094,18 @@ export function register(/** @type {import('claude-code').On} */ on) {
       if (bad) return bad
       if (arg === 'on' || arg === 'off') await setVoice($, arg === 'on')
       const t = (await voiceTally($)) ?? tally(undefined, await $.clock.now()), avg = average(t)
-      const cost = avg.measured ? `${money(avg.usd)} a line, measured over the ${t.lines} line${t.lines === 1 ? '' : 's'} paid so far (${Math.round(t.input / t.lines)} tokens in and ${Math.round(t.output / t.lines)} out each)` : `about ${money(avg.usd)} a line: an estimate, replaced by the measured figure after the first line`
-      const cap = `${RULES.voiceCapDay} lines a day, about ${money(RULES.voiceCapDay * avg.usd)}`
-      if (!(await getPrefs($)).voice) return { text: `Comments off: the pet says its fixed lines, and nothing is sent anywhere for it. /pet comments on lets a small model write one line about the turn. That spends tokens of your own account: ${cost}, never more than ${cap}. ${PRICE_NOTE}` }
+      const cost = avg.measured ? `${avg.input} tokens in and ${avg.output} out a line, measured over the ${t.lines} line${t.lines === 1 ? '' : 's'} paid so far` : `about ${avg.input} tokens in and ${avg.output} out a line: the average we measured, replaced by your own after the first line`
+      const cap = `${RULES.voiceCapDay} lines a day`
+      if (!(await getPrefs($)).voice) return { text: `Comments off: the pet says its fixed lines, and nothing is sent anywhere for it. /pet comments on lets a small model write one line about the turn. That spends tokens of your own account: ${cost}, never more than ${cap}.` }
       return { text: [
         `Comments on. They spend tokens of your own account: each line is one request to a small model (the alias ${MODEL}, through Claude Code's own client).`,
         `Sent to the model: the pet's name, animal, five statistics and language; the name you told it with /pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts (the tools of your MCP servers too, by their names); the program names of the commands that failed; how many files changed; the last ${RULES.voiceTailChars} characters of the assistant's reply (during a turn, of what it wrote last in it, and how many minutes the turn has lasted); the pet's own last ${RULES.voiceRecall} lines, so that it does not repeat itself (they are kept in the store and go back to the model in later chats too); at most ${RULES.diaryRecall} lines of its diary, as memories it may hint at (times, counts, a folder's name: /pet diary shows all of it). When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it.`,
         `/pet say <text> speaks to the pet: what you write after it (its first ${RULES.saySaidChars} characters) is sent to the same model, which answers in the bubble with one line. It is a request of its own, not a turn of the chat, and counts in the day's lines.`,
         `Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant. But the end of the assistant's reply is sent as it is: those ${RULES.voiceTailChars} characters can hold a path, a name or a piece of code the assistant wrote there.`,
-        `Cost: ${cost}. ${PRICE_NOTE}`,
+        `Cost: ${cost}. The tokens are the ones each call reports; what they cost in money depends on the model the alias ${MODEL} leads to on your account.`,
         `When: at the end of a turn, at most one line every ${RULES.voiceGapMs / 60_000} minutes; without that wait after a failed command, a turn that changed ${RULES.voiceManyFiles} files or more, or a cuddle: each of those waits ${(RULES.voiceEvery.fail ?? 0) / 1000}, ${(RULES.voiceEvery.files ?? 0) / 1000} and ${(RULES.voiceEvery.cuddle ?? 0) / 1000} seconds since the last line for the same reason. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too. Also during a turn that lasts longer than ${RULES.voiceGapMs / 60_000} minutes, under the same wait. Never more than ${cap}, over all your chats. Never while you type, and a call slower than ${RULES.voiceTimeoutMs / 1000} seconds is dropped.`,
         `A line that comes back wider than ${RULES.voiceMaxCols} columns on screen (a Chinese character takes two) is not shown, and is paid for all the same: ${t.dropped} of ${t.lines} so far. Nor is one that names a file or a path: ${t.paths} so far.`,
-        `Today: ${t.today} of ${RULES.voiceCapDay} lines, ${money(t.todayUsd)}: ${left(t) ? `${left(t)} left` : 'none left, they come back tomorrow'}. /pet comments off stops them.`,
+        `Today: ${t.today} of ${RULES.voiceCapDay} lines, ${t.todayTokens} tokens (${t.input + t.output} in all): ${left(t) ? `${left(t)} left` : 'none left, they come back tomorrow'}. /pet comments off stops them.`,
       ].join('\n') }
     }
     if (verb === 'demo') {
@@ -1257,7 +1246,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const names = OWNABLE.filter(i => c.owned.includes(i.id)).map(i => itemName(L, i))
     const spoken = await voiceTally($)
     const comments = !(await voiceChosen($)) ? say('card.comments.off')
-      : spoken ? say('card.comments.on', { n: spoken.today, cap: RULES.voiceCapDay, today: money(spoken.todayUsd), all: money(spoken.usd) }) : say('card.comments.unread')
+      : spoken ? say('card.comments.on', { n: spoken.today, cap: RULES.voiceCapDay, today: spoken.todayTokens, all: spoken.input + spoken.output, in: average(spoken).input, out: average(spoken).output }) : say('card.comments.unread')
     const ends = extremes(who.stats), now = await $.clock.now()
     const stage = STATE[c.stage] ?? c.stage, label = Math.max(...STATS.map(name => cols(say(`stat.${name}`)))) + 1
     return {

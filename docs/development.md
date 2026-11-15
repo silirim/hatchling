@@ -3,7 +3,7 @@
 ```
 npm test          # engine rules, and the two plugins loaded together (engine/together.test.js)
 npm run test:mod  # validate and test both plugins
-npm run typecheck # types: the mod, then the Node scripts (audit, skin:check, skin:import, bench) with Node's
+npm run typecheck # types: the mod, then the Node scripts (skin:check, skin:import, bench) with Node's
 npm run sprites   # rebuild sprites/zoo.json, zoo.js and the icon
 npm run skin:check <pack.json>        # check a skin pack with the mod's own rules
 npm run skin:import <Codex pet folder> # turn a Codex pet into a skin pack

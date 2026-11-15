@@ -189,7 +189,7 @@ test('the diet and /pet weight are gone: a long output passes whole whatever was
   expect(await cmd('')).not.toMatch(/diet|trimmed/)
   // each command answers with one line: taken out, and why. Neither changes anything
   for (const args of ['diet', 'diet on', 'diet off']) expect(await cmd(args)).toMatch(/^\/pet diet was taken out: in our bench it showed no saving \(alone -3\.6%, p 0\.31\)\..*still in ~\/\.claude\/cachito-out/)
-  expect(await cmd('weight')).toBe('/pet weight was taken out: /context in Claude Code already shows what every request carries. /pet audit still shows where the tokens went.')
+  expect(await cmd('weight')).toBe('/pet weight was taken out: /context in Claude Code already shows what every request carries.')
   // the first write of a preference (here the pet's own, at its first start) took the diet's key out of the store; the object of the earlier version is never written
   expect('pref.diet' in disk).toBe(false)
   await cmd('lang es')
@@ -284,48 +284,6 @@ test('over 30k the style waits: lean is the style alone, the note goes while it 
   await cmd('style on')
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
   expect(await styled()).toBe(true)
-})
-
-test('/pet audit says when node is missing', async ($, on) => {
-  mock.clock(on)
-  mock.store(on, { prefs: { species: 'penguin', born: 'penguin', trait: 'dry', voiceAsked: true } }) // born with the old traits: dry is the wit
-  on('config.list', () => ({ value: [] }))
-  on('command.register', () => ({ value: { command: 'pet' } }))
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  let path: string | undefined
-  const stats: string[] = []
-  on('env.get', (_: any, e: any) => ({ value: e.name === 'PATH' ? path : undefined }))
-  on('fs.stat', (_: any, e: any) => { stats.push(e.path); if (!['/w/proj/bin/node', '/usr/local/bin/node'].includes(e.path)) throw new Error('ENOENT'); return { value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } } })
-  on('fs.list', () => ({ value: [] }))
-  on('session.model', () => ({ value: 'claude-opus-5-5' }))
-  on('tool.call', () => ({ result: {} }) as any)
-  let breakdown: any
-  on('session.usage', () => ({ value: { context: { breakdown } } }) as any)
-  let node: () => any = () => ({ deny: 'spawn node ENOENT' })
-  const ran: string[][] = []
-  on('process.run', (_: any, e: any) => { ran.push(e.argv); return node() })
-  const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
-
-  await $.session.start({ cwd: '/w/proj', surface: 'terminal', isInteractive: true })
-
-  // no PATH, or no node in its folders: said, and nothing is run
-  expect(await cmd('audit')).toMatch(/`node` is not on the PATH Claude Code was started with/)
-  path = '/opt/empty:/usr/bin'
-  expect(await cmd('audit')).toMatch(/`node` is not on the PATH Claude Code was started with/)
-  expect(ran).toEqual([])
-  // E24: node is run by its absolute path, from an absolute folder of the PATH that is not inside the project: never a `node`
-  // found through the working folder (an empty entry, `.`, a relative one) or left in the repository
-  path = ':.:bin:/w/proj/bin:/w/proj:/usr/local/bin:/usr/bin'
-  node = () => ({ value: { exitCode: 0, stdout: 'CACHITO RECEIPT', stderr: '' } })
-  expect(await cmd('audit 7')).toBe('CACHITO RECEIPT')
-  expect(ran).toEqual([['/usr/local/bin/node', expect.stringMatching(/\/engine\/audit\.js$/), '--days', '7']])
-  expect(stats.some(p => p.startsWith('/w/proj') || !p.startsWith('/'))).toBe(false) // the project's own folders were not even looked in
-  // a wrong argument is said here, with what is right, and nothing is run
-  for (const bad of ['0', 'abc', '-3', '7.5', '99999']) expect(await cmd(`audit ${bad}`)).toBe(`/pet audit [days]: the days are a whole number from 1 to 3650, not ${bad}. With none, all your sessions.`)
-  expect(ran.length).toBe(1)
-  node = () => ({ value: { exitCode: 2, stdout: '', stderr: 'boom\u001b[31m' } })
-  expect(await cmd('audit')).toBe('The receipt stopped with an error (exit 2). It needs Node 20 or later.\nboom')
-  expect(await cmd('demo fox')).toBe('Cachito demo: egg, seedling, healthy, bloom, cheer, dizzy, stomach, loop, bloated, sleep (5 s each).')
 })
 
 test('the companion: a greeting from the marks, a mark of its own with nothing of the chat in it, news of another chat, the outline', async ($, on) => {
@@ -566,7 +524,7 @@ test('a pet is born with a name and a character of its own: on the card and in t
   await k.clock.advance(2_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   // hatched: before anything else it asks whether it may speak, once, and says what a yes comes to
-  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account, at most about\n$0.00280 a day, and sends it a short summary\nof the turn. Details: /pet comments')
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account, about 570 tokens in\nand 20 out a line, at most 40 lines a day,\nand sends it a short summary of the turn.\nDetails: /pet comments')
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
   await ui.press({ key: 'voice-off' })
@@ -731,7 +689,7 @@ test('one pet for two chats: a turn here keeps what another chat did meanwhile, 
   expect(k.disk.pet).toMatchObject({ coins: 41, affection: 71, owned: ['shades', 'cap'], life: { input: 19_000, cacheRead: 18_000 } }) // its progress, plus this turn
   const card = await cardOf($)
   expect(card).toMatch(/^41 stars; owns sunglasses, a travel cap\. \/pet shop$/m) // bought in the other chat
-  expect(card).not.toMatch(/cache/i) // 18k of 19k came from the cache: not said here, the figure is /pet audit's
+  expect(card).not.toMatch(/cache/i) // 18k of 19k came from the cache: not said here
   expect(card).toMatch(/♥♥♡♡♡/)
 
   // the skin button opens the parts something is owned for, one button each: a press turns that part alone, and the bubble tells what is on
@@ -1697,7 +1655,7 @@ test('comments off, as installed: no call to a model, whatever happens, and the 
   expect(k.v.calls).toEqual([])
   expect(k.disk.voice).toBeUndefined()
   expect(await cardOf($)).toMatch(/\ncomments off: fixed lines only, nothing sent\. \/pet comments on lets a small model write them, on your tokens/)
-  expect(await cardOf($, 'comments')).toMatch(/^Comments off: the pet says its fixed lines, and nothing is sent anywhere for it\..*spends tokens of your own account: about \$0\.00007 a line: an estimate.*never more than 40 lines a day, about \$0\.00280\. The dollars are an estimate: the tokens are the ones each call reports, priced at Haiku 5\.5's list price, and the alias haiku may lead to another model with another price\.$/)
+  expect(await cardOf($, 'comments')).toMatch(/^Comments off: the pet says its fixed lines, and nothing is sent anywhere for it\..*spends tokens of your own account: about 570 tokens in and 20 out a line: the average we measured, replaced by your own after the first line, never more than 40 lines a day\.$/)
 })
 
 test('comments on: it says what it costs and sends; a line at the end of a turn made of counts and names only, counted with its real tokens', async ($, on) => {
@@ -1707,9 +1665,10 @@ test('comments on: it says what it costs and sends; a line at the end of a turn 
   expect(says).toMatch(/^Comments on\. They spend tokens of your own account: each line is one request to a small model \(the alias haiku/)
   expect(says).toMatch(/Sent to the model: the pet's name, animal, five statistics and language; the name you told it with \/pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts \(the tools of your MCP servers too, by their names\); the program names of the commands that failed; how many files changed; the last 600 characters of the assistant's reply \(during a turn, of what it wrote last in it, and how many minutes the turn has lasted\); the pet's own last 2 lines, so that it does not repeat itself \(they are kept in the store and go back to the model in later chats too\); at most 3 lines of its diary/)
   expect(says).toMatch(/Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant\. But the end of the assistant's reply is sent as it is/)
-  expect(says).toMatch(/Cost: about \$0\.00007 a line: an estimate, replaced by the measured figure after the first line\./)
-  expect(says).toMatch(/at most one line every 10 minutes; without that wait after a failed command, a turn that changed 5 files or more, or a cuddle: each of those waits 30, 30 and 20 seconds since the last line for the same reason\. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too\. Also during a turn that lasts longer than 10 minutes, under the same wait\. Never more than 40 lines a day, about \$0\.00280, over all your chats\./)
-  expect(says).toMatch(/Today: 0 of 40 lines, \$0\.00000: 40 left\. \/pet comments off stops them\.$/)
+  expect(says).toMatch(/Cost: about 570 tokens in and 20 out a line: the average we measured, replaced by your own after the first line\. The tokens are the ones each call reports; what they cost in money depends on the model the alias haiku leads to on your account\.\n/)
+  expect(says).not.toContain('$')
+  expect(says).toMatch(/at most one line every 10 minutes; without that wait after a failed command, a turn that changed 5 files or more, or a cuddle: each of those waits 30, 30 and 20 seconds since the last line for the same reason\. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too\. Also during a turn that lasts longer than 10 minutes, under the same wait\. Never more than 40 lines a day, over all your chats\./)
+  expect(says).toMatch(/Today: 0 of 40 lines, 0 tokens \(0 in all\): 40 left\. \/pet comments off stops them\.$/)
   expect(prefsOf(k.disk).voice).toBe(true)
   expect(k.v.calls).toEqual([]) // turning it on asks nothing
 
@@ -1733,12 +1692,13 @@ test('comments on: it says what it costs and sends; a line at the end of a turn 
   expect(ask.prompt.split('reply ended: ')[1].split('\n')[0].length).toBe(600)
   expect(JSON.stringify(ask)).not.toMatch(/secret plan|SECRET OUTPUT|hunter2|TOKEN|keys\.txt|app\.js|private/)
   expect(await k.texts()).toContain('Three failures, then green. Noted.')
-  // the real tokens of the call, at Haiku 5.5's list price: 300 in at $0.10 and 20 out at $0.50 per million
-  expect(k.disk.voice).toMatchObject({ today: 1, lines: 1, input: 300, output: 20 })
-  expect(Math.round(k.disk.voice.usd * 1e9)).toBe(40_000)
-  expect(Math.round(k.disk.voice.todayUsd * 1e9)).toBe(40_000)
-  expect(await cardOf($)).toMatch(/\ncomments on: 1 of 40 lines today, \$0\.00004 today, \$0\.00004 in all/)
-  expect(await cardOf($, 'comments')).toMatch(/Cost: \$0\.00004 a line, measured over the 1 line paid so far \(300 tokens in and 20 out each\)\./)
+  // the real tokens of the call, and no dollars: none kept, none said
+  expect(k.disk.voice).toMatchObject({ today: 1, todayTokens: 320, lines: 1, input: 300, output: 20 })
+  expect(Object.keys(k.disk.voice).filter(key => /usd/i.test(key))).toEqual([])
+  expect(await cardOf($)).toMatch(/\ncomments on: about 300 tokens in and 20 out a line, 1 of 40 lines today, 320 tokens today, 320 in all$/m)
+  expect(await cardOf($, 'comments')).toMatch(/Cost: 300 tokens in and 20 out a line, measured over the 1 line paid so far\./)
+  expect(await cardOf($, 'comments')).toMatch(/\nToday: 1 of 40 lines, 320 tokens \(320 in all\): 39 left\./)
+  expect(await cardOf($, 'comments')).not.toContain('$')
 
   // the wait: the next turn ends within 10 minutes and asks nothing; the fixed line is back with the prompt
   await k.clock.advance(60_000)
@@ -1805,7 +1765,7 @@ test('comments on, and the call fails, is cut short or says nothing usable: the 
     k.v.reply = reply
     const before = await k.texts()
     await k.turn(failing)
-    expect(k.disk.voice).toMatchObject({ today: k.v.calls.length, lines: k.v.calls.length, usd: 0, input: 0 }) // counted, at no cost
+    expect(k.disk.voice).toMatchObject({ today: k.v.calls.length, lines: k.v.calls.length, todayTokens: 0, input: 0 }) // counted, at no cost
     expect((await k.texts()).length).toBe(before.length) // no line was added to the bubble
     await k.clock.advance(31_000)
   }
@@ -1822,7 +1782,7 @@ test('comments on, and the call fails, is cut short or says nothing usable: the 
 test('comments on: the cap of the day stops it, a new day starts the count again, and it never speaks while the person types', async ($, on) => {
   const k = voiceKit($, on, { voice: true })
   const T0 = Date.UTC(2026, 10, 12, 12)
-  k.disk.voice = { day: dayOf(T0), today: RULES.voiceCapDay, todayUsd: 0.0016, lines: 90, usd: 0.0036, input: 27000, output: 1800, at: T0 - 3_600_000 }
+  k.disk.voice = { day: dayOf(T0), today: RULES.voiceCapDay, todayUsd: 0.0016, lines: 90, usd: 0.0036, input: 27000, output: 1800, at: T0 - 3_600_000 } // a store of before the tokens, with its dollars: not read, not shown, nothing breaks
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   k.v.fail = true
   const failing = () => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't' } as any)
@@ -1830,8 +1790,9 @@ test('comments on: the cap of the day stops it, a new day starts the count again
   await $.command.run({ command: 'pet', args: 'pet' } as any)
   await k.settle()
   expect(k.v.calls).toEqual([]) // 40 lines today: not one more, not even for a failure or a cuddle
-  expect(await cardOf($)).toMatch(/\ncomments on: 40 of 40 lines today, \$0\.00160 today, \$0\.00360 in all/)
-  expect(await cardOf($, 'comments')).toMatch(/\nToday: 40 of 40 lines, \$0\.00160: none left, they come back tomorrow\. \/pet comments off stops them\.$/)
+  expect(await cardOf($)).toMatch(/\ncomments on: about 300 tokens in and 20 out a line, 40 of 40 lines today, 0 tokens today, 28800 in all$/m)
+  expect(await cardOf($, 'comments')).toMatch(/\nCost: 300 tokens in and 20 out a line, measured over the 90 lines paid so far\..*\nToday: 40 of 40 lines, 0 tokens \(28800 in all\): none left, they come back tomorrow\. \/pet comments off stops them\.$/s)
+  expect(await cardOf($, 'comments')).not.toMatch(/\$|0\.0016|0\.0036/)
   // the next day: what the store counted belongs to the day before
   k.disk.voice.day--
   k.box = 'I am typing'
@@ -1869,9 +1830,9 @@ test('under the bench the voice is off, even when the person had it on', async (
 
 test('the voice is asked for once, at the first start of a pet born before: unanswered it stays off, and no later chat asks again', async ($, on) => {
   const k = voiceKit($, on, { voiceAsked: false })
-  k.disk.voice = { lines: 10, usd: 0.001, input: 5000, output: 200 } // lines paid for earlier: the figure in the question is the measured one
+  k.disk.voice = { lines: 10, input: 5000, output: 200 } // lines paid for earlier: the figure in the question is the measured one
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  const Q = 'May I comment on your work? It uses a small\nmodel on your account, at most about\n$0.00400 a day, and sends it a short summary\nof the turn. Details: /pet comments'
+  const Q = 'May I comment on your work? It uses a small\nmodel on your account, about 500 tokens in\nand 20 out a line, at most 40 lines a day,\nand sends it a short summary of the turn.\nDetails: /pet comments'
   expect(await k.texts()).toContain(Q)
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true]) // marked when it comes up
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -2046,7 +2007,7 @@ test('the bubble in Chinese: wrapped and bordered by width on screen, two column
   k.state = {}
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const ask = await bubble()
-  expect(ask.lines[0]!.split('\n')).toEqual(['我可以点评你的工作吗？会用你账户上的小模型，', '每天最多约 $0.00280，并发给它一段本轮的简短', '摘要。详情：/pet comments'])
+  expect(ask.lines[0]!.split('\n')).toEqual(['我可以点评你的工作吗？会用你账户上的小模型，', '每句约输入 570、输出 20 token，每天最多 40', '句，并发给它一段本轮的简短摘要。详情：/pet', 'comments'])
   expect(ask.width).toBe(48)
   expect(ask.buttons.slice(-2)).toEqual(['开启点评', '保持安静'])
 })
@@ -2245,7 +2206,7 @@ test('/pet say with comments off: a fixed line in its character saying that talk
 test('/pet say counts in the day\'s cap: at the cap the pet says so in its character and no call is made; a failed call leaves a fixed line and is not counted', async ($, on) => {
   const k = voiceKit($, on, { voice: true })
   const today = Math.floor((k.clock.now() - new Date(k.clock.now()).getTimezoneOffset() * 60_000) / DAY)
-  k.disk.voice = { day: today, today: RULES.voiceCapDay - 1, todayUsd: 0.001, lines: 60, usd: 0.003, input: 30000, output: 1200, at: k.clock.now() - 1000 }
+  k.disk.voice = { day: today, today: RULES.voiceCapDay - 1, todayTokens: 20000, lines: 60, input: 30000, output: 1200, at: k.clock.now() - 1000 }
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await sayTo($, 'one more?') // the last line of the day: no wait since the line before, unlike a comment at the end of a turn
   await k.settle()
@@ -2316,7 +2277,7 @@ test('comments during a long turn: nothing between turns, nothing over the cap o
   expect(k.v.calls).toEqual([])
   // the cap of the day holds a long turn too
   await $.prompt.submit({ text: 'the secret plan', wait: false, origin: 'user' } as any)
-  k.disk.voice = { day: dayOf(k.clock.now()), today: RULES.voiceCapDay, todayUsd: 0.0016, lines: 90, usd: 0.0036, input: 27000, output: 1800, at: 0 }
+  k.disk.voice = { day: dayOf(k.clock.now()), today: RULES.voiceCapDay, todayTokens: 12800, lines: 90, input: 27000, output: 1800, at: 0 }
   await wait(11 * 60_000)
   expect(k.v.calls).toEqual([])
   // and a line another chat got meanwhile counts for the wait: one line every 10 minutes over all the chats
@@ -2369,9 +2330,9 @@ test('the outline offer keeps the comment of the turn under it; a cuddle passes 
   await cardOf($, 'lang es')
   expect(await cardOf($, 'pet')).toMatch(/^Miro: (caricia anotada\. comentarios, hasta mañana|contada\. comentarios: cero hasta mañana)  \(/)
   // /pet comments says how many are left
-  expect(await cardOf($, 'comments')).toMatch(/\nToday: 40 of 40 lines, \$\d\.\d+: none left, they come back tomorrow\./)
+  expect(await cardOf($, 'comments')).toMatch(/\nToday: 40 of 40 lines, \d+ tokens \(\d+ in all\): none left, they come back tomorrow\./)
   k.disk.voice = { ...k.disk.voice, today: 3 }
-  expect(await cardOf($, 'comments')).toMatch(/\nToday: 3 of 40 lines, \$\d\.\d+: 37 left\./)
+  expect(await cardOf($, 'comments')).toMatch(/\nToday: 3 of 40 lines, \d+ tokens \(\d+ in all\): 37 left\./)
   // with the comments off a cuddle at any count is a cuddle: the cap is nothing to speak of
   await cardOf($, 'lang en')
   k.disk.voice = { ...k.disk.voice, today: RULES.voiceCapDay }
@@ -2809,17 +2770,15 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'lang', 'share', 'diary', 'audit', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'lang', 'share', 'diary', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
-  // the short answers are said in the pet's language: adoption, the demo, the budget that is gone, the receipt's errors
+  // the short answers are said in the pet's language: adoption, the demo, the budget that is gone
   await cardOf($, 'lang es')
   expect(await cardOf($, 'adopt')).toBe('No hay ningún /buddy en tu configuración de Claude Code: nada que adoptar.')
   expect(await cardOf($, 'demo')).toMatch(/^Demo de Cachito: .* \(5 s cada uno\)\.$/)
   expect(await cardOf($, 'budget 5')).toMatch(/^El presupuesto de contexto se quitó/)
-  expect(await cardOf($, 'audit abc')).toBe('/pet audit [días]: los días son un número entero de 1 a 3650, no abc. Sin número, todas tus sesiones.')
-  expect(await cardOf($, 'audit')).toMatch(/^El recibo no pudo empezar: `node` no está en el PATH/)
   expect(await cardOf($, 'nada')).toBe('No existe /pet nada. /pet help muestra los comandos.')
   // typed with a capital, /pet Say is still for the pet alone: dropped, never a turn of the chat
   const r = await $.prompt.submit({ text: '/pet Say hola', command: { name: 'pet', args: 'Say hola' }, wait: false, origin: 'user' } as any) as any
@@ -3166,8 +3125,11 @@ const wordsOf = (lines: string[]) => { const p = picture({ rows: [], palette: {}
 test('/pet share: a colour picture of the pet written by Node in the config folder, its path said, the words from the pet only and nothing of the work', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, personality: 'A secret adopted line.', hatched: 1_700_000_000_000, cuddles: 4141, wear: 'sombrero hoodie skateboard suitcase golden' })
   k.disk.pet = { variant: 'golden', coins: 123, affection: 98_765, days: 5151, day: dayOf(EARLY), born: EARLY, life: { input: 77_777_777, cacheRead: 88_888_888 }, owned: ['eggshell', 'sombrero', 'hoodie', 'skateboard', 'suitcase', 'golden'], animals: ['penguin'] }
-  k.env.PATH = '/usr/bin'
-  on('fs.stat', (_: any, e: any) => { if (e.path !== '/usr/bin/node') throw new Error('ENOENT'); return { value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } } })
+  // E24: node is run by its absolute path, from an absolute folder of the PATH that is not inside the project: never a `node`
+  // found through the working folder (an empty entry, `.`, a relative one) or left in the repository
+  k.env.PATH = ':.:bin:/w/secretproj/bin:/w/secretproj:/usr/bin'
+  const stats: string[] = []
+  on('fs.stat', (_: any, e: any) => { stats.push(e.path); if (!['/usr/bin/node', '/w/secretproj/bin/node'].includes(e.path)) throw new Error('ENOENT'); return { value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } } })
   const ran: { argv: string[], stdin: string }[] = []
   let exitCode = 0
   on('process.run', (_: any, e: any) => { ran.push({ argv: e.argv, stdin: e.init.stdin }); return { value: { exitCode, stdout: '', stderr: '' } } as any })
@@ -3176,6 +3138,7 @@ test('/pet share: a colour picture of the pet written by Node in the config fold
   expect(said).toBe('Saved a picture of the pet: /home/me/.claude/cachito-share/cachito-miro.png\nAttach it to a post. Nothing about your work is on it.')
   const one = shared(ran[0]!)
   expect(one.argv).toEqual(['/usr/bin/node', expect.stringMatching(/\/engine\/share-save\.js$/), '/home/me/.claude/cachito-share/cachito-miro.png'])
+  expect(stats.some(p => p.startsWith('/w/secretproj') || !p.startsWith('/'))).toBe(false) // the project's own folders were not even looked in
   // the words drawn are these and no others: the name, the animal, the stage and what is special, the strong point, the stars, the link
   expect(one.words).toBe(wordsOf(['Miro', 'Cachito the fox', 'crown · golden · founder', 'Checks everything twice', '★ 123 stars', 'github.com/silirim/cachito-pet']))
   expect(one.pet).toBeGreaterThan(5000) // and the pet, in colours of its own

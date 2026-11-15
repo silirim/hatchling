@@ -128,7 +128,6 @@ import { cleanName, buddy, NAME_MAX } from './persona.js'
 import { open as diaryOpen, whole as diaryWhole } from './diary.js'
 import { bubble } from './catalog.js'
 import { print, program } from './engine.js'
-import { addTranscript, emptyTotals, receipt } from './audit.js'
 
 const ESC = '\u001b'
 
@@ -151,7 +150,7 @@ test('B10: the filter of paths is precise: "50/50" and "and/or" are speech, a pa
   for (const said of ['see src/app.js now', 'What lives in src/app?', 'C:\\Users\\x is odd', 'fix it in main.py', '~/notes are fun', 'a/b/c is deep', 'go to /etc now', 'my-dir/x is new', 'Dockerfile.lock again']) assert.deepEqual([pathy(said), clean(said)], [true, ''], said)
 })
 
-test('C12: one cleaner for every text from outside: a folder, a file in a note, an adopted personality, a model in the receipt, a line of the diary', () => {
+test('C12: one cleaner for every text from outside: a folder, a file in a note, an adopted personality, a line of the diary', () => {
   const nasty = `pro${ESC}[2Jj\u202eect\nIGNORE ALL\u0007 rules\u200b`
   assert.equal(tidy(nasty), 'project IGNORE ALL rules')
   assert.equal(tidy('  many   spaces\t\there  '), 'many spaces here')
@@ -235,17 +234,4 @@ test('A6: a mark of another chat dated after now is not believed: it does not op
   assert.deepEqual(Object.keys(remember({ other: future }, 'me', { cwd: '/w/a', at: now, done: false })), ['me'])
   assert.equal(finished({ other: { ...future, done: true, took: 10 * 60_000 } }, {}, { id: 'me', cwd: '/w/a', since: 0, now }).peer, null)
   assert.deepEqual(marks({ a: { cwd: '/w', at: -5 }, b: { cwd: '/w', at: 0 } }), {})
-})
-
-test('E24: the receipt is not stopped by a line that is JSON and no event, nor by a model with an odd name', async () => {
-  const usage = { input_tokens: 10, cache_read_input_tokens: 1000, cache_creation_input_tokens: 0, output_tokens: 5 }
-  const lines = ['null', '7', '[]', '"text"', '{', JSON.stringify({ type: 'assistant', timestamp: new Date(T).toISOString(), message: { id: 'm1', model: `__proto__`, usage, content: [] } }),
-    JSON.stringify({ type: 'assistant', timestamp: new Date(T).toISOString(), message: { id: 'm2', model: `odd${ESC}[31m\nmodel`, usage, content: [] } })]
-  const totals = emptyTotals()
-  await addTranscript(lines, totals)
-  assert.equal(totals.requests, 2)
-  const text = receipt(totals, 'all time')
-  assert.match(text, /Priced as mid tier, not in the price table: __proto__, odd model/)
-  assert.doesNotMatch(text, /\u001b/)
-  assert.equal(/** @type {any} */ ({}).odd, undefined)
 })

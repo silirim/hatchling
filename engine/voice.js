@@ -1,17 +1,15 @@
 // @ts-check
 // The voice: one short line about the turn, written by a small model. Off unless the person turns it on, since it spends their tokens.
-// Pure: what is sent (`system`, `summary`), what comes back made fit to show (`clean`), and the count of lines and cost (`tally`, `count`).
+// Pure: what is sent (`system`, `summary`), what comes back made fit to show (`clean`), and the count of lines and tokens (`tally`, `settle`).
 // The adapter does the call. Nothing here reads a file, a command's output or the person's prompt.
 
 import { RULES, dayOf } from './engine.js'
 import { STATS } from './persona.js'
-import { rates } from './prices.js'
 import { BASE, asLang, text, list } from './lang/index.js'
 import { cols, tidy } from './width.js'
 
 export const MODEL = 'haiku' // the alias, resolved by Claude Code
-// shortcut: the call gives back tokens, not dollars, and not the model the alias came to: the cost is those tokens at this model's list price
-export const PRICED_AS = 'claude-haiku-5-5'
+// The cost of a line is said in tokens, as each call reports them: no price is kept here, a price list goes stale
 
 /** Why the pet speaks. `turn` (a turn ended) and `long` (a turn still running after RULES.voiceGapMs) wait for RULES.voiceGapMs since the last line, the others do not; `say` is an answer to /pet say. @typedef {'turn' | 'long' | 'fail' | 'files' | 'cuddle' | 'say' | 'peer'} Why */
 const WHY = /** @type {Record<Why, string>} */ ({
@@ -25,11 +23,11 @@ const WHY = /** @type {Record<Why, string>} */ ({
 })
 
 /**
- * The count kept in the store, shared by every chat: `today` and `todayUsd` belong to `day`, `lines`, `usd`, `input` and `output`
- * are all-time, `at` is when the last line was asked for, `by` when the last one was asked for each reason, `dropped` how many of
+ * The count kept in the store, shared by every chat: `today` and `todayTokens` (in and out together) belong to `day`, `lines`, `input` and `output`
+ * are all-time (a `usd` kept by an earlier version is not read), `at` is when the last line was asked for, `by` when the last one was asked for each reason, `dropped` how many of
  * the lines paid for were not shown because they came back too long, `paths` how many because they named a file or a path,
  * `last` the newest RULES.voiceRecall lines shown, oldest first: sent back so the next one differs.
- * @typedef {{ day: number, today: number, todayUsd: number, lines: number, usd: number, input: number, output: number, at: number, by: Record<string, number>, dropped: number, paths: number, last: string[] }} Tally
+ * @typedef {{ day: number, today: number, todayTokens: number, lines: number, input: number, output: number, at: number, by: Record<string, number>, dropped: number, paths: number, last: string[] }} Tally
  */
 
 /** The newest RULES.voiceRecall lines of a list, each a text short enough to have been shown. @param {unknown} list @returns {string[]} */
@@ -48,7 +46,7 @@ export function tally(raw, now) {
   const day = Math.max(today, kept), same = kept > 0 && kept === day
   const past = (/** @type {unknown} */ x) => Math.min(num(x), now)
   const by = Object.fromEntries(Object.keys(WHY).flatMap(why => { const at = past(raw?.by?.[why]); return at ? [[why, at]] : [] }))
-  return { day, today: same ? Math.floor(num(raw.today)) : 0, todayUsd: same ? num(raw.todayUsd) : 0, lines: Math.floor(num(raw?.lines)), usd: num(raw?.usd), input: Math.floor(num(raw?.input)), output: Math.floor(num(raw?.output)), at: past(raw?.at), by, dropped: Math.floor(num(raw?.dropped)), paths: Math.floor(num(raw?.paths)), last: recall(raw?.last) }
+  return { day, today: same ? Math.floor(num(raw.today)) : 0, todayTokens: same ? Math.floor(num(raw.todayTokens)) : 0, lines: Math.floor(num(raw?.lines)), input: Math.floor(num(raw?.input)), output: Math.floor(num(raw?.output)), at: past(raw?.at), by, dropped: Math.floor(num(raw?.dropped)), paths: Math.floor(num(raw?.paths)), last: recall(raw?.last) }
 }
 
 /**
@@ -65,12 +63,7 @@ export function due(t, why, now) {
 /** A count of tokens as the call reports it, when it is one: a text, a negative or a broken number is none. @param {unknown} x */
 const tokens = (x) => Math.floor(num(x))
 
-/** What one call cost, in dollars: its tokens at the list price of PRICED_AS. @param {{ input_tokens?: number, output_tokens?: number, cache_read_input_tokens?: number, cache_creation_input_tokens?: number } | undefined} u */
-export function usd(u) {
-  const inp = tokens(u?.input_tokens), read = tokens(u?.cache_read_input_tokens), write = tokens(u?.cache_creation_input_tokens)
-  const r = rates(PRICED_AS, inp + read + write)
-  return r ? (inp * r.inp + read * r.read + write * r.w5 + tokens(u?.output_tokens) * r.out) / 1e6 : 0
-}
+/** The tokens of one call as it reports them: what went in (new, read from the cache, written to it) and what came out. @typedef {{ input_tokens?: number, output_tokens?: number, cache_read_input_tokens?: number, cache_creation_input_tokens?: number } | undefined} Usage */
 
 /**
  * The tally with one line asked for: counted in the day and timed BEFORE the call goes out, so that two chats, or a slow call,
@@ -80,26 +73,29 @@ export function usd(u) {
 export const reserve = (t, why, now) => ({ ...t, today: t.today + 1, lines: t.lines + 1, at: now, by: { ...t.by, [why]: now } })
 
 /**
- * The tally with what a call that was reserved came to: its tokens and cost, whether its reply was dropped for its length (`long`)
+ * The tally with what a call that was reserved came to: its tokens, whether its reply was dropped for its length (`long`)
  * or for naming a file or a path (`path`), and the line shown, if one was.
- * @param {Tally} t @param {Parameters<typeof usd>[0]} u @param {{ long?: boolean, path?: boolean, line?: string }} [how] @returns {Tally}
+ * @param {Tally} t @param {Usage} u @param {{ long?: boolean, path?: boolean, line?: string }} [how] @returns {Tally}
  */
 export function settle(t, u, { long = false, path = false, line = '' } = {}) {
-  const cost = usd(u)
-  return { ...t, todayUsd: t.todayUsd + cost, usd: t.usd + cost, input: t.input + tokens(u?.input_tokens) + tokens(u?.cache_read_input_tokens) + tokens(u?.cache_creation_input_tokens), output: t.output + tokens(u?.output_tokens), dropped: t.dropped + (long ? 1 : 0), paths: t.paths + (path ? 1 : 0), last: recall([...t.last, line]) }
+  const inp = tokens(u?.input_tokens) + tokens(u?.cache_read_input_tokens) + tokens(u?.cache_creation_input_tokens), out = tokens(u?.output_tokens)
+  return { ...t, todayTokens: t.todayTokens + inp + out, input: t.input + inp, output: t.output + out, dropped: t.dropped + (long ? 1 : 0), paths: t.paths + (path ? 1 : 0), last: recall([...t.last, line]) }
 }
 
 /** How many lines are left today. @param {Tally} t */
 export const left = (t) => Math.max(0, RULES.voiceCapDay - t.today)
 
-/** What a line costs on average: measured once one was paid for, RULES.voiceEstUsd until then. @param {Tally} t */
-export const average = (t) => t.lines ? { usd: t.usd / t.lines, measured: true } : { usd: RULES.voiceEstUsd, measured: false }
+/**
+ * The tokens of a line on average, in and out: measured over the lines counted here once one of them was paid for, and until then
+ * RULES.voiceEst rounded to the ten ("about 570 tokens in and 20 out").
+ * @param {Tally} t
+ */
+export const average = (t) => t.lines && t.input + t.output
+  ? { input: Math.round(t.input / t.lines), output: Math.round(t.output / t.lines), measured: true }
+  : { input: Math.round(RULES.voiceEst.input / 10) * 10, output: Math.round(RULES.voiceEst.output / 10) * 10, measured: false }
 
-/** Dollars, to the digits a line's cost needs. @param {number} x */
-export const money = (x) => `$${x >= 1 ? x.toFixed(2) : x.toFixed(5)}`
-
-/** What the pet asks once, before it ever speaks: what a yes comes to, in few words. `usdDay` is the most a day can cost. @param {number} usdDay @param {string} [lang] */
-export const question = (usdDay, lang) => text(lang, 'comments.ask', { usd: money(usdDay) })
+/** What the pet asks once, before it ever speaks: what a yes comes to, in tokens a line and lines a day. @param {Tally} t @param {string} [lang] */
+export const question = (t, lang) => { const a = average(t); return text(lang, 'comments.ask', { in: a.input, out: a.output, cap: RULES.voiceCapDay }) }
 
 // How each statistic sounds when it leads and what it is like as the weak point. Three lines in its tone are in engine/lang/ (`tone.*`),
 // in the language the pet speaks: reactions, not reports. The rest of what the model reads stays in English.

@@ -194,7 +194,7 @@ test('test, fix, test again is not a loop: an edit between failures resets it', 
   assert.equal(view(run([fail()], s), t).mood, 'loop')
 })
 
-test('the card claims no saving and carries no cache figure: that one is in /pet audit only', () => {
+test('the card claims no saving and carries no cache figure', () => {
   const s = run([at({ type: 'sessionStart' }), usage(100_000, 900_000, 0)], initialState(0.5))
   assert.deepEqual(Object.keys(card(s)).filter(k => /saved|hit|cache/i.test(k)), [])
 })

@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { RULES, dayOf, reduce, initialState, view } from './engine.js'
 import { bubble } from './catalog.js'
-import { tally, due, left, reserve, settle, pathy, usd, average, money, system, summary, reply, clean, tooLong, question, MODEL } from './voice.js'
+import { tally, due, left, reserve, settle, pathy, average, system, summary, reply, clean, tooLong, question, MODEL } from './voice.js'
 
 const T = Date.UTC(2026, 10, 13, 12), MIN = 60_000
 const USAGE = { input_tokens: 300, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -15,11 +15,14 @@ test('the limits are in RULES: 40 lines a day, 10 minutes, 60 columns, 8 words, 
 })
 
 test('the tally is whole whatever the store holds, and today starts at zero on a new day', () => {
-  assert.deepEqual(tally(undefined, T), { day: dayOf(T), today: 0, todayUsd: 0, lines: 0, usd: 0, input: 0, output: 0, at: 0, by: {}, dropped: 0, paths: 0, last: [] })
-  assert.deepEqual(tally({ day: 'x', today: -3, lines: NaN, usd: '1' }, T), tally(undefined, T))
-  const kept = { day: dayOf(T), today: 7, todayUsd: 0.0003, lines: 50, usd: 0.002, input: 15000, output: 1000, at: T - MIN, by: { cuddle: T - MIN }, dropped: 4, paths: 1, last: ['Steady work.'] }
+  assert.deepEqual(tally(undefined, T), { day: dayOf(T), today: 0, todayTokens: 0, lines: 0, input: 0, output: 0, at: 0, by: {}, dropped: 0, paths: 0, last: [] })
+  assert.deepEqual(tally({ day: 'x', today: -3, lines: NaN, todayTokens: '1' }, T), tally(undefined, T))
+  const kept = { day: dayOf(T), today: 7, todayTokens: 2240, lines: 50, input: 15000, output: 1000, at: T - MIN, by: { cuddle: T - MIN }, dropped: 4, paths: 1, last: ['Steady work.'] }
   assert.deepEqual(tally(kept, T), kept)
-  assert.deepEqual(tally(kept, T + 86_400_000), { ...kept, day: dayOf(T) + 1, today: 0, todayUsd: 0 })
+  // a store of before the tokens: the dollars it kept are not read and not kept, the lines and the tokens stay, today's tokens start at none
+  assert.deepEqual(tally({ ...kept, todayTokens: undefined, todayUsd: 0.0003, usd: 0.002 }, T), { ...kept, todayTokens: 0 })
+  assert.deepEqual(average(tally({ lines: 50, usd: 0.002, input: 15000, output: 1000 }, T)), { input: 300, output: 20, measured: true })
+  assert.deepEqual(tally(kept, T + 86_400_000), { ...kept, day: dayOf(T) + 1, today: 0, todayTokens: 0 })
   // A2: a clock set back over midnight does not give the day's lines again: the count stays in the day kept
   assert.deepEqual(tally({ ...kept, today: 40 }, T - 86_400_000), { ...kept, today: 40, at: T - 86_400_000, by: { cuddle: T - 86_400_000 } })
   assert.equal(due(tally({ ...kept, today: 40 }, T - 86_400_000), 'cuddle', T - 86_400_000), 'cap')
@@ -94,13 +97,12 @@ test('the outline offer and the recap do not silence the comment of the same tur
 /** A line asked for and what its call came to, as the mod does it: counted before the call, its use added after. */
 const count = (/** @type {import('./voice.js').Tally} */ t, /** @type {any} */ u, /** @type {number} */ now, long = false, line = '', why = /** @type {import('./voice.js').Why} */ ('turn')) => settle(reserve(t, why, now), u, { long, line })
 
-test('a line is counted when it is asked for, before the call, and its own tokens at the list price are added after; a call that used none stays counted', () => {
-  assert.ok(Math.abs(usd(USAGE) - (300 * 0.1 + 20 * 0.5) / 1e6) < 1e-12)
+test('a line is counted when it is asked for, before the call, and its own tokens are added after; a call that used none stays counted', () => {
   const one = count(tally(undefined, T), USAGE, T)
-  assert.deepEqual({ ...one, usd: 0, todayUsd: 0 }, { day: dayOf(T), today: 1, todayUsd: 0, lines: 1, usd: 0, input: 300, output: 20, at: T, by: { turn: T }, dropped: 0, paths: 0, last: [] })
+  assert.deepEqual(one, { day: dayOf(T), today: 1, todayTokens: 320, lines: 1, input: 300, output: 20, at: T, by: { turn: T }, dropped: 0, paths: 0, last: [] })
   assert.equal(count(one, USAGE, T, true).dropped, 1) // a line dropped for its length is paid for and counted as both
   assert.equal(count(one, USAGE, T, true).lines, 2)
-  assert.equal(one.usd, usd(USAGE))
+  assert.deepEqual([settle(one, { cache_read_input_tokens: 100, cache_creation_input_tokens: 50, output_tokens: 5 }).input, settle(one, { cache_read_input_tokens: 100, output_tokens: 5 }).todayTokens], [450, 425]) // the cache's tokens went in too
   // asked for and not yet answered: already in the day's count and timed, with nothing spent
   assert.deepEqual(reserve(tally(undefined, T), 'cuddle', T), { ...tally(undefined, T), today: 1, lines: 1, at: T, by: { cuddle: T } })
   // a call that failed or was cut short used no token: it stays a line of the day, and costs nothing
@@ -108,14 +110,13 @@ test('a line is counted when it is asked for, before the call, and its own token
   // tokens that are not counts (a text, a negative, a broken number) are none
   for (const junk of [{ input_tokens: -100 }, { input_tokens: NaN, output_tokens: -3 }, { input_tokens: '5' }, { output_tokens: Infinity }]) {
     const c = settle(one, /** @type {any} */ (junk))
-    assert.deepEqual([c.input, c.output, c.usd], [one.input, one.output, one.usd], JSON.stringify(junk))
+    assert.deepEqual([c.input, c.output, c.todayTokens], [one.input, one.output, one.todayTokens], JSON.stringify(junk))
   }
   assert.equal(settle(one, USAGE, { path: true }).paths, 1) // a line dropped for naming a file is counted as such
   // the average is an estimate until a line was paid for, then the measured one
-  assert.deepEqual(average(tally(undefined, T)), { usd: RULES.voiceEstUsd, measured: false })
-  assert.deepEqual(average(one), { usd: usd(USAGE), measured: true })
-  assert.equal(money(0.00004), '$0.00004')
-  assert.equal(money(1.5), '$1.50')
+  assert.deepEqual([RULES.voiceEst, average(tally(undefined, T))], [{ input: 567, output: 19 }, { input: 570, output: 20, measured: false }])
+  assert.deepEqual(average(one), { input: 300, output: 20, measured: true })
+  assert.deepEqual(average(reserve(tally(undefined, T), 'turn', T)), average(tally(undefined, T))) // asked for and nothing paid yet: still the estimate
 })
 
 test('the system prompt says who the pet is and how its five values sound together, asks for a reaction and not a report; the prompt is counts and names', () => {
@@ -206,12 +207,12 @@ test('the animal is told with the parts it has and has not; an unknown one names
   assert.match(system({ name: 'x', animal: 'dog', stats: [1, 2, 3, 4, 5] }), /begin each line your own way: no habitual opening word/)
 })
 
-test('the question asked once says what a yes comes to: whose account, the most a day costs, what is sent, where the details are', () => {
-  const q = question(RULES.voiceCapDay * average(tally(undefined, T)).usd)
-  assert.equal(q, 'May I comment on your work? It uses a small model on your account, at most about $0.00280 a day, and sends it a short summary of the turn. Details: /pet comments')
-  assert.doesNotMatch(q, /!|coin|wallet/)
+test('the question asked once says what a yes comes to: whose account, the tokens of a line and the lines of a day, what is sent, where the details are', () => {
+  const q = question(tally(undefined, T))
+  assert.equal(q, 'May I comment on your work? It uses a small model on your account, about 570 tokens in and 20 out a line, at most 40 lines a day, and sends it a short summary of the turn. Details: /pet comments')
+  assert.doesNotMatch(q, /!|coin|wallet|\$/)
   // once lines were paid for, the figure is the measured one
-  assert.match(question(RULES.voiceCapDay * average(count(tally(undefined, T), USAGE, T)).usd), /at most about \$0\.0\d+ a day/)
+  assert.match(question(count(tally(undefined, T), USAGE, T)), /about 300 tokens in and 20 out a line, at most 40 lines a day/)
 })
 
 test('the model is told the language and answers in it: the tone lines are in that language, Chinese is asked for in characters, English is as it was', () => {
@@ -231,7 +232,7 @@ test('the model is told the language and answers in it: the tone lines are in th
   assert.equal(summary({ why: 'cuddle', lang: 'en' }), summary({ why: 'cuddle' }))
   assert.equal(system({ ...pet, lang: 'xx' }), system(pet)) // a language there is not: English
   // the question, in each language, names the command as it is typed and has no exclamation mark
-  for (const lang of ['es', 'pt', 'zh']) { const q = question(0.0028, lang); assert.match(q, /\$0\.00280.*\/pet comments$/); assert.doesNotMatch(q, /[!！¡]/); assert.notEqual(q, question(0.0028)) }
+  for (const lang of ['es', 'pt', 'zh']) { const q = question(tally(undefined, T), lang); assert.match(q, /570.*20.*40.*\/pet comments$/); assert.doesNotMatch(q, /[!！¡$]/); assert.notEqual(q, question(tally(undefined, T))) }
 })
 
 test('the limit of a line is its width on screen: 60 columns are 60 letters or 30 Chinese characters', () => {

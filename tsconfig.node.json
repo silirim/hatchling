@@ -17,7 +17,6 @@
     ]
   },
   "include": [
-    "engine/audit.js",
     "engine/skin-check.js",
     "engine/skin-import.js",
     "engine/image.js",

@@ -40,7 +40,6 @@ A headless run (`claude -p`) leaves no chat mark and keeps no diary.
 ## What is read
 
 - **`/pet adopt`** reads `~/.claude.json`, whole, when you run it and never otherwise. That file also holds your account data and the secrets of your MCP servers. Three fields are kept, the rest is dropped at once, and the file is never written.
-- **`/pet audit`** reads your local Claude Code transcripts to add up costs. Nothing is sent.
 - **Skin packs** in `~/.claude/cachito-skins/` are read as data, never run as code.
 
 `/pet chats off` hides this chat from your others; it still leaves its mark, with no sign of life.
