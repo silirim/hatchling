@@ -12,7 +12,9 @@ const AHEAD_MS = 60_000 // a mark dated later than this after now was left by a 
 /**
  * `took` is how long the turn that ended lasted, in ms: only a long one is news for the other chats. `beat` is when the chat last
  * said it was alive, `asking` since when a tool call of its turn has been waiting for the person's leave, `closed` that it ended.
- * @typedef {{ cwd: string, at: number, done: boolean, took?: number, beat?: number, asking?: number, closed?: true }} Mark
+ * A closed chat's `at` is when it closed: `left` is then when its last turn started or ended, and `mid` that this turn was cut short.
+ * `recap` is the pause (the time of that last turn) the pet already made its recap for: no second one in the same process. A chat closed and resumed is asked again.
+ * @typedef {{ cwd: string, at: number, done: boolean, took?: number, beat?: number, asking?: number, closed?: true, left?: number, mid?: true, recap?: number }} Mark
  */
 /** @typedef {Record<string, Mark>} Marks by chat id */
 /** What a chat is doing, for the person who has several open. @typedef {'working' | 'waiting' | 'asking' | 'closed'} ChatState */
@@ -22,7 +24,7 @@ export function marks(raw) {
   if (!raw || typeof raw !== 'object') return {}
   const time = (/** @type {unknown} */ x) => typeof x === 'number' && Number.isFinite(x) && x > 0
   // made from pairs: a chat id is a name from outside, and is never set as a field by hand
-  return Object.fromEntries(Object.entries(raw).flatMap(([id, m]) => m && typeof m.cwd === 'string' && time(m.at) ? [[id, { cwd: m.cwd.slice(0, 1024), at: m.at, done: !!m.done, ...(time(m.took) && { took: m.took }), ...(time(m.beat) && { beat: m.beat }), ...(time(m.asking) && { asking: m.asking }), ...(m.closed === true && { closed: true }) }]] : []))
+  return Object.fromEntries(Object.entries(raw).flatMap(([id, m]) => m && typeof m.cwd === 'string' && time(m.at) ? [[id, { cwd: m.cwd.slice(0, 1024), at: m.at, done: !!m.done, ...(time(m.took) && { took: m.took }), ...(time(m.beat) && { beat: m.beat }), ...(time(m.asking) && { asking: m.asking }), ...(m.closed === true && { closed: true }), ...(time(m.left) && { left: m.left }), ...(m.mid === true && { mid: true }), ...(time(m.recap) && { recap: m.recap }) }]] : []))
 }
 
 /**
@@ -36,6 +38,11 @@ export function stateOf(m, now) {
   if (m.closed || !beat || now - beat > RULES.chatDeadMs || beat - now > AHEAD_MS) return 'closed'
   return m.done ? 'waiting' : m.asking ? 'asking' : 'working'
 }
+/**
+ * The last turn of a chat as its mark tells it: when it started or ended (`at`), and whether it was left midway (`mid`).
+ * @param {Mark} m
+ */
+export const leftOf = (m) => m.closed ? { at: m.left ?? m.at, mid: !!m.mid } : { at: m.at, mid: !m.done }
 /** Since when a chat is in its state: its last turn's start or end, or the moment a call began to wait for leave. @param {Mark} m */
 const sinceOf = (m) => !m.done && m.asking ? m.asking : m.at
 

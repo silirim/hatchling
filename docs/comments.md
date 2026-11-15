@@ -19,7 +19,7 @@ The pet asks once, right after it hatches, with two buttons: `comments on` and `
 
 A summary of the turn made on your machine: tool names and counts, the program names of commands that failed, how many files changed, and **the last 600 characters of the assistant's reply**, as they are. With it the pet's character, its last two lines, at most three lines of the diary, and the name you told it with `/pet call me`, when you told one.
 
-Never the content of a file, the output or arguments of a command, a file path, or your prompts to the assistant.
+Never the content of a file, the output or arguments of a command, a file path, or your prompts to the assistant. The one exception is the recap, below.
 
 The complete list: [privacy.md](privacy.md). With comments off none of it is sent.
 
@@ -32,6 +32,19 @@ The complete list: [privacy.md](privacy.md). With comments off none of it is sen
 - It never blocks: a call that takes more than 4 seconds is dropped and the fixed line stays.
 
 A line is shown only if it is at most 60 columns wide and names no file or path.
+
+## Where we left off
+
+When you come back to a chat after a pause, the pet says once where the work got to and what is left: `yesterday: parser tests are green, the README is still to do. shall we go on?`
+
+- A pause is 30 minutes after a turn ended with no new prompt. In a chat left open the line comes when they pass; in a chat closed and resumed, at the start.
+- One recap per pause while the chat stays open. A chat closed and resumed gets one at each resume, also for a pause already recapped: the line was in memory only and went with the chat. It stays in the bubble until your next prompt, and the time word is worked out when it is drawn, so it is still right the day after.
+- **What it sends, each time**: up to 16,000 characters of the last turn's text (what the assistant wrote, the newest kept; nothing a tool was given or answered) and the first 300 characters of your last prompt. The two together are never more than 16,000.
+- It counts in the day's 40 lines and in the tokens like any other line. It is a larger request than a comment: a few thousand tokens in at the most. Not measured yet.
+- Nothing of it is kept on disk: not what is sent, not the line. The chat's mark keeps only the time of the pause it was made for, so that an open chat is not asked twice.
+- A turn that was interrupted is told as stopped midway, not as finished.
+- It may be up to 120 columns wide and may name a file. If the call fails or takes more than 8 seconds, the pet stays silent.
+- With comments off no recap is made and nothing is read.
 
 ## Talking to the pet
 

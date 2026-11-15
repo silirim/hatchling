@@ -144,6 +144,15 @@ export const RULES = {
   saySaidChars: 300,       // how much of what the person writes after /pet say is sent to the model
   sayShowMs: 12_000,       // how long the pet's answer stays in the bubble
   cuddleShowMs: 5_000,     // how long the line of a cuddle holds the bubble, over any other line; the comment about it, when one comes, starts the time again
+
+  // The recap (engine/voice.js `recap`), part of the comments: where the work got to, said once when the person is back after a pause
+  recapAfterMs: 30 * 60_000, // the pause: this long after a turn ended with no new prompt, in a chat left open or in one closed and resumed
+  recapChars: 16_000,      // how much text goes to the model in all: the start of the person's last prompt and the end of what the assistant wrote in the last turn
+  recapPromptChars: 300,   // ...of which this much of the prompt, at most
+  recapMaxCols: 120,       // columns on screen: a recap wider than this is dropped, not cut
+  recapMaxWords: 24,       // what the model is asked for
+  recapMaxTokens: 80,      // the reply's cap, as asked
+  recapTimeoutMs: 8_000,   // a call slower than this is dropped: the pet stays silent
 }
 
 // Most important first: decides which rate-limited cheer is kept for later.

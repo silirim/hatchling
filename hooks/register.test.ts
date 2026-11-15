@@ -1664,7 +1664,8 @@ test('comments on: it says what it costs and sends; a line at the end of a turn 
   const says = await cardOf($, 'comments on')
   expect(says).toMatch(/^Comments on\. They spend tokens of your own account: each line is one request to a small model \(the alias haiku/)
   expect(says).toMatch(/Sent to the model: the pet's name, animal, five statistics and language; the name you told it with \/pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts \(the tools of your MCP servers too, by their names\); the program names of the commands that failed; how many files changed; the last 600 characters of the assistant's reply \(during a turn, of what it wrote last in it, and how many minutes the turn has lasted\); the pet's own last 2 lines, so that it does not repeat itself \(they are kept in the store and go back to the model in later chats too\); at most 3 lines of its diary/)
-  expect(says).toMatch(/Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant\. But the end of the assistant's reply is sent as it is/)
+  expect(says).toMatch(/\nAfter a pause the pet says once where the work got to and what is left: when 30 minutes pass after a turn with no new prompt, or when you resume a chat left for longer\. For that one line, once per pause and once more each time you resume a closed chat, it sends up to 16000 characters: the first 300 of your last prompt and the end of the text the assistant wrote in the last turn \(text only: nothing a tool was given or answered\)\. It counts in the day's lines and in the tokens like any other line, and it is a larger request than a comment: a few thousand tokens in at the most, not measured yet\. Neither what is sent nor the line is kept on disk\.\n/)
+  expect(says).toMatch(/Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap\. But the assistant's text is sent as it is/)
   expect(says).toMatch(/Cost: about 570 tokens in and 20 out a line: the average we measured, replaced by your own after the first line\. The tokens are the ones each call reports; what they cost in money depends on the model the alias haiku leads to on your account\.\n/)
   expect(says).not.toContain('$')
   expect(says).toMatch(/at most one line every 10 minutes; without that wait after a failed command, a turn that changed 5 files or more, or a cuddle: each of those waits 30, 30 and 20 seconds since the last line for the same reason\. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too\. Also during a turn that lasts longer than 10 minutes, under the same wait\. Never more than 40 lines a day, over all your chats\./)
@@ -2131,7 +2132,7 @@ test('comments on: two or three lines of the diary go to the model as memories, 
   expect(sent).toMatch(/- works most often in w \(a habit\)\n/)
   expect(sent.match(/\n- .*\((today|yesterday|\d+ days ago|a habit)\)/g)!.length).toBeLessThanOrEqual(3)
   const says = await cardOf($, 'comments on')
-  expect(says).toMatch(/at most 3 lines of its diary, as memories it may hint at \(times, counts, a folder's name: \/pet diary shows all of it\)\. When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it\.\n\/pet say <text> speaks to the pet: what you write after it \(its first 300 characters\) is sent to the same model, which answers in the bubble with one line\. It is a request of its own, not a turn of the chat, and counts in the day's lines\.\nNever sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant\. But the end of the assistant's reply is sent as it is: those 600 characters can hold a path, a name or a piece of code the assistant wrote there\./)
+  expect(says).toMatch(/at most 3 lines of its diary, as memories it may hint at \(times, counts, a folder's name: \/pet diary shows all of it\)\. When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it\.\n\/pet say <text> speaks to the pet: what you write after it \(its first 300 characters\) is sent to the same model, which answers in the bubble with one line\. It is a request of its own, not a turn of the chat, and counts in the day's lines\.\nAfter a pause [^\n]+\nNever sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap\. But the assistant's text is sent as it is: the last 600 characters of a reply, and in a recap the end of the last turn's text, can hold a path, a name or a piece of code the assistant wrote there\./)
 })
 
 // /pet say as the person types it: the prompt is submitted as the command, and the mod answers it there
@@ -3245,4 +3246,202 @@ test('the name told with /pet call me goes to the small model only with comments
   await k.settle()
   expect(k.v.calls.length).toBe(2)
   expect(k.v.calls[1].system + k.v.calls[1].prompt).not.toMatch(/Ana|call them/)
+})
+
+// The recap: where the work got to, said once when the person is back after a pause. `rows` is what $.session.messages() gives.
+const PAUSE = RULES.recapAfterMs
+const ROWS = [
+  { role: 'user', text: 'an older request', toolUses: [] },
+  { role: 'assistant', text: 'OLDER ANSWER', toolUses: [] },
+  { role: 'user', text: `fix the\n parser ${'1'.repeat(400)}`, toolUses: [] },
+  { role: 'assistant', text: 'First I look.', toolUses: [{ id: 't1', name: 'Bash', input: { command: 'TOOL INPUT' }, text: 'TOOL OUTPUT' }] },
+  { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 't1', text: 'TOOL OUTPUT', isError: false }] },
+  { role: 'assistant', text: `${'2'.repeat(20_000)} The parser tests are green; the README is still to do.`, toolUses: [] },
+]
+const LINE = 'Parser tests are green, the README is still to do. Shall we go on?'
+function recapKit($: any, on: any, prefs: object = { voice: true }) {
+  const k = voiceKit($, on, prefs), r = { rows: ROWS as any[], reads: 0 }
+  on('session.messages', () => { r.reads++; return { value: r.rows } })
+  const recaps = () => k.v.calls.filter(c => /comes back to this chat after a pause/.test(c.system))
+  const said = async () => (await k.texts()).map(t => t.replace(/\n/g, ' ')) // the bubble wraps a line: read here as one
+  return Object.assign(k, { r, recaps, said })
+}
+const NOW = Date.UTC(2026, 10, 12, 12)
+
+test('the recap: 30 minutes after a turn with no new prompt the pet says once where the work got to, from the last prompt and the last turn\'s text; held in the bubble with its time, and nothing of it on disk', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  k.v.reply = { isAnswered: true, text: LINE, usage: USAGE }
+  await k.clock.advance(PAUSE - 60_000)
+  await k.settle()
+  expect(k.recaps()).toEqual([]) // not before the pause is over
+  expect(k.r.reads).toBe(0)
+  await k.clock.advance(60_000)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  const ask = k.recaps()[0]
+  expect(ask).toMatchObject({ model: 'haiku', maxTokens: 80, effort: 'low', timeoutMs: 8000 })
+  expect(ask.system).toMatch(/^You are Miro, a small pixel fox /) // what a comment gets: the character and the language
+  expect(ask.system).toMatch(/where the work got to and what is left to do, then ask in a few words whether to go on.*Do not say when it was/)
+  expect(ask.system).toMatch(/One or two short sentences, all on one line, never more than 24 words\. Plain English\./)
+  // the person's last prompt, its first 300 characters on one line; the assistant's text of the last turn, the newest kept; 16,000 in all
+  expect(ask.prompt).toMatch(/\nThe person's last request began:\nfix the parser 1{285}\n/)
+  expect(ask.prompt).toMatch(/\nWhat the assistant wrote in that turn ended:\n2+ The parser tests are green; the README is still to do\.\n\nThat turn ended by itself\.\n/)
+  const sent = ask.prompt.split('began:\n')[1].split('\n')[0].length + ask.prompt.split('turn ended:\n')[1].split('\n\nThat turn')[0].length
+  expect(sent).toBe(RULES.recapChars)
+  expect(ask.prompt).not.toMatch(/TOOL INPUT|TOOL OUTPUT|OLDER ANSWER|older request|First I look/) // text blocks of the last turn only, and the oldest of them gave way
+  // shown with when it was, worked out at the drawing: it stays, and the time moves on
+  expect(await k.said()).toContain(`30 min ago: ${LINE}`)
+  await k.clock.advance(60 * 60_000)
+  await k.settle()
+  expect(await k.said()).toContain(`2 h ago: ${LINE}`) // still there, asleep or not
+  expect(k.recaps().length).toBe(1) // once per pause
+  // counted in the day and in the tokens as any line; neither the input nor the line is in the store
+  expect(k.disk.voice).toMatchObject({ today: 2, lines: 2, todayTokens: 640 })
+  expect(k.disk.voice.last).toEqual(['Three failures, then green. Noted.'])
+  const disk = JSON.stringify(k.disk)
+  expect(disk).not.toMatch(/Parser tests|README|fix the|parser|1{20}|2{20}|First I look/)
+  expect(JSON.stringify(k.state)).toContain(LINE) // in the session's memory only
+  expect(k.disk['chat.me'].recap).toBe(k.disk['chat.me'].at) // the mark keeps which pause it was for: a time
+  // the next prompt takes it away
+  await $.prompt.submit({ text: 'go on', wait: false, origin: 'user' } as any)
+  expect((await k.texts()).join('\n')).not.toContain('Parser tests')
+  expect(JSON.stringify(k.state)).not.toContain(LINE)
+})
+
+test('the recap: a new prompt cancels the wait, and each pause has its own', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  await k.clock.advance(PAUSE - 60_000)
+  await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any) // back before the pause was over
+  await k.clock.advance(PAUSE + 60_000) // a turn that runs is no pause
+  await k.settle()
+  expect(k.recaps()).toEqual([])
+  await $.turn.complete({ answer: 'cut', reason: 'aborted' } as any)
+  await k.clock.advance(PAUSE - 60_000)
+  await k.settle()
+  expect(k.recaps()).toEqual([]) // counted from the end of this turn
+  await k.clock.advance(60_000)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  expect(k.recaps()[0].prompt).toMatch(/\nThat turn was cut short before the assistant finished: say that it stopped midway, never that the work is done\.\n/)
+  await $.command.run({ command: 'pet', args: 'chats' } as any) // a slash command is no prompt
+  await k.clock.advance(PAUSE + 60_000)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+})
+
+test('the recap with no messages from the session: the end of the reply the comments already hold; with nothing at all, no call', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  k.r.rows = []
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn(async () => {}, `${'x'.repeat(700)} All done: the tests pass now.`)
+  await k.clock.advance(PAUSE)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  expect(k.recaps()[0].prompt).toMatch(/\nWhat the assistant wrote in that turn ended:\nx+ All done: the tests pass now\.\n/)
+  expect(k.recaps()[0].prompt.split('turn ended:\n')[1].split('\n\n')[0].length).toBe(600)
+  expect(k.recaps()[0].prompt).not.toMatch(/request began|secret plan/)
+  await k.turn(async () => {}, '')
+  await k.clock.advance(PAUSE)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+})
+
+test('the recap of a chat closed and resumed: asked at each start of the process when its last turn is older than 30 minutes, also for a pause already recapped, with the day it was; not again under a reload', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  k.disk['chat.me'] = { cwd: '/w', at: NOW - 24 * 3_600_000, done: true }
+  k.v.reply = { isAnswered: true, text: LINE, usage: USAGE }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  expect(await k.said()).toContain(`yesterday: ${LINE}`)
+  expect(k.disk['chat.me']).toMatchObject({ at: NOW - 24 * 3_600_000, recap: NOW - 24 * 3_600_000 })
+  expect(JSON.stringify(k.disk)).not.toMatch(/Parser tests|README|fix the/)
+  // a reload of the mod, the same process: the same pause, no second recap, and the line is still there
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 4; i++) await k.clock.advance(8 * 60_000) // in steps: each start of this test adds a tick of its own, and one advance holds only so many
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  expect(await k.said()).toContain(`yesterday: ${LINE}`)
+  // closed with no prompt and resumed, a new process: the line was in memory only and is lost, so it is asked again, once
+  await $.session.end({ reason: 'exit', sessionId: 'me' } as any)
+  expect(k.disk['chat.me']).toMatchObject({ closed: true, left: NOW - 24 * 3_600_000 })
+  k.state = {}
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.settle()
+  expect(k.recaps().length).toBe(2)
+  expect(await k.said()).toContain(`yesterday: ${LINE}`)
+  for (let i = 0; i < 4; i++) await k.clock.advance(8 * 60_000) // in steps: each start of this test adds a tick of its own, and one advance holds only so many
+  await k.settle()
+  expect(k.recaps().length).toBe(2)
+  expect(JSON.stringify(k.disk)).not.toMatch(/Parser tests|README|fix the/)
+})
+
+test('the recap of a chat resumed within 30 minutes waits for the rest of them; a turn that was cut is told as cut', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  k.disk['chat.me'] = { cwd: '/w', at: NOW - 10 * 60_000, done: false }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.settle()
+  expect(k.recaps()).toEqual([])
+  expect(k.r.reads).toBe(0)
+  await k.clock.advance(19 * 60_000)
+  await k.settle()
+  expect(k.recaps()).toEqual([])
+  await k.clock.advance(60_000)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  expect(k.recaps()[0].prompt).toMatch(/That turn was cut short/)
+})
+
+test('a chat closed keeps in its mark when its last turn was and whether it was cut, and a resume counts from there', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await $.turn.complete({ answer: 'half', reason: 'aborted' } as any)
+  await k.settle()
+  const left = k.disk['chat.me'].at
+  await k.clock.advance(5 * 60_000)
+  await $.session.end({ reason: 'exit', sessionId: 'me' } as any)
+  expect(k.disk['chat.me']).toMatchObject({ closed: true, at: left + 5 * 60_000, left, mid: true })
+  k.state = {}
+  await k.clock.advance(PAUSE)
+  await k.settle()
+  expect(k.recaps()).toEqual([]) // the timer of the chat that closed is gone
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  expect(k.recaps()[0].prompt).toMatch(/That turn was cut short/)
+})
+
+test('the recap is part of the comments: off, no call and nothing read from the session; at the day\'s cap, no call; a call that fails, silence', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on, {})
+  k.disk['chat.me'] = { cwd: '/w', at: NOW - 2 * 3_600_000, done: true }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  await k.clock.advance(PAUSE + 60_000)
+  await k.settle()
+  expect(k.v.calls).toEqual([])
+  expect(k.r.reads).toBe(0)
+  expect(k.disk.voice).toBeUndefined()
+  // on, with the day's lines used up
+  await cardOf($, 'comments on')
+  k.disk.voice = { day: dayOf(NOW), today: RULES.voiceCapDay, lines: RULES.voiceCapDay }
+  await k.turn()
+  await k.clock.advance(PAUSE + 60_000)
+  await k.settle()
+  expect(k.v.calls).toEqual([])
+  expect(k.disk.voice.today).toBe(RULES.voiceCapDay)
+  // two lines left, one for the comment at the end of the turn and one for the recap, and the calls fail: counted, and nothing is said
+  k.disk.voice = { day: dayOf(NOW), today: RULES.voiceCapDay - 2, lines: RULES.voiceCapDay - 2 }
+  k.v.reply = { isAnswered: false, reason: 'error', usage: NONE }
+  await k.turn()
+  await k.clock.advance(PAUSE + 60_000)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  expect(k.disk.voice.today).toBe(RULES.voiceCapDay)
+  expect(JSON.stringify(k.state)).not.toMatch(/"recap":"[^"]/)
+  expect((await k.texts()).join('\n')).not.toMatch(/ago: /)
 })

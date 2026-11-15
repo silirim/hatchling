@@ -294,3 +294,23 @@ test('which chat needs me: a chat is at work, waits for the person, may wait for
   s = run([at({ type: 'peer', here: false, name: 'api', ago: 0, ask: true })], s)
   assert.equal(say(s), 'the chat in api may be waiting for your OK')
 })
+
+test('a mark tells its last turn: a closed one keeps when it was and whether it was cut, and the pause a recap was made for', async () => {
+  const { leftOf } = await import('./company.js')
+  const { since } = await import('./catalog.js')
+  assert.deepEqual(marks({ a: { cwd: '/w', at: 9, done: true, closed: true, left: 5, mid: true, recap: 5, text: 'never' } }), { a: { cwd: '/w', at: 9, done: true, closed: true, left: 5, mid: true, recap: 5 } })
+  assert.deepEqual(marks({ a: { cwd: '/w', at: 9, done: true, left: 'x', mid: 1, recap: -1 } }), { a: { cwd: '/w', at: 9, done: true } })
+  assert.deepEqual(leftOf({ cwd: '/w', at: 9, done: true }), { at: 9, mid: false })
+  assert.deepEqual(leftOf({ cwd: '/w', at: 9, done: false }), { at: 9, mid: true })
+  assert.deepEqual(leftOf({ cwd: '/w', at: 9, done: true, closed: true, left: 5, mid: true }), { at: 5, mid: true })
+  assert.deepEqual(leftOf({ cwd: '/w', at: 9, done: true, closed: true }), { at: 9, mid: false }) // closed by a version before: when it closed
+  // when it was, as of now: the same day how long ago, the day before `yesterday`, then the days
+  const noon = new Date(2026, 10, 12, 12).getTime(), H = 3_600_000
+  assert.equal(since(noon - 2 * H, noon, 'en'), '2 h ago')
+  assert.equal(since(noon - 40 * 60_000, noon, 'en'), '40 min ago')
+  assert.equal(since(noon - 13 * H, noon, 'en'), 'yesterday') // 23:00 of the day before
+  assert.equal(since(noon - 20 * H, noon + 4 * H, 'en'), 'yesterday')
+  assert.equal(since(noon - 48 * H, noon, 'en'), '2 days ago')
+  assert.equal(since(noon + H, noon, 'en'), 'just now') // a clock that was ahead
+  assert.deepEqual(['es', 'pt', 'zh'].map(l => since(noon - 24 * H, noon, l)), ['ayer', 'ontem', '昨天'])
+})

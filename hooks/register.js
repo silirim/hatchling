@@ -8,10 +8,10 @@
 
 import { atom, read, update } from 'claude-code'
 import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
-import { MODEL, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question } from '../engine/voice.js'
+import { MODEL, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question, lastTurn, recap as recapOf, cleanRecap } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page } from '../engine/diary.js'
-import { marks, greeting, finished, folder, counts, listing } from '../engine/company.js'
-import { bubble, cuddle as cuddleLine, called, ago, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
+import { marks, greeting, finished, folder, counts, listing, leftOf } from '../engine/company.js'
+import { bubble, cuddle as cuddleLine, called, ago, since, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
 import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX, cleanCall, CALL_MAX } from '../engine/persona.js'
 import { text, list as listOf, voicedAs, asLang, fromLocale } from '../engine/lang/index.js'
 import { cols, pad, wrap, tidy } from '../engine/width.js'
@@ -24,7 +24,9 @@ const pet = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'pet' }), null)
 // `idle` is the small gesture a calm pet is making and `idleN` its frame; `spark` the sparkles lit next to a golden coat, a bit each spot; `hush` counts the phrases that left the bubble, only to draw again.
 // `sig` and `sigAt` are the phrase last shown and when it came up: kept here so that a reload of the mod does not show again a phrase that had its time
 // `note` is a line the pet says for a while by itself, over any other line (its answer to /pet say, the line of a cuddle), `noteFix` the dim line under it, `noteLeft` the ticks it stays: then the bubble is what it was
-const ANIM0 = { n: 0, rare: -1, demo: '', sleep: false, egg: 0, love: 0, ask: '', note: '', noteFix: '', noteLeft: 0, skin: 0, idle: '', idleN: 0, spark: 0, hush: 0, sig: '', sigAt: 0 }
+// `recap` is where the work got to, as the small model said it after a pause, and `recapAt` when that work was left: the line holds
+// the bubble until the next prompt, with its time word made anew at each drawing. Here and nowhere else: never in the store
+const ANIM0 = { n: 0, rare: -1, demo: '', sleep: false, egg: 0, love: 0, ask: '', note: '', noteFix: '', noteLeft: 0, skin: 0, idle: '', idleN: 0, spark: 0, hush: 0, sig: '', sigAt: 0, recap: '', recapAt: 0 }
 const anim = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'anim' }), ANIM0)
 const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: false, voiceAsked: false, lang: '', missing: '', chats: true, callme: '' }
 const prefs = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'prefs' }), PREFS0)
@@ -141,7 +143,7 @@ const chatsOn = async (/** @type {any} */ $) => social && !!cwd && (await getPre
  * Leaves this chat's mark: the folder, now, and whether the turn ended. With the board on it also says it is alive (`beat`), so
  * the other chats count it; with the board off the mark is the least there ever was, and the others take the chat for closed.
  */
-async function mark(/** @type {any} */ $, /** @type {boolean} */ done, /** @type {{ closed?: true }} */ more = {}) {
+async function mark(/** @type {any} */ $, /** @type {boolean} */ done, /** @type {Partial<import('../engine/company.js').Mark>} */ more = {}) {
   if (!social || !cwd) return
   const at = await $.clock.now()
   asked = null
@@ -259,8 +261,9 @@ async function sayTo(/** @type {any} */ $, /** @type {string} */ said) {
  * The line is counted in the day and timed in the store BEFORE the call (engine/voice.js `reserve`): two chats, or a slow call,
  * cannot pass the cap or the wait together, and a call that fails or runs out of time stays counted. What it used is added after.
  * `stop` says why no call was made; `line` is the reply made fit to show, '' when there is none.
+ * A recap has its own length, time and cap of the reply, and its line is not kept among the pet's last lines: nothing of it is in the store.
  */
-async function askLine(/** @type {any} */ $, /** @type {import('../engine/voice.js').Why} */ why, /** @type {{ talk?: boolean }} */ sys, /** @type {(t: import('../engine/voice.js').Tally) => string | Promise<string>} */ prompt) {
+async function askLine(/** @type {any} */ $, /** @type {import('../engine/voice.js').Why} */ why, /** @type {{ talk?: boolean, recap?: boolean }} */ sys, /** @type {(t: import('../engine/voice.js').Tally) => string | Promise<string>} */ prompt) {
   const none = (/** @type {string} */ stop) => ({ asked: false, line: '', stop })
   if (speaking || !(await voiceOn($))) return none('off')
   const t = await voiceTally($), now = await $.clock.now()
@@ -272,11 +275,12 @@ async function askLine(/** @type {any} */ $, /** @type {import('../engine/voice.
   try {
     if (!(await storeSet($, 'voice', reserve(t, why, now)).then(() => true, () => false))) return none('lost')
     const p = await getPrefs($)
-    const r = await $.model.complete({ model: MODEL, system: system({ name: p.name, animal: p.species, stats: p.stats, lang: p.lang, person: p.callme, ...sys }), prompt: await prompt(t), maxTokens: RULES.voiceMaxTokens, effort: 'low', timeoutMs: RULES.voiceTimeoutMs }).catch(() => null)
-    const line = r?.isAnswered ? clean(r.text) : ''
+    const long = why === 'recap'
+    const r = await $.model.complete({ model: MODEL, system: system({ name: p.name, animal: p.species, stats: p.stats, lang: p.lang, person: p.callme, ...sys }), prompt: await prompt(t), maxTokens: long ? RULES.recapMaxTokens : RULES.voiceMaxTokens, effort: 'low', timeoutMs: long ? RULES.recapTimeoutMs : RULES.voiceTimeoutMs }).catch(() => null)
+    const line = !r?.isAnswered ? '' : long ? cleanRecap(r.text) : clean(r.text)
     // added over the store as it is now: another chat may have spoken meanwhile
     const after = await voiceTally($)
-    if (after && r) await storeSet($, 'voice', settled(after, r.usage, { long: !!r.isAnswered && tooLong(r.text), path: !!r.isAnswered && !tooLong(r.text) && pathy(r.text), line })).catch(() => {})
+    if (after && r) await storeSet($, 'voice', settled(after, r.usage, long ? {} : { long: !!r.isAnswered && tooLong(r.text), path: !!r.isAnswered && !tooLong(r.text) && pathy(r.text), line })).catch(() => {})
     return { asked: true, line, stop: '' }
   } finally { speaking = false }
 }
@@ -450,6 +454,73 @@ async function midTurn(/** @type {any} */ $) {
   const was = midAt
   midAt = now // before the call: a second look while this one is out asks nothing
   if (!(await speak($, 'long', turnInfo, turnSaid, (now - turnAt) / 60_000))) midAt = was
+}
+// The recap, part of the comments: when the person comes back to a chat after a pause the pet says, once, where the work got to and
+// what is left. A pause is RULES.recapAfterMs after a turn ended with no new prompt: in a chat left open a timer waits for it; in a chat
+// closed and resumed the start looks at the chat's own mark. The small model gets the start of the person's last prompt and the end
+// of the text the assistant wrote in the last turn (engine/voice.js `lastTurn`): read from the session at that moment, sent, and
+// dropped. Neither that text nor the line is ever in the store; the mark keeps only the time of the pause the recap was made for,
+// which stops a second ask within the same process. A chat resumed in a new process is asked again: the line was lost with the old one.
+/** @type {{ cancel: () => void } | null} */ let recapTimer = null
+let pauseAt = 0 // when the last turn of this chat ended or was cut: the pause a recap would be for; 0 with no turn behind, or one running
+let pauseMid = false // that turn was cut short
+let lastSaid = '' // the end of what the assistant wrote in it, as the comments already hold it: used when the session gives no messages
+/** This chat's mark as the store has it: the one a chat that was closed and resumed left behind. */
+async function ownMark(/** @type {any} */ $) { return marks({ m: await storeGet($, chatKey(await myId($))).catch(() => undefined) }).m }
+function recapWait(/** @type {any} */ $, /** @type {number} */ ms) {
+  recapTimer?.cancel()
+  recapTimer = $.clock.after(Math.max(0, ms), () => { recapTimer = null; recapNow($).catch(() => {}) })
+}
+/** A new prompt, or the end of the chat: no recap is waited for, and the one in the bubble goes. */
+async function recapDrop(/** @type {any} */ $) {
+  recapTimer?.cancel()
+  recapTimer = null
+  pauseAt = 0
+  if ((await heldAnim($)).recap) await update($, anim, a => ({ ...a, recap: '', recapAt: 0 }))
+}
+/** The pause the recap was asked for goes in this chat's mark, a time and nothing else: a reload of the mod does not ask again. */
+async function recapMarked(/** @type {any} */ $, /** @type {number} */ at) {
+  const m = myMark ?? await ownMark($)
+  if (!m) return
+  if (myMark) myMark = { ...myMark, recap: at }
+  await storeSet($, chatKey(await myId($)), { ...m, recap: at }).catch(() => {})
+}
+/**
+ * Asks for the recap of the pause that began at `pauseAt` and shows it until the next prompt. Silent, like any comment, when the
+ * comments are off, at the day's cap, while the person types, or when the call fails or says nothing usable. Nothing is read from
+ * the session unless the comments are on. Counted in the day and in the tokens as any line (`askLine`).
+ */
+async function recapNow(/** @type {any} */ $) {
+  const at = pauseAt, mid = pauseMid
+  if (!at || turnAt || !(await voiceOn($))) return
+  const read = lastTurn(await $.session.messages().catch(() => [])), work = read.prompt || read.text ? read : { prompt: '', text: lastSaid }
+  if (!work.prompt && !work.text) return
+  const lang = (await getPrefs($)).lang
+  const r = await askLine($, 'recap', { recap: true }, () => recapOf({ ...work, mid, lang }))
+  if (r.asked) await recapMarked($, at)
+  if (!r.line || pauseAt !== at || turnAt) return // a prompt was sent meanwhile: the line is of no use any more
+  lastActive = await $.clock.now()
+  await update($, anim, a => ({ ...a, recap: r.line, recapAt: at, sleep: false }))
+}
+/**
+ * At a start: a chat that has a turn behind it (its mark says when) gets its recap now when the pause is already over, else when
+ * it will be. A chat closed and resumed is asked at each start of the process, also for a pause already recapped while it was open:
+ * that line was in memory only and is gone. Under a reload of the mod, the same process, the mark stops a second ask for the same
+ * pause, and a turn still running is left to its end.
+ */
+async function recapResume(/** @type {any} */ $, /** @type {boolean} */ fresh) {
+  recapTimer?.cancel()
+  recapTimer = null
+  if (!social || !cwd) return
+  const m = await ownMark($)
+  if (!m) return
+  const { at, mid } = leftOf(m)
+  if (!fresh && (mid || m.recap === at)) return
+  pauseAt = at
+  pauseMid = mid
+  const wait = at + RULES.recapAfterMs - await $.clock.now()
+  if (wait > 0) recapWait($, Math.min(wait, RULES.recapAfterMs))
+  else recapNow($).catch(() => {}) // not awaited: the start goes on
 }
 let light = false
 let windowTokens = 0 // the model's context window; known after the first turn
@@ -895,6 +966,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (fresh && newborn && social) await update($, anim, a => ({ ...a, egg: EGG_TICKS })) // the first start ever: it hatches before the greeting
     newborn = false
     if (!(await heldAnim($)).egg) await askVoice($).catch(() => {}) // a pet born before this version is asked once; a newborn after it hatched
+    await recapResume($, fresh).catch(() => {})
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
     await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary, /pet share, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
@@ -926,7 +998,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     }
     await pullPrefs($).catch(() => {}) // lean switched in another chat counts from this turn
     await feed($, { type: 'prompt', turn: !e.command }).catch(() => {}) // a slash command sends no request: no word on an expired cache
-    if (!e.command) { await mark($, false); turnInfo = TURN0(); turnAt = await $.clock.now(); midAt = 0; turnSaid = '' } // a slash command starts no turn
+    if (!e.command) { await mark($, false); turnInfo = TURN0(); turnAt = await $.clock.now(); midAt = 0; turnSaid = ''; await recapDrop($).catch(() => {}) } // a slash command starts no turn
     if (!e.command && (await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' })).catch(() => {}) // the question went unanswered: the voice stays off
     return next(e)
   })
@@ -997,6 +1069,10 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const grown = cur ? card(cur).stage : ''
       await diaryDo($, (d, t) => grown !== stage && stage ? diaryGrew(diaryTouched(d, t), STATE[grown] ?? grown, t) : diaryTouched(d, t)).catch(() => {})
       await mark($, e.reason !== 'aborted' && e.reason !== 'error') // an interrupted turn is left midway
+      // the pause begins: with no new prompt for RULES.recapAfterMs the pet says where the work got to (with the comments on, asked then)
+      pauseAt = myMark?.at ?? await $.clock.now(); pauseMid = e.reason === 'aborted' || e.reason === 'error'
+      lastSaid = String(e.answer ?? '').slice(-RULES.voiceTailChars) || turnSaid
+      if (social) recapWait($, RULES.recapAfterMs)
       // the voice, when it is on: not awaited, so the turn ends as fast as ever. A failure or many files changed skip the wait
       const done = turnInfo, why = Object.keys(done.failed).length ? 'fail' : Object.keys(done.files).length >= RULES.voiceManyFiles ? 'files' : 'turn'
       turnInfo = TURN0(); turnAt = 0; turnSaid = ''
@@ -1010,7 +1086,10 @@ export function register(/** @type {import('claude-code').On} */ on) {
     // after /clear the process goes on and no session.start fires, so start the next one here
     // the new chat sends everything again anyway: a style that waited gets in with its first request
     // the chat after a /clear is the same sitting: no second greeting, and a mark of its own
-    await mark($, true, { closed: true }).catch(() => {}) // this chat is over: the others stop counting it at once (after /clear the next one has an id of its own)
+    await recapDrop($).catch(() => {})
+    // closed, the mark still tells when the last turn was and whether it was cut
+    const was = social && cwd ? myMark ?? await ownMark($).catch(() => undefined) : undefined, last = was ? leftOf(was) : null
+    await mark($, true, { closed: true, ...(last && { left: last.at, ...(last.mid && { mid: /** @type {const} */ (true) }) }) }).catch(() => {}) // this chat is over: the others stop counting it at once (after /clear the next one has an id of its own)
     if (e.reason === 'clear') { if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' })).catch(() => {}); ctxTokens = turnAt = 0; styleOther = undefined; turnSaid = ''; styleLive = undefined; chatId = ''; await feed($, { type: 'sessionStart' }).catch(() => {}); await feedLean($) }
     await share($, true).catch(() => {})
     return next(e)
@@ -1101,7 +1180,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
         `Comments on. They spend tokens of your own account: each line is one request to a small model (the alias ${MODEL}, through Claude Code's own client).`,
         `Sent to the model: the pet's name, animal, five statistics and language; the name you told it with /pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts (the tools of your MCP servers too, by their names); the program names of the commands that failed; how many files changed; the last ${RULES.voiceTailChars} characters of the assistant's reply (during a turn, of what it wrote last in it, and how many minutes the turn has lasted); the pet's own last ${RULES.voiceRecall} lines, so that it does not repeat itself (they are kept in the store and go back to the model in later chats too); at most ${RULES.diaryRecall} lines of its diary, as memories it may hint at (times, counts, a folder's name: /pet diary shows all of it). When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it.`,
         `/pet say <text> speaks to the pet: what you write after it (its first ${RULES.saySaidChars} characters) is sent to the same model, which answers in the bubble with one line. It is a request of its own, not a turn of the chat, and counts in the day's lines.`,
-        `Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant. But the end of the assistant's reply is sent as it is: those ${RULES.voiceTailChars} characters can hold a path, a name or a piece of code the assistant wrote there.`,
+        `After a pause the pet says once where the work got to and what is left: when ${RULES.recapAfterMs / 60_000} minutes pass after a turn with no new prompt, or when you resume a chat left for longer. For that one line, once per pause and once more each time you resume a closed chat, it sends up to ${RULES.recapChars} characters: the first ${RULES.recapPromptChars} of your last prompt and the end of the text the assistant wrote in the last turn (text only: nothing a tool was given or answered). It counts in the day's lines and in the tokens like any other line, and it is a larger request than a comment: a few thousand tokens in at the most, not measured yet. Neither what is sent nor the line is kept on disk.`,
+        `Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap. But the assistant's text is sent as it is: the last ${RULES.voiceTailChars} characters of a reply, and in a recap the end of the last turn's text, can hold a path, a name or a piece of code the assistant wrote there.`,
         `Cost: ${cost}. The tokens are the ones each call reports; what they cost in money depends on the model the alias ${MODEL} leads to on your account.`,
         `When: at the end of a turn, at most one line every ${RULES.voiceGapMs / 60_000} minutes; without that wait after a failed command, a turn that changed ${RULES.voiceManyFiles} files or more, or a cuddle: each of those waits ${(RULES.voiceEvery.fail ?? 0) / 1000}, ${(RULES.voiceEvery.files ?? 0) / 1000} and ${(RULES.voiceEvery.cuddle ?? 0) / 1000} seconds since the last line for the same reason. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too. Also during a turn that lasts longer than ${RULES.voiceGapMs / 60_000} minutes, under the same wait. Never more than ${cap}, over all your chats. Never while you type, and a call slower than ${RULES.voiceTimeoutMs / 1000} seconds is dropped.`,
         `A line that comes back wider than ${RULES.voiceMaxCols} columns on screen (a Chinese character takes two) is not shown, and is paid for all the same: ${t.dropped} of ${t.lines} so far. Nor is one that names a file or a path: ${t.paths} so far.`,
@@ -1282,13 +1362,14 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const asking = !hatching && !a.demo && !!a.ask // the question about the voice holds the bubble until it is answered; a cuddle's line passes over it for its seconds
     const mine = zooOf(v.animals, p) // the animals to pick from: with more than one the skin menu has a part for them
     const dressing = !hatching && !asking && !a.demo && a.skin > 0 && (v.closet.length > 0 || mine.length > 1) // the row of the parts is open: the bubble tells what is on, the buttons are the parts
-    const b = hatching ? quiet(text(L, a.egg > EGG_CRACKS ? 'egg.whole' : 'egg.crack')) : dressing ? { ...quiet([...(v.closet.length ? [wornLine(L, v.closet, p.wear, true)] : []), ...(mine.length > 1 ? [text(L, 'wears.part', { slot: text(L, 'part.animal'), item: animalName(L, p.species) })] : [])].join(text(L, 'sep'))), fix: text(L, 'skin.pick') } : a.noteLeft > 0 && a.note && !a.demo ? { ...quiet(a.note), fix: a.noteFix || null } : asking ? quiet(a.ask) : (a.demo ? a.demo === 'sleep' : a.sleep) ? quiet(text(L, 'sleep')) : bubble(v, who)
+    const recapping = !hatching && !a.demo && !!a.recap // where the work got to: it holds the bubble until the next prompt, and when it was is said as of now
+    const b = hatching ? quiet(text(L, a.egg > EGG_CRACKS ? 'egg.whole' : 'egg.crack')) : dressing ? { ...quiet([...(v.closet.length ? [wornLine(L, v.closet, p.wear, true)] : []), ...(mine.length > 1 ? [text(L, 'wears.part', { slot: text(L, 'part.animal'), item: animalName(L, p.species) })] : [])].join(text(L, 'sep'))), fix: text(L, 'skin.pick') } : a.noteLeft > 0 && a.note && !a.demo ? { ...quiet(a.note), fix: a.noteFix || null } : asking ? quiet(a.ask) : recapping ? quiet(text(L, 'recap.say', { when: since(a.recapAt, await $.clock.now(), L), line: a.recap })) : (a.demo ? a.demo === 'sleep' : a.sleep) ? quiet(text(L, 'sleep')) : bubble(v, who)
     // how long the phrase stays. What has its own time, or waits for an answer, is not timed here: the egg, the row of the parts, a
     // line held for its seconds, the demo, the question about the voice and a greeting that asks (both go at the next prompt).
     // The plain line of a calm chat is not news: it never opens the bubble.
     const now = await $.clock.now()
     const question = v.calm && v.talk?.kind === 'greet' && v.talk.greet === 'resume'
-    const timed = !(hatching || dressing || asking || a.demo || (a.noteLeft > 0 && a.note) || question)
+    const timed = !(hatching || dressing || asking || recapping || a.demo || (a.noteLeft > 0 && a.note) || question)
     const asleep = a.demo ? a.demo === 'sleep' : a.sleep
     const small = timed && !asleep && v.calm && !v.talk && !(v.long && (v.wait || !v.lean))
     const sig = JSON.stringify([b.say, b.fix, b.more?.say, b.aside])

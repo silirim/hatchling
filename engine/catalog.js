@@ -73,6 +73,17 @@ const LEAN_FIX = { link: DOCS + 'long-chat.md', ask: '/pet lean on' }
 // The companion's lines. All of it is local text: nothing here enters the model's context, except the outline request, and that only
 // when the person presses the button and then Enter.
 export const SILLY = list(BASE, 'silly')
+/**
+ * When a moment was, for the recap: how long ago on the same day, `yesterday` for the day before, then the days. Worked out when
+ * the line is drawn, so it is right for as long as the line stays.
+ * @param {number} at @param {number} now @param {string} [lang]
+ */
+export function since(at, now, lang) {
+  const day = (/** @type {number} */ t) => { const d = new Date(t); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000 }
+  const days = day(now) - day(at)
+  return days <= 0 ? ago(Math.max(0, now - at), lang) : days === 1 ? text(lang, 'recap.yesterday') : text(lang, 'ago.days', { n: days })
+}
+
 // what the outline button puts in the prompt box
 export const OUTLINE = 'Write an outline of this chat that I can paste into a new one. Three parts: where we are (what is done and decided, with the files and commands that matter), where we need to get to (the goal and its constraints), and what is still missing (the open steps, in order). Keep it short and self-contained: the new chat knows nothing of this one.'
 

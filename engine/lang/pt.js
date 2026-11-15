@@ -58,6 +58,8 @@ export default {
   'ago.min': 'há {n} min',
   'ago.h': 'há {n} h',
   'ago.days': 'há {n} dias',
+  'recap.yesterday': 'ontem',
+  'recap.say': '{when}: {line}', // the recap of the comments: when the work was left, then the line the small model wrote
   'greet.resume.done': 'uma conversa aqui terminou o turno {ago}. retomar?',
   'greet.resume.mid': 'uma conversa aqui parou no meio do turno {ago}. retomar?',
   'greet.back': 'que bom que você voltou',
