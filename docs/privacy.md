@@ -34,6 +34,13 @@ Never the content of a chat, a prompt or a command.
 
 In `~/.claude/cachito-share/` (or the config folder Claude Code was given), only when you run `/pet share`: one picture a pet name, `cachito-<name>.png`, written over each time (an `.svg` when there is no Node to write the PNG). On it: the pet, its name, animal, stage, character and stars. No folder, path, project, token or cost. Nothing is sent: you attach it to a post yourself.
 
+In the same folder, only when you run `/pet export` (or `/pet import <path> yes`, which saves the pet that is there first): one JSON file, `cachito-<name>-<date>.json`, readable by you alone (mode 0600). Nothing is sent: you carry the file yourself.
+
+- **In the file**: the pet (animal, name, character and statistics, birth, days, affection, cuddles, stars, the items, coats and animals it has, what it wears, whether it was born golden, its two all-time token counters), your choices (language, lean, hidden, the board of the chats, the comments' model, comments on or off and whether you were asked), the name you gave with `/pet call me`, and the diary.
+- **Not in the file**: the marks of the chats (full folder paths, times of turns), the pet's last lines, the comments' count, anything of a chat's content.
+- **The diary carries folder names**, and the file your `/pet call me` name: look at it before you send it to anyone.
+- `/pet import` reads the one file you name and no other, and writes only the pet's own keys in the store. The file is checked like a skin pack before any of it is used: nothing in it can name a path.
+
 In the session's own memory, which other plugins could read, the pet keeps no path and no command line: only hashes of the files read and of the commands that failed. The line of a recap is held there until your next prompt; it can name a file. Neither it nor the text sent for it is written to the store.
 
 A headless run (`claude -p`) leaves no chat mark and keeps no diary.

@@ -462,7 +462,7 @@ const SKINS = '/home/me/.claude/cachito-skins'
 /** The kit of a person at the prompt whose config holds `config`; `disk` is the store, `state` the session's, `reads` and `writes` the files touched. */
 const LATE = new Date(2027, 5, 1, 12).getTime() // a birth after FOUNDER_UNTIL
 function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 12, 12)) {
-  const k = { env: {} as Record<string, string>, box: '', disk: (prefs ? { prefs: { voiceAsked: true, ...prefs } } : {}) as Record<string, any>, state: {} as Record<string, { value: unknown, version: number }>, reads: [] as string[], writes: [] as string[], toasts: [] as string[], filled: '', sets: [] as string[], lost: false, skins: {} as Record<string, unknown> | null, skinReads: [] as string[], meanwhile: null as (() => void) | null }
+  const k = { env: {} as Record<string, string>, box: '', disk: (prefs ? { prefs: { voiceAsked: true, ...prefs } } : {}) as Record<string, any>, state: {} as Record<string, { value: unknown, version: number }>, reads: [] as string[], writes: [] as string[], toasts: [] as string[], filled: '', sets: [] as string[], lost: false, skins: {} as Record<string, unknown> | null, skinReads: [] as string[], meanwhile: null as (() => void) | null, files: {} as Record<string, string> }
   const clock = mock.clock(on, { now })
   // `meanwhile` is what another chat does right after each read of this one, so before the write that follows it; `lost` is a store that cannot be read; `sets` the keys written
   // a pet a test puts in the store with no birth is one born after the founders' date (LATE): it has no eggshell, as every pet born
@@ -483,9 +483,9 @@ function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 
   on('fs.list', (_: any, e: any) => { if (!k.skins) throw new Error('EACCES'); return { value: e.path === SKINS ? Object.entries(k.skins).map(([name, v]) => ({ name, kind: v === 'link' ? 'other' : 'file', size: typeof v === 'number' ? v : 100, mtimeMs: 0, isLink: v === 'link' })) : [] } })
   on('fs.read', (_: any, e: any) => {
     if (String(e.path).startsWith(SKINS)) { k.skinReads.push(e.path); const v = k.skins?.[String(e.path).slice(SKINS.length + 1)]; return { value: typeof v === 'string' ? v : JSON.stringify(v) } }
-    k.reads.push(e.path); return { value: JSON.stringify(config) }
+    k.reads.push(e.path); return { value: k.files[e.path] ?? JSON.stringify(config) } // `files`: what a test put at a path, or the mod wrote there
   })
-  on('fs.write', (_: any, e: any) => { if ((k as any).sealed) throw new Error('EACCES'); k.writes.push(e.path); return { value: undefined } })
+  on('fs.write', (_: any, e: any) => { if ((k as any).sealed) throw new Error('EACCES'); k.writes.push(e.path); k.files[e.path] = e.text; return { value: undefined } })
   on('ui.toast', (_: any, e: any) => { k.toasts.push(String(e.message ?? e.text ?? JSON.stringify(e))); return { value: undefined } })
   on('prompt.read', () => ({ value: { text: k.box, cursor: 0 } }))
   on('prompt.fill', (_: any, e: any) => { k.filled = e.text; return { isFilled: true, text: e.text, cursor: 0 } })
@@ -2779,7 +2779,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'model', 'lang', 'share', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'model', 'lang', 'share', 'export', 'import', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
@@ -3696,4 +3696,177 @@ test('/pet where: a line a surface, with when a client attached, how many times 
   await ask('terminal')
   expect((await cardOf($, 'where')).split('\n')[1]).toMatch(/band asked 3 times, last answer: the terminal drawing$/)
   expect(Object.keys(k.disk).some(key => /where|asked|attach/.test(key))).toBe(false) // in memory only
+})
+
+// The pet moved to another computer (/pet export, /pet import): the "disk" of the files Node or the mod writes, and of the one read back
+function moving(on: any, k: ReturnType<typeof home>) {
+  const m = { files: k.files, ran: [] as string[][], kinds: {} as Record<string, string>, fileReads: k.reads }
+  k.env.PATH = '/usr/bin'
+  on('fs.stat', (_: any, e: any) => {
+    if (e.path === '/usr/bin/node' || e.path === '/bin/chmod') return { value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } }
+    if (m.files[e.path] === undefined && !m.kinds[e.path]) throw new Error('ENOENT')
+    return { value: { kind: m.kinds[e.path] ?? 'file', size: m.files[e.path]?.length ?? 0, mtimeMs: 0, isLink: false } }
+  })
+  on('process.run', (_: any, e: any) => { m.ran.push(e.argv); if (e.init?.stdin !== undefined) m.files[e.argv[2]] = e.init.stdin; return { value: { exitCode: 0, stdout: '', stderr: '' } } as any })
+  return m
+}
+const MOVED = { species: 'penguin', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, personality: 'A quiet one.', hatched: 1_700_000_000_000, cuddles: 41, cuddled: EARLY - 5000, wear: 'sombrero', lang: 'en', style: true, callme: 'Ana', model: 'claude-haiku-5-5', voice: false, chats: true, hidden: false }
+const MOVED_PET = { variant: null, coins: 123, affection: 456, days: 9, day: dayOf(EARLY), lately: [dayOf(EARLY)], born: EARLY - 3 * 86_400_000, owned: ['eggshell', 'sombrero'], animals: ['penguin'] }
+const MOVE_DAY = dated(EARLY)
+
+test('/pet export then /pet import on an empty store gives the same pet: the file is the person\'s alone, holds no chat mark and no spoken line, and the import asks first and saves the pet that was there', async ($, on) => {
+  const k = home(on, {}, MOVED), m = moving(on, k)
+  k.disk.pet = structuredClone(MOVED_PET)
+  k.disk.diary = diaryOpened(diaryOf(undefined), { now: EARLY - 86_400_000, folder: 'cachito', born: false })
+  k.disk['chat.other'] = { cwd: '/w/secretproj', at: EARLY - 1000, done: true }
+  k.disk.voice = { day: dayOf(EARLY), today: 3, lines: 9, input: 5000, output: 400, last: ['a secret spoken line'] }
+  await $.session.start({ ...START, cwd: '/w/secretproj' })
+  const file = `/home/me/.claude/cachito-share/cachito-miro-${MOVE_DAY}.json`
+  expect(await cardOf($, 'export')).toBe(`Saved Miro to a file, to take to another computer: ${file}\nCopy it there and run /pet import <path>. It holds the pet, your choices and the diary, and the diary carries folder names: look at it before you send it to anyone.`)
+  // Node writes it, with the mode 0600 (engine/move-save.js): the mod itself writes nothing
+  expect(m.ran).toEqual([['/usr/bin/node', expect.stringMatching(/\/engine\/move-save\.js$/), file]])
+  expect(k.writes).toEqual([])
+  const text = m.files[file]!, out = JSON.parse(text)
+  expect(Object.keys(out)).toEqual(['cachito', 'format', 'exported', 'pet', 'prefs', 'diary'])
+  expect([out.cachito, out.format]).toEqual(['pet', 1])
+  expect(out.pet).toMatchObject(MOVED_PET)
+  expect(out.prefs).toMatchObject({ ...MOVED, voiceAsked: true })
+  expect(Object.keys(out.prefs).sort()).toEqual(KNOWN.filter(key => key !== 'missing'))
+  expect(out.diary).toEqual(k.disk.diary)
+  expect(Object.keys(out.diary.folders)).toEqual(['cachito', 'secretproj']) // the diary carries folder names, as the line printed says: names, never a path
+  // not in the file: the marks of the chats (full paths, times of turns), the pet's last lines, the day's count of comments, the session
+  expect(text).not.toMatch(/\/w\/|spoken|chat\.|"cwd"|"last"|"today":3|session|issues|"missing"/)
+
+  // another computer: an empty store, where a pet of its own hatches, with a chat mark of its own
+  for (const key of Object.keys(k.disk)) delete k.disk[key]
+  k.disk['chat.there'] = { cwd: '/w/elsewhere', at: EARLY - 2000, done: true }
+  k.disk.voice = { day: dayOf(EARLY), today: 1, lines: 1, input: 600, output: 70, last: ['a line of this machine'] }
+  k.state = {}
+  await $.session.start({ ...START, cwd: '/w/elsewhere' })
+  await k.clock.advance(9_000)
+  const local = prefsOf(k.disk).name as string
+  expect(local).not.toBe('Miro')
+  m.files['/home/me/my pets/miro.json'] = text
+  m.ran.length = 0
+  // the first call only tells: the pet of the file, the pet here that it would replace, and how to say yes
+  const before = JSON.stringify(k.disk), asked = await cardOf($, 'import ~/my pets/miro.json')
+  expect(asked.split('\n')).toEqual([
+    `In the file: Miro, Cachito the penguin, adult, 123 stars, affection 456 over 9 days of use. Saved on ${MOVE_DAY}.`,
+    expect.stringMatching(new RegExp(`^Here now: ${local}, Cachito the \\w+, baby, \\d+ stars?, affection \\d+ over \\d+ days? of use\\. It would be replaced, after a copy of it is saved\\.$`)),
+    'To do it: /pet import ~/my pets/miro.json yes',
+  ])
+  expect([JSON.stringify(k.disk), m.ran, k.writes]).toEqual([before, [], []])
+  // with yes: the pet here is saved first, and its path said; then the pet of the file is the pet
+  const done = await cardOf($, 'import ~/my pets/miro.json yes')
+  const backup = m.ran[0]![2]!
+  expect(backup).toMatch(new RegExp(`^/home/me/\\.claude/cachito-share/cachito-[\\p{L}\\p{N}-]+-${MOVE_DAY}-backup-\\d{6}\\.json$`, 'u'))
+  expect(done).toBe(`Miro moved in. The marks of this computer's chats stay.\nThe pet that was here is saved: ${backup}`)
+  expect(JSON.parse(m.files[backup]!).prefs.name).toBe(local)
+  expect(m.ran.length).toBe(1)
+  // the same pet: what the file held, to the last field
+  expect(k.disk.pet).toEqual(out.pet)
+  expect(prefsOf(k.disk)).toMatchObject({ ...out.prefs, missing: '' })
+  expect(k.disk.diary).toEqual(out.diary)
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the penguin, adult/)
+  expect(await cardOf($)).toMatch(/\n  wears head: a sombrero\n/)
+  // what is this computer's own stays: the marks of its chats, the lines the pet said here and the day's count
+  expect(k.disk['chat.there']).toEqual({ cwd: '/w/elsewhere', at: EARLY - 2000, done: true })
+  expect(k.disk.voice).toMatchObject({ today: 1, last: ['a line of this machine'] })
+  expect(Object.keys(k.disk).filter(key => !/^(pet|diary|voice|pref\.\w+|chat\.\w+)$/.test(key))).toEqual([])
+  // and exported again from here it is the same file, but for the moment it was written
+  await cardOf($, 'export')
+  expect({ ...JSON.parse(m.files[file]!), exported: 0 }).toEqual({ ...out, exported: 0 })
+})
+
+test('/pet import: the founder\'s eggshell follows the birth of the pet that moves in, as it does for any pet', async ($, on) => {
+  const k = home(on, {}, MOVED), m = moving(on, k)
+  k.disk.pet = structuredClone(MOVED_PET)
+  await $.session.start(START)
+  await cardOf($, 'export')
+  const out = JSON.parse(Object.values(m.files)[0]!)
+  // born in time, and the file says no eggshell: it has it once here, and wears it on a head with nothing on
+  m.files['/t/early.json'] = JSON.stringify({ ...out, pet: { ...out.pet, owned: [] }, prefs: { ...out.prefs, name: 'Early', wear: '' } })
+  expect(await cardOf($, 'import /t/early.json yes')).toMatch(/^Early moved in\./)
+  expect(k.disk.pet).toMatchObject({ owned: ['eggshell'], born: MOVED_PET.born })
+  expect(await cardOf($)).toMatch(/\n  wears head: half an eggshell\n/)
+  // born after the founders' date: none
+  m.files['/t/late.json'] = JSON.stringify({ ...out, pet: { ...out.pet, born: AFTER, owned: ['sombrero'] }, prefs: { ...out.prefs, name: 'Late' } })
+  expect(await cardOf($, 'import /t/late.json yes')).toMatch(/^Late moved in\./)
+  expect(k.disk.pet).toMatchObject({ owned: ['sombrero'], born: AFTER })
+  expect(await cardOf($, 'shop')).toMatch(/\n  eggshell +half an eggshell +–  head +founders only\n/)
+})
+
+test('/pet import of a hostile file: said in one line, and nothing is read further, written or changed', async ($, on) => {
+  const k = home(on, {}, MOVED), m = moving(on, k)
+  k.disk.pet = structuredClone(MOVED_PET)
+  await $.session.start(START)
+  await cardOf($, 'export')
+  const good = Object.values(m.files)[0]!, out = JSON.parse(good)
+  m.ran.length = 0
+  const before = JSON.stringify(k.disk)
+  const refused = async (path: string, why: RegExp, yes = ' yes') => {
+    const said = await cardOf($, `import ${path}${yes}`)
+    expect(said.split('\n').length).toBe(1)
+    expect(said).toMatch(why)
+    expect(said).not.toMatch(/\u001b/)
+    expect([JSON.stringify(k.disk), m.ran, k.writes]).toEqual([before, [], []])
+  }
+  const bad = (name: string, change: (o: any) => void) => { const o = structuredClone(out); change(o); m.files[`/t/${name}.json`] = JSON.stringify(o); return `/t/${name}.json` }
+  expect(await cardOf($, 'import')).toBe('Name the file: /pet import <path>. /pet export on the other computer makes it.')
+  await refused('/t/none.json', /^Nothing imported from \/t\/none\.json: file: there is no such file$/)
+  m.kinds['/t/folder'] = 'dir'
+  await refused('/t/folder', /: file: not a regular file$/)
+  // a huge file is not even read
+  m.files['/t/huge.json'] = `{"cachito":"pet","pad":"${'x'.repeat(300 * 1024)}"}`
+  await refused('/t/huge.json', /: file: larger than 256 KiB$/)
+  expect(m.fileReads).not.toContain('/t/huge.json')
+  m.files['/t/broken.json'] = good.slice(0, 200)
+  await refused('/t/broken.json', /: file: not JSON \(/)
+  await refused(bad('escape', o => { o.prefs.name = 'Mi\u001b[31mro\u001b]0;x\u0007' }), /: file\.prefs\.name: must be a text/)
+  await refused(bad('escape2', o => { o.diary.folders = { 'a\u001b[2Jb': 3 } }), /a field's name/)
+  await refused(bad('type', o => { o.pet.coins = '999999' }), /: pet\.coins: missing, unknown, not of the right kind, or out of range$/)
+  await refused(bad('type2', o => { o.prefs.style = 'yes' }), /: prefs\.style: not of the right kind, or out of range$/)
+  await refused(bad('item', o => { o.pet.owned = ['eggshell', 'jetpack'] }), /: pet\.owned: "jetpack" is not an item or a coat known here$/)
+  await refused(bad('animal', o => { o.prefs.species = 'unicorn' }), /: prefs\.species: the animal "unicorn" is not known here: if it comes from a skin pack, install the pack first$/)
+  await refused(bad('coat', o => { o.prefs.wear = 'sombrero mint' }), /: prefs\.wear: "mint" is not a thing or a coat known here/)
+  await refused(bad('newer', o => { o.format = 2 }), /: format: the file was made by a newer Cachito \(format 2, this one reads 1\): update Cachito here, then import it$/)
+  // path tricks: a name that would be a path, a field that names a file, a key nobody knows
+  await refused(bad('path', o => { o.prefs.name = '../../../etc/cron.d/x' }), /: prefs\.name: not of the right kind, or out of range$/)
+  await refused(bad('path2', o => { o.prefs.callme = '/etc/passwd' }), /: prefs\.callme: /)
+  await refused(bad('path3', o => { o.file = '/etc/passwd'; o.backup = '~/.ssh/authorized_keys' }), /: file: unknown field "file"$/)
+  await refused(bad('path4', o => { o.prefs.dir = '/tmp' }), /: prefs: unknown field "dir"$/)
+  // refused the same without yes: a file is judged before anything is asked
+  await refused(bad('ask', o => { o.pet.days = -1 }), /: pet\.days: /, '')
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the penguin/)
+  // the only paths the mod opened are the ones the person named
+  expect(m.fileReads.every(p => p.startsWith('/t/'))).toBe(true)
+})
+
+test('/pet export with no Node: the mod writes the file and chmod closes it, or it says the file is open; with no copy of the pet here, nothing is imported', async ($, on) => {
+  const k = home(on, {}, MOVED), m = moving(on, k)
+  k.disk.pet = structuredClone(MOVED_PET)
+  await $.session.start(START)
+  await cardOf($, 'export')
+  const good = Object.values(m.files)[0]!
+  m.files['/t/miro.json'] = good.replace('"Miro"', '"Nube"')
+  k.env.PATH = '/opt/empty' // neither node nor chmod
+  m.ran.length = 0
+  const file = `/home/me/.claude/cachito-share/cachito-miro-${MOVE_DAY}.json`
+  expect((await cardOf($, 'export')).split('\n')).toEqual([expect.stringMatching(/^Saved Miro to a file/), 'The file could not be closed to the other users of this computer (mode 0600): they may read it.', expect.stringMatching(/^Copy it there/)])
+  expect([m.ran, k.writes]).toEqual([[], [file]])
+  // chmod found on the PATH: run by its absolute path on the file, and no warning
+  k.env.PATH = '/bin'
+  expect((await cardOf($, 'export')).split('\n').length).toBe(2)
+  expect(m.ran).toEqual([['/bin/chmod', '600', file]])
+  // the folder cannot be written: said; and an import stops before it changes anything
+  k.env.PATH = '/opt/empty';
+  (k as any).sealed = true
+  const before = JSON.stringify(k.disk)
+  expect(await cardOf($, 'export')).toBe('The pet could not be saved to a file: the store could not be read, or the folder cachito-share in your Claude Code config folder could not be written.')
+  expect(await cardOf($, 'import /t/miro.json yes')).toBe('Nothing imported: the pet that is here could not be saved to a file first.')
+  expect(JSON.stringify(k.disk)).toBe(before)
+  // the language of the fixed text is the pet's
+  await cardOf($, 'lang es')
+  expect(await cardOf($, 'import')).toBe('Indica el archivo: /pet import <ruta>. Lo crea /pet export en el otro ordenador.')
+  expect(await cardOf($, 'import /t/miro.json')).toMatch(/^En el archivo: Nube, Cachito: pingüino, adulto, 123 estrellas, .*\nAquí ahora: Miro, .*\nPara hacerlo: \/pet import \/t\/miro\.json yes$/)
 })

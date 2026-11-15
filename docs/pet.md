@@ -90,6 +90,16 @@ Every pet has a name and five statistics from 0 to 100, set at birth: `WIT`, `CU
 
 At most 40 lines of times, counts and folder names, written on your machine with no model: milestones (first day, each stage, a week, a month), habits (the folder you work in most, your usual hours) and recent facts. The pet uses at most one memory a day in place of a plain greeting.
 
+## Moving to another computer
+
+The pet lives in the plugin store of one machine, not in your Claude account. To take it along:
+
+1. `/pet export` writes `cachito-share/cachito-<name>-<date>.json` in your Claude Code config folder (`~/.claude`), for you alone (mode 0600), and prints its path.
+2. Copy the file to the other computer yourself. Nothing is sent.
+3. There, `/pet import <path>` checks the file and tells what would happen: the pet in the file, and the pet there that it would replace. `/pet import <path> yes` does it. The pet that was there is saved first, as `cachito-<name>-<date>-backup-<time>.json` in the same folder, and its path is printed: importing that file brings it back.
+
+The path may start with `~`, be relative to the chat's folder, and hold spaces. What is in the file: [privacy.md](privacy.md). A file with a field Cachito does not know, a value out of range, a control character in a text, or an animal, item or coat that is not there is refused whole, with what is wrong in one line (in English); so is a file of a newer format, until Cachito is updated. A pet shown as an animal of a skin pack, or wearing a thing of one, needs that pack installed first.
+
 ## Languages
 
 English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system's language when it is one of these. The bubble, the buttons and the short replies of commands are translated; command names and documents stay in English. Adding one: [development.md](development.md).
@@ -114,6 +124,8 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet say <text>` | speak to the pet: [comments.md](comments.md) |
 | `/pet diary [clear]` | show or empty the diary |
 | `/pet share` | a colour picture to attach to a post, 800×420: the pet with what it wears, its name, animal, stage, character and stars; nothing about your work. Saved as `cachito-share/cachito-<name>.png` in your Claude Code config folder (`~/.claude`), written over each time. Node writes the PNG; without Node on the PATH the same picture is saved as an SVG |
+| `/pet export` | save the pet to a file, for another computer: [above](#moving-to-another-computer) |
+| `/pet import <path> [yes]` | bring in a pet saved with `/pet export`; asks first, and saves the pet that was there |
 | `/pet lang <en\|es\|pt\|zh>` | the pet's language |
 | `/pet adopt` | take your old `/buddy`'s name and personality: [privacy.md](privacy.md) |
 | `/pet hide`, `/pet show` | hide or show the band |

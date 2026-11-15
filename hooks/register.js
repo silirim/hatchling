@@ -9,7 +9,7 @@
 import { atom, read, update } from 'claude-code'
 import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
 import { MODEL, MODEL_MAX, asModel, unavailable, tellGone, measuredHow, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question, lastTurn, recap as recapOf, cleanRecap } from '../engine/voice.js'
-import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page } from '../engine/diary.js'
+import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page, dated } from '../engine/diary.js'
 import { marks, greeting, finished, folder, counts, listing, leftOf } from '../engine/company.js'
 import { bubble, cuddle as cuddleLine, called, ago, since, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
 import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX, cleanCall, CALL_MAX } from '../engine/persona.js'
@@ -18,6 +18,7 @@ import { cols, pad, wrap, tidy } from '../engine/width.js'
 import zoo from '../sprites/zoo.js'
 import { REG, install, coatOf, dressed, portrait, LIMITS as SKIN_LIMITS } from '../engine/skins.js'
 import { shareLines, picture, png, svg, sharePath } from '../engine/share.js'
+import { pack as movePack, parse as moveParse, movePath, asked as moveAsked, stageOf, LIMITS as MOVE_LIMITS } from '../engine/move.js'
 
 const pet = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'pet' }), null)
 // `skin` is the ticks the row of the parts stays open, in place of the buttons, after the skin button.
@@ -333,15 +334,15 @@ let farewell = '', farewellSaid = '' // the animal of a pack that is gone: said 
 /**
  * Where `node` is, as an absolute path, for the picture of /pet share: looked for in the absolute folders of the PATH Claude Code was started
  * with, in their order. A relative entry, an empty one (the working folder), and a folder inside the project are passed over,
- * so a `node` someone left in the repository is never the one run. '' when there is none.
+ * so a `node` someone left in the repository is never the one run. '' when there is none. `bin` names another program looked for the same way.
  */
-async function nodePath(/** @type {any} */ $) {
+async function nodePath(/** @type {any} */ $, bin = 'node') {
   const path = String((await $.env.get('PATH').catch(() => '')) ?? ''), win = /^[A-Za-z]:[\\/]/.test(path) || path.includes(';')
   const here = cwd.replace(/[\\/]+$/, '')
   for (const dir of path.split(win ? ';' : ':')) {
     const d = dir.replace(/[\\/]+$/, '')
     if (!(win ? /^[A-Za-z]:[\\/]/ : /^\//).test(dir) || (here && (d === here || d.startsWith(`${here}/`) || d.startsWith(`${here}\\`)))) continue
-    for (const name of win ? ['node.exe'] : ['node']) {
+    for (const name of [win ? `${bin}.exe` : bin]) {
       const file = `${d}${win ? '\\' : '/'}${name}`
       if ((await $.fs.stat(file).catch(() => null))?.kind === 'file') return file
     }
@@ -917,6 +918,50 @@ async function pullPrefs(/** @type {any} */ $) {
   if (p.style !== now.style) await feedLean($)
 }
 
+/**
+ * /pet export, and the copy made before an import: the pet as the store has it now, its choices and its diary, as one JSON file
+ * in cachito-share (engine/move.js says what is in it and what is not). Node writes it, for the person alone from its first byte
+ * (engine/move-save.js); with no Node the mod writes it and `chmod` closes it after. Null when the store cannot be read or the
+ * file cannot be written; `closed` false when it is written and may be read by the other users of the computer.
+ */
+async function moveOut(/** @type {any} */ $, /** @type {boolean} */ backup) {
+  const dir = await configDir($, 'cachito-share'), none = {}
+  if (!dir || !cur) return null
+  await share($, true).catch(() => {})
+  const { raw, lost, ...p } = await storedPrefs($), diary = await storeGet($, 'diary').catch(() => none)
+  if (lost || diary === none) return null
+  const now = await $.clock.now(), body = JSON.stringify(movePack({ pet: cur, prefs: p, diary, now }), null, 2)
+  if (moveParse(body).errors.length) return null // a file this version would not read back is not written
+  const file = movePath(dir, p.name, now, backup), ran = (/** @type {{ exitCode: number }} */ r) => r.exitCode === 0
+  const node = await nodePath($)
+  if (node && await $.process.run([node, `${$.plugin.root}/engine/move-save.js`, file], { stdin: body }).then(ran, () => false)) return { file, closed: true }
+  if (!(await $.fs.write(file, body).then(() => true, () => false))) return null
+  const chmod = await nodePath($, 'chmod')
+  return { file, closed: !!chmod && await $.process.run([chmod, '600', file]).then(ran, () => false) }
+}
+/**
+ * /pet import, once the person said yes: the pet of a checked file (engine/move.js `parse`) takes the place of the one here, in
+ * the store and in this chat. Only the keys of the pet, of its choices and of the diary are written: the marks of the chats, the
+ * pet's last lines and the day's count of comments stay as this computer has them. The eggshell follows the birth as ever
+ * (`founding`). False when the store could not be written.
+ */
+async function moveIn(/** @type {any} */ $, /** @type {import('../engine/move.js').Move} */ m) {
+  const set = (/** @type {string} */ key, /** @type {unknown} */ value) => storeSet($, key, value).then(() => true, () => false)
+  if (!(await set('pet', m.pet))) return false // nothing was changed
+  const wrote = [await set('diary', m.diary)]
+  for (const name of Object.keys(PREFS0)) wrote.push(await set(prefKey(name), name === 'missing' ? '' : /** @type {Record<string, unknown>} */ (m.prefs)[name]))
+  cur = adopt(cur, m.pet, m.pet)
+  await update($, pet, () => cur)
+  const { raw, lost, ...p } = await storedPrefs($)
+  if (!lost) await update($, prefs, () => p)
+  await founding($)
+  await feedLean($)
+  return wrote.every(Boolean)
+}
+/** A pet in one line, for the import: its name, animal and stage, its stars, its affection and days. */
+const brief = (/** @type {string} */ lang, /** @type {string} */ name, /** @type {string} */ animal, /** @type {string} */ stage, /** @type {{ coins: number, affection: number, days: number }} */ p) =>
+  [text(lang, 'card.head', { name, animal: animalName(lang, animal), stage: text(lang, `stage.${STATE[stage] ?? stage}`, {}, stage) }), count1(lang, 'points', p.coins), text(lang, 'card.affection', { a: p.affection, days: count1(lang, 'days', p.days) })].join(text(lang, 'sep'))
+
 /** A reload finds the state in $.state; a new session takes it from $.store and starts fresh. True for a new session. */
 async function load(/** @type {any} */ $) {
   lastActive = lastOwn = await $.clock.now()
@@ -1044,7 +1089,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await recapResume($, fresh).catch(() => {})
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
-    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary, /pet share, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
+    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
     $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
     return next(e)
   })
@@ -1420,6 +1465,29 @@ export function register(/** @type {import('claude-code').On} */ on) {
       if (saved) return { text: `${say('share.saved', { path: file })}\n${say('share.saved.how')}` }
       const drawn = sharePath(dir, who.name, 'svg')
       return { text: await $.fs.write(drawn, svg(pic)).then(() => `${say('share.svg', { path: drawn })}\n${say('share.svg.how')}`, () => say('share.failed')) }
+    }
+    if (verb === 'export' || verb === 'import') { // the pet moved to another computer, as a file: nothing is sent anywhere
+      if (await bench($)) return { text: 'No export or import: under the bench the pet lives in memory only.' }
+      const closed = (/** @type {{ closed: boolean }} */ out) => out.closed ? [] : [say('export.open')]
+      if (verb === 'export') {
+        const out = await moveOut($, false)
+        return { text: out ? [say('export.saved', { name: who.name, path: out.file }), ...closed(out), say('export.how')].join('\n') : say('export.failed') }
+      }
+      const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
+      const { path, yes, typed } = moveAsked(e.args.trim().slice(verb.length), String(home ?? ''))
+      if (!path) return { text: say('import.usage') }
+      // the file is a stranger's until it is checked: a regular file, not too big, read once, and judged whole (engine/move.js)
+      const st = await $.fs.stat(path).catch(() => null)
+      const why = !st ? 'file: there is no such file' : st.kind !== 'file' ? 'file: not a regular file' : st.size > MOVE_LIMITS.bytes ? `file: larger than ${MOVE_LIMITS.bytes / 1024} KiB` : ''
+      const read = why ? null : await $.fs.read(path).then((/** @type {unknown} */ t) => moveParse(String(t)), () => null)
+      const m = read?.move
+      if (!m) return { text: say('import.bad', { path: tidy(path, 200), why: why || (read?.errors[0] ?? 'file: could not be read') }) }
+      const told = [say('import.file', { pet: brief(L, m.prefs.name, m.prefs.species, stageOf(m), m.pet), date: dated(m.exported) }), say('import.here', { pet: brief(L, who.name, who.species, c.stage, c) })]
+      if (!yes) return { text: [...told, say('import.ask', { path: tidy(typed, 200) })].join('\n') }
+      const back = await moveOut($, true) // the pet that is here, saved first: with no copy of it, nothing is replaced
+      if (!back) return { text: say('import.nobackup') }
+      const done = await moveIn($, m), now = (await getPrefs($)).lang // said in the language the pet that moved in speaks
+      return { text: [text(now, done ? 'import.done' : 'import.failed', { name: m.prefs.name }), text(now, 'import.backup', { path: back.file }), ...(back.closed ? [] : [text(now, 'export.open')])].join('\n') }
     }
     if (verb) return { text: say('cmd.unknown', { verb: tidy(verb, 24) }) } // a word that is no command says so, in one line: the card is /pet alone
     // lean is the style. Neither line claims a saving for this chat: the figures are the bench's, and are labelled so

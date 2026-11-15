@@ -21,6 +21,7 @@
     "engine/skin-import.js",
     "engine/image.js",
     "engine/share-save.js",
+    "engine/move-save.js",
     "engine/share.test.js",
     "engine/readme.test.js",
     "sprites/readme.mjs",

@@ -148,7 +148,7 @@ export function svg({ width, height, colours, px }) {
 
 /**
  * Where a pet's picture goes: one file a pet name in the folder, written over each time. The name gives letters and digits only,
- * so whatever it holds (a slash, dots, a drive, an escape) the file is in the folder. @param {string} dir @param {string} name @param {'png' | 'svg'} kind
+ * so whatever it holds (a slash, dots, a drive, an escape) the file is in the folder. @param {string} dir @param {string} name @param {'png' | 'svg' | 'json'} kind
  */
 export function sharePath(dir, name, kind) {
   const slug = (String(name).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join('-').slice(0, 40)
