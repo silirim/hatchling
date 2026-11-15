@@ -1,4 +1,6 @@
 node_modules/
+# not in the repository: the plugin installer would install every package it lists
+package-lock.json
 dist/
 *.log
 .DS_Store

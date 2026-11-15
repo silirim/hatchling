@@ -223,7 +223,7 @@ npm run skin:check <pack.json>        # check a skin pack with the mod's own rul
 npm run skin:import <Codex pet folder> # turn a Codex pet into a skin pack
 ```
 
-On a fresh clone `npm run typecheck` needs the mod's types, which are not in the repository: Claude Code writes them into `.claude-plugin/types/` when it loads the mod. Start it once from the clone with `claude --plugin-dir .` (2.1.275 or later), close it, then run the typecheck. `npm test` needs nothing but Node 20.
+On a fresh clone `npm run typecheck` needs the mod's types, which are not in the repository: Claude Code writes them into `.claude-plugin/types/` when it loads the mod. Start it once from the clone with `claude --plugin-dir .` (2.1.275 or later), close it, then run the typecheck. `npm test` needs nothing but Node 20. The typecheck also needs `npm install` first (TypeScript and Node's types, exact versions in `package.json`); `package-lock.json` is deliberately not in the repository, because Claude Code's plugin installer installs every package a lockfile lists, and an installed plugin must pull nothing from npm.
 
 The repository's root is the pet's folder, and `lean/` inside it is the other plugin, whole: `claude --plugin-dir .` loads the pet, `claude --plugin-dir lean` loads cachito-lean, and both flags together load both. The eight lines are written once, in `lean/style.js`, which the pet imports.
 
