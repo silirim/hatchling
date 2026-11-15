@@ -1,5 +1,6 @@
 {
   "name": "cachito-pet",
+  "description": "A pixel pet for Claude Code and, apart, eight lines of system prompt measured by a bench in the repository",
   "owner": {
     "name": "silirim"
   },

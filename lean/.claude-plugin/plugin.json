@@ -2,6 +2,10 @@
   "name": "cachito-lean",
   "version": "0.1.0",
   "description": "Eight lines in the system prompt: short answers, the least code, read-only calls sent together. On as installed; /lean off turns them off",
+  "author": {
+    "name": "silirim",
+    "url": "https://github.com/silirim"
+  },
   "license": "MIT",
   "repository": "https://github.com/silirim/cachito-pet",
   "homepage": "https://github.com/silirim/cachito-pet#readme"
