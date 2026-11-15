@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { RULES, dayOf, reduce, initialState, view } from './engine.js'
 import { bubble } from './catalog.js'
-import { tally, due, left, reserve, settle, pathy, average, system, summary, reply, clean, tooLong, question, MODEL } from './voice.js'
+import { tally, due, left, reserve, settle, pathy, average, system, summary, reply, clean, tooLong, question, MODEL, MODEL_MAX, asModel, unavailable, tellGone } from './voice.js'
 
 const T = Date.UTC(2026, 10, 13, 12), MIN = 60_000
 const USAGE = { input_tokens: 300, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -114,7 +114,7 @@ test('a line is counted when it is asked for, before the call, and its own token
   }
   assert.equal(settle(one, USAGE, { path: true }).paths, 1) // a line dropped for naming a file is counted as such
   // the average is an estimate until a line was paid for, then the measured one
-  assert.deepEqual([RULES.voiceEst, average(tally(undefined, T))], [{ input: 567, output: 19 }, { input: 570, output: 20, measured: false }])
+  assert.deepEqual([RULES.voiceEst, average(tally(undefined, T))], [{ input: 650, output: 75 }, { input: 650, output: 75, measured: false }])
   assert.deepEqual(average(one), { input: 300, output: 20, measured: true })
   assert.deepEqual(average(reserve(tally(undefined, T), 'turn', T)), average(tally(undefined, T))) // asked for and nothing paid yet: still the estimate
 })
@@ -209,10 +209,10 @@ test('the animal is told with the parts it has and has not; an unknown one names
 
 test('the question asked once says what a yes comes to: whose account, the tokens of a line and the lines of a day, what is sent, where the details are', () => {
   const q = question(tally(undefined, T))
-  assert.equal(q, 'May I comment on your work? It uses a small model on your account, about 570 tokens in and 20 out a line, at most 40 lines a day, and sends it a short summary of the turn. Details: /pet comments')
+  assert.equal(q, 'May I comment on your work? It uses a small model on your account: about 650 tokens in and 75 out a line (measured in November 2026), at most 40 lines a day. It gets a short summary of the turn. The recap is not measured yet. Details: /pet comments')
   assert.doesNotMatch(q, /!|coin|wallet|\$/)
   // once lines were paid for, the figure is the measured one
-  assert.match(question(count(tally(undefined, T), USAGE, T)), /about 300 tokens in and 20 out a line, at most 40 lines a day/)
+  assert.match(question(count(tally(undefined, T), USAGE, T)), /about 300 tokens in and 20 out a line \(measured on your lines\), at most 40 lines a day/)
 })
 
 test('the model is told the language and answers in it: the tone lines are in that language, Chinese is asked for in characters, English is as it was', () => {
@@ -232,7 +232,7 @@ test('the model is told the language and answers in it: the tone lines are in th
   assert.equal(summary({ why: 'cuddle', lang: 'en' }), summary({ why: 'cuddle' }))
   assert.equal(system({ ...pet, lang: 'xx' }), system(pet)) // a language there is not: English
   // the question, in each language, names the command as it is typed and has no exclamation mark
-  for (const lang of ['es', 'pt', 'zh']) { const q = question(tally(undefined, T), lang); assert.match(q, /570.*20.*40.*\/pet comments$/); assert.doesNotMatch(q, /[!！¡$]/); assert.notEqual(q, question(tally(undefined, T))) }
+  for (const lang of ['es', 'pt', 'zh']) { const q = question(tally(undefined, T), lang); assert.match(q, /650.*75.*2026.*40.*\/pet comments$/); assert.doesNotMatch(q, /[!！¡$]/); assert.notEqual(q, question(tally(undefined, T))) }
 })
 
 test('the limit of a line is its width on screen: 60 columns are 60 letters or 30 Chinese characters', () => {
@@ -318,4 +318,51 @@ test('the recap: the last prompt cut to 300 characters and the last turn\'s text
   assert.equal(due(reserve(t0, 'recap', T), 'recap', T + 1), '')
   assert.equal(due({ ...t0, today: RULES.voiceCapDay }, 'recap', T), 'cap')
   assert.deepEqual(settle(reserve(t0, 'recap', T), USAGE).last, [])
+})
+
+test('the model of the comments: haiku unless the person chose, and a choice is checked for its shape only', () => {
+  assert.equal(MODEL, 'haiku')
+  for (const ok of ['haiku', 'sonnet', 'opus[1m]', 'claude-haiku-5-5', 'us.anthropic.claude-haiku-5-5-v1:0', 'arn:aws:bedrock:us-east-1:123456789012:inference-profile/x', 'publishers/anthropic/models/claude@20261001', 'a'.repeat(MODEL_MAX)]) assert.equal(asModel(ok), ok)
+  for (const bad of ['', ' ', 'two words', 'haiku ', ' haiku', 'haiku\n', '-haiku', '.x', 'ha"iku', 'haiku;rm', 'ha$iku', 'modèle', '小模型', 'a'.repeat(MODEL_MAX + 1), 7, null, undefined, {}, ['haiku']]) assert.equal(asModel(bad), '', JSON.stringify(bad))
+})
+
+test('a model that is not there is told from every other failure', () => {
+  const usage = { input_tokens: 0, output_tokens: 0 }
+  // the API says there is no such model for this person, or Claude Code refuses to send the request because of the model
+  for (const gone of [
+    { isAnswered: false, reason: 'api-error', status: 404, error: 'model_not_found', usage },
+    { isAnswered: false, reason: 'api-error', status: 400, error: 'model_not_found', usage },
+    { isAnswered: false, reason: 'api-error', status: 403, error: 'model_not_found', usage },
+    { isAnswered: false, reason: 'api-error', status: 404, error: 'unknown', usage },
+    { thrown: new Error("cachito: $.model.complete: model claude-x is not in this organization's allowlist") },
+    { thrown: 'cachito: $.model.complete: model nope' },
+  ]) assert.equal(unavailable(gone), true, JSON.stringify(gone))
+  // the network, an overload, the rate, the account, a wrong request, a call out of time, a reply with no text, a reply: the model may be there
+  for (const other of [
+    { isAnswered: false, reason: 'api-error', status: null, error: 'unknown', usage },
+    { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage },
+    { isAnswered: false, reason: 'api-error', status: 429, error: 'rate_limit', usage },
+    { isAnswered: false, reason: 'api-error', status: 500, error: 'server_error', usage },
+    { isAnswered: false, reason: 'api-error', status: 400, error: 'invalid_request', usage },
+    { isAnswered: false, reason: 'api-error', status: 403, error: 'authentication_failed', usage },
+    { isAnswered: false, reason: 'api-error', status: 403, error: 'billing_error', usage },
+    { isAnswered: false, reason: 'aborted', usage },
+    { isAnswered: false, reason: 'empty-reply', usage },
+    { isAnswered: true, text: 'model', usage },
+    { thrown: new Error('cachito: $.model.complete: maxTokens must be a positive integer (got 0)') },
+    { thrown: new Error('cachito: $.model.complete: timeoutMs must be a positive integer of milliseconds (got 0)') },
+    { thrown: new Error('unloaded') },
+    { thrown: undefined },
+    null, undefined,
+  ]) assert.equal(unavailable(other), false, JSON.stringify(other))
+})
+
+test('a model that did not answer is told of once a day, and again the same day when it is another model', () => {
+  const day = 24 * 60 * MIN
+  assert.equal(tellGone(undefined, 'opus', T), true)
+  const kept = { day: dayOf(T), model: 'opus' }
+  assert.equal(tellGone(kept, 'opus', T + MIN), false)
+  assert.equal(tellGone(kept, 'sonnet', T + MIN), true)
+  assert.equal(tellGone(kept, 'opus', T + day), true)
+  for (const junk of ['x', 7, {}, { day: 'x' }]) assert.equal(tellGone(junk, 'opus', T), true)
 })

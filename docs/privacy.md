@@ -22,7 +22,7 @@ Never the content of a file, the output or arguments of a command, or a file pat
 In Claude Code's plugin store (`~/.claude/plugins/store/`):
 
 - **The pet**: seed, name, character, affection, days of use, stars, what it owns, how many times you petted it and when last, token totals.
-- **Preferences**: lean, comments, chats, language, what is worn.
+- **Preferences**: lean, comments and their model, chats, language, what is worn.
 - **Your name, only if you typed it** after `/pet call me`: the pet never reads one from your account, the system user, git or a path. `/pet call me nobody` forgets it. It is not on the picture of `/pet share`, in the diary or in the marks of the chats.
 - **The diary**: at most 40 lines of times, counts and folder names. `/pet diary clear` empties it.
 - **Comments' count**: lines, tokens and cost, the time of the last line, the pet's last two lines.

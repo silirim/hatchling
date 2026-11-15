@@ -96,8 +96,16 @@ export default {
   sleep: 'zzz',
 
   // the comments (the line a small model writes): the question asked once, and three lines in the tone of each character
-  'comments.ask': 'May I comment on your work? It uses a small model on your account, about {in} tokens in and {out} out a line, at most {cap} lines a day, and sends it a short summary of the turn. Details: /pet comments',
+  'comments.ask': 'May I comment on your work? It uses a small model on your account: about {in} tokens in and {out} out a line ({how}), at most {cap} lines a day. It gets a short summary of the turn. The recap is not measured yet. Details: /pet comments',
   'comments.ask.how': 'Answer with /pet comments on or /pet comments off.',
+  // /pet model: the model the comments are asked of, and the word said once a day when it does not answer
+  'comments.ours': 'measured in November 2026',
+  'comments.own': 'measured on your lines',
+  'model.is': 'Comments use the model {model}. /pet model <alias or id> changes it, /pet model default goes back to {default}.',
+  'model.now': 'Comments now use the model {model}. A larger model costs more tokens per line. /pet model default goes back to {default}.',
+  'model.back': 'Comments use the default model again: {default}.',
+  'model.bad': 'Not a model name: {arg}. Give one word, an alias such as haiku or a full model id: letters, digits and . _ : / @ - [ ], at most {max} characters.',
+  'model.gone': 'Cachito: the model {model} did not answer. Choose another with /pet model.',
   'tone.wit': ['Well. That went suspiciously well.', 'A failure. I am shocked, truly.', 'I saw nothing. Carry on.'],
   'tone.curiosity': ['Ooh, what does that one do?', 'Wait, why did that break?', 'So much changed. What are we making?'],
   'tone.calm': ['No rush. It will come.', 'It failed. We breathe, we go on.', 'Steady work. I like this pace.'],
@@ -258,7 +266,7 @@ export default {
   'gone.diet': '/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; the outputs it saved are still in ~/.claude/cachito-out. /pet lean, the style, is the lever that showed one.',
   'gone.weight': '/pet weight was taken out: /context in Claude Code already shows what every request carries.',
   'card.comments.off': 'comments off: fixed lines only, nothing sent. /pet comments on lets a small model write them, on your tokens',
-  'card.comments.on': 'comments on: about {in} tokens in and {out} out a line, {n} of {cap} lines today, {today} tokens today, {all} in all',
+  'card.comments.on': 'comments on: model {model}, about {in} tokens in and {out} out a line, {n} of {cap} lines today, {today} tokens today, {all} in all',
   'card.comments.unread': 'comments on: their count could not be read',
   'card.cost': 'this session cost {usd} so far',
 
@@ -334,7 +342,7 @@ export default {
   'gone.budget': "The context budget was taken out: no valid run of ours showed that compacting at a threshold pays; on paper it did not on a large model. Nothing was set. After a long pause in a large chat the pet suggests /compact, and you decide.",
   'diary.unkept': "The diary could not be cleared: the store cannot be written now.",
   'shop.debt': "The balance is under zero: two chats spent the same stars at once. Both things are yours; nothing more can be bought until use brings it back to zero.",
-  'help': ["Cachito commands", "  /pet                       the pet card", "  /pet pet                   a cuddle", "  /pet say <text>            talk to the pet (with comments on)", "  /pet name [name]           its name, or a new one", "  /pet call me [name]        what it calls you; nobody forgets it", "  /pet shop [item|animal]    the shop; with a name, buys or unlocks", "  /pet skin                  what is on, part by part", "  /pet wear <item>           put a thing on its part, or take it off", "  /pet wear none             take everything off", "  /pet wear plain|golden     the coat: its own colours, or the golden one", "  /pet animal [name]         the animals you have; with a name, switches", "  /pet skins                 your skin packs", "  /pet chats [on|off]        your open chats: working, waiting, or asking", "  /pet lean [on|off]         the style in the system prompt", "  /pet comments [on|off]     lines by a small model, on your tokens", "  /pet lang [en|es|pt|zh]    its language", "  /pet share                 a picture of the pet to attach to a post", "  /pet diary                 its diary", "  /pet diary clear           empty the diary", "  /pet adopt                 take the name and character of your old /buddy", "  /pet hide                  hide the band", "  /pet show                  show it again", "  /pet demo                  every mood, 5 s each", "  /pet help                  this list"],
+  'help': ["Cachito commands", "  /pet                       the pet card", "  /pet pet                   a cuddle", "  /pet say <text>            talk to the pet (with comments on)", "  /pet name [name]           its name, or a new one", "  /pet call me [name]        what it calls you; nobody forgets it", "  /pet shop [item|animal]    the shop; with a name, buys or unlocks", "  /pet skin                  what is on, part by part", "  /pet wear <item>           put a thing on its part, or take it off", "  /pet wear none             take everything off", "  /pet wear plain|golden     the coat: its own colours, or the golden one", "  /pet animal [name]         the animals you have; with a name, switches", "  /pet skins                 your skin packs", "  /pet chats [on|off]        your open chats: working, waiting, or asking", "  /pet lean [on|off]         the style in the system prompt", "  /pet comments [on|off]     lines by a small model, on your tokens", "  /pet model [alias|id]      the model of the comments, now {model}", "  /pet lang [en|es|pt|zh]    its language", "  /pet share                 a picture of the pet to attach to a post", "  /pet diary                 its diary", "  /pet diary clear           empty the diary", "  /pet adopt                 take the name and character of your old /buddy", "  /pet hide                  hide the band", "  /pet show                  show it again", "  /pet demo                  every mood, 5 s each", "  /pet help                  this list"],
   'store.lost': "The pet's store cannot be read right now: nothing is shown or changed until it can be.",
   'peer.ask.here': "the other chat in this folder ({name}) may be waiting for your OK",
   'peer.ask.away': "another chat may be waiting for your OK",

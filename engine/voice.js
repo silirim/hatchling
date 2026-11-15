@@ -9,7 +9,36 @@ import { STATS } from './persona.js'
 import { BASE, asLang, text, list } from './lang/index.js'
 import { cols, tidy } from './width.js'
 
-export const MODEL = 'haiku' // the alias, resolved by Claude Code
+export const MODEL = 'haiku' // the alias every call uses unless the person chose another with /pet model; resolved by Claude Code
+
+export const MODEL_MAX = 100
+/**
+ * A model as the person may choose it: an alias (`haiku`) or a full id, one token of at most MODEL_MAX letters, digits and the marks
+ * an id is written with. Only the shape is looked at: whether there is such a model is Claude Code's to say. '' for anything else.
+ * @param {unknown} raw
+ */
+export const asModel = (raw) => typeof raw === 'string' && raw.length <= MODEL_MAX && /^[A-Za-z0-9][A-Za-z0-9._:/@[\]-]*$/.test(raw) ? raw : ''
+
+/**
+ * Whether a call failed because its model is not there for this person: Claude Code refused to send the request because of
+ * the model (a blocked or unknown one), or the API answered that there is no such model (`model_not_found`, or a 400, 403 or
+ * 404 of that kind; a 404 alone too, since the one thing asked for by name is the model). Any other failure, a network that drops, an overload,
+ * a call out of time, a wrong request, is not: the model may well be there.
+ * @param {unknown} r what `$.model.complete` resolved to, or `{ thrown }` with what it rejected with
+ */
+export function unavailable(r) {
+  const x = /** @type {any} */ (r)
+  // Claude Code 2.1.325 words a refusal `<plugin>: $.model.complete: model <id> ...`; a bad cap, effort or time limit names that field instead
+  if (x && typeof x === 'object' && 'thrown' in x) return /\.complete: model\b/.test(String(x.thrown?.message ?? x.thrown ?? ''))
+  return x?.isAnswered === false && x.reason === 'api-error' && (x.error === 'model_not_found' || x.status === 404)
+}
+
+/**
+ * Whether to tell the person now that `model` did not answer: once a day for a model, and again the same day for another one.
+ * `kept` is what the store holds of the last time it was told (`{ day, model }`).
+ * @param {any} kept @param {string} model @param {number} now
+ */
+export const tellGone = (kept, model, now) => !(kept?.day === dayOf(now) && kept?.model === model)
 // The cost of a line is said in tokens, as each call reports them: no price is kept here, a price list goes stale
 
 /** Why the pet speaks. `turn` (a turn ended) and `long` (a turn still running after RULES.voiceGapMs) wait for RULES.voiceGapMs since the last line, the others do not; `say` is an answer to /pet say; `recap` is where the work got to, said once after a pause. @typedef {'turn' | 'long' | 'fail' | 'files' | 'cuddle' | 'say' | 'peer' | 'recap'} Why */
@@ -89,15 +118,18 @@ export const left = (t) => Math.max(0, RULES.voiceCapDay - t.today)
 
 /**
  * The tokens of a line on average, in and out: measured over the lines counted here once one of them was paid for, and until then
- * RULES.voiceEst rounded to the ten ("about 570 tokens in and 20 out").
+ * RULES.voiceEst, the figure we measured ("about 650 tokens in and 75 out").
  * @param {Tally} t
  */
 export const average = (t) => t.lines && t.input + t.output
   ? { input: Math.round(t.input / t.lines), output: Math.round(t.output / t.lines), measured: true }
-  : { input: Math.round(RULES.voiceEst.input / 10) * 10, output: Math.round(RULES.voiceEst.output / 10) * 10, measured: false }
+  : { ...RULES.voiceEst, measured: false }
+
+/** Where a line's figure comes from, in words: the person's own lines, or our measure with its month. @param {Tally} t @param {string} [lang] */
+export const measuredHow = (t, lang) => text(lang, average(t).measured ? 'comments.own' : 'comments.ours')
 
 /** What the pet asks once, before it ever speaks: what a yes comes to, in tokens a line and lines a day. @param {Tally} t @param {string} [lang] */
-export const question = (t, lang) => { const a = average(t); return text(lang, 'comments.ask', { in: a.input, out: a.output, cap: RULES.voiceCapDay }) }
+export const question = (t, lang) => { const a = average(t); return text(lang, 'comments.ask', { in: a.input, out: a.output, cap: RULES.voiceCapDay, how: measuredHow(t, lang) }) }
 
 // How each statistic sounds when it leads and what it is like as the weak point. Three lines in its tone are in engine/lang/ (`tone.*`),
 // in the language the pet speaks: reactions, not reports. The rest of what the model reads stays in English.

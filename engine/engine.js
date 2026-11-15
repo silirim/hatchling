@@ -131,7 +131,7 @@ export const RULES = {
   voiceMaxTokens: 30,      // the reply's cap, as asked: 8 words are about 12 tokens. Claude Code 2.1.323 does not hold it (a cap of 5 gave 18 tokens, 40 gave 299): what keeps a reply short is the prompt
   voiceTimeoutMs: 4_000,   // a call slower than this is dropped: the fixed line stays
   voiceTailChars: 600,     // how much of the end of the assistant's reply is sent
-  voiceEst: { input: 567, output: 19 }, // a line's tokens before one is measured here: the average of 12 live lines (13/11/2026, with the body and the last two lines in the prompt)
+  voiceEst: { input: 650, output: 75 }, // a line's tokens before one is measured here: measured in November 2026 over 112 lines of our own store (72,880 in, 8,563 out). The 75 out are for a line of about 12 tokens: the rest is the model's thinking, which a mod cannot switch off (only `effort`, already `low`)
 
   // The diary (engine/diary.js): a few lines the mod writes by itself in the store. Times, counts and folder names only
   diaryMax: 40,            // lines kept; the oldest go

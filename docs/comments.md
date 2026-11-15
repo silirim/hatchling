@@ -8,12 +8,29 @@ The pet asks once, right after it hatches, with two buttons: `comments on` and `
 
 ## What it costs
 
-- Each line is one request to a small model (the alias `haiku`), through Claude Code's own client, on your own tokens.
-- About 600 tokens a line: 567 in and 19 out, the average of 12 live lines on 13 November 2026.
+- Each line is one request to a small model, through Claude Code's own client, on your own tokens. The model is the alias `haiku` unless you choose another: `/pet model`, below.
+- Measured in November 2026: about 650 tokens in and 75 out a line, the average of the 112 lines in our own store (72,880 in, 8,563 out).
+- The line itself is about 12 tokens. The rest of the 75 out is the model's thinking: a mod cannot switch it off, it can only ask for low effort, and Cachito does.
+- The recap after a pause is a larger request and is not measured yet.
 - At most 40 lines a day over all your chats.
-- The cost is said in tokens, as each call reports them. In November 2026 that was under one cent a day at Haiku 5.5's list price. If `haiku` leads to another model on your account, the money differs.
+- The cost is said in tokens, as each call reports them. In November 2026 that was under one cent a day at Haiku 5.5's list price. If `haiku` leads to another model on your account, or you chose another with `/pet model`, the money differs.
 - A call that fails, or whose line is not shown, is paid and counted all the same.
 - `/pet comments` shows your measured tokens a line, the lines left today, and the tokens spent today and in all.
+
+## The model
+
+- `/pet model` shows the model in use. As installed it is the alias `haiku`, which Claude Code resolves.
+- `/pet model <alias or id>` sets another: an alias (`sonnet`) or a full model id. Only its shape is checked (one word, letters, digits and `. _ : / @ - [ ]`, at most 100 characters); whether there is such a model is Claude Code's to say.
+- A larger model costs more tokens per line.
+- `/pet model default` goes back to `haiku`.
+- The card, `/pet comments` and `/pet help` show the model in use.
+
+## If the model goes away
+
+- The pet never switches model by itself.
+- When a call fails because the model is not available (Claude Code refuses it as blocked or unknown, or the API answers that there is no such model), the pet stays silent, as for any failed call, and tells you in a toast, once a day: `the model <name> did not answer. Choose another with /pet model.`
+- Any other failure (the network, an overload, a call out of time) stays silent.
+- Until you choose another, each call that fails is still counted in the day's 40 lines; it uses no tokens.
 
 ## What is sent
 

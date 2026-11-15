@@ -46,6 +46,7 @@ The eight lines alone:
 | `/pet chats` | which chat works, waits or asks for your OK |
 | `/pet share` | a picture of the pet to attach to a post |
 | `/pet comments on\|off` | comments; off by default |
+| `/pet model [alias\|id]` | the model of the comments; `haiku` by default |
 | `/pet lean on\|off` | cachito-lean's eight lines, from the pet |
 | `/pet hide`, `/pet show` | put it away, bring it back |
 | `/pet help` | every command |
@@ -78,7 +79,7 @@ Every run and its limits: [bench/RESULTS.md](bench/RESULTS.md). Run it on your o
 
 - **Kept locally**, in Claude Code's plugin store (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, and for each chat the full path of its folder and the times of its last turn (30 chats, 30 days). Never the content of a chat, a prompt, a file or a command. cachito-lean keeps only its switch.
 - **Nothing is sent anywhere**, and no model is asked.
-- **The one exception is comments, off until you say yes.** Each asks a small model on your own tokens, about 600 tokens a line, at most 40 lines a day. It gets the pet's character and language, your name if told (`/pet call me`), why it speaks, tool names (your MCP servers' too) and counts, the names of programs that failed, how many files changed, the last 600 characters of the assistant's reply, the pet's own last two lines, up to three diary lines, and another finished chat's folder name and turn times; diary lines can carry folder names too. With `/pet say`, the first 300 characters you typed. After a pause of 30 minutes, and when you resume a closed chat, the recap sends up to 16,000 characters of the last turn's text and 300 of your last prompt.
+- **The one exception is comments, off until you say yes.** Each asks a small model on your own tokens, about 650 tokens in and 75 out a line (measured in November 2026; the recap is not measured yet), at most 40 lines a day. It gets the pet's character and language, your name if told (`/pet call me`), why it speaks, tool names (your MCP servers' too) and counts, the names of programs that failed, how many files changed, the last 600 characters of the assistant's reply, the pet's own last two lines, up to three diary lines, and another finished chat's folder name and turn times; diary lines can carry folder names too. With `/pet say`, the first 300 characters you typed. After a pause of 30 minutes, and when you resume a closed chat, the recap sends up to 16,000 characters of the last turn's text and 300 of your last prompt.
 - `/pet adopt` reads `~/.claude.json` once, when you run it. `/pet share` saves a picture in `~/.claude/cachito-share/`.
 - Complete: [docs/privacy.md](docs/privacy.md).
 

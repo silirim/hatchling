@@ -12,7 +12,7 @@ import zoo from '../../sprites/zoo.js'
 const LINE = 44 // a line of the bubble, in columns (hooks/register.js BUBBLE_MAX)
 const en = /** @type {Record<string, string | string[]>} */ (LANGS[BASE])
 // what a {place} is filled with to measure a line: the longest value it meets in use
-const FILL = { d: '100', n: '12', turns: '3', pct: '93', name: 'cachito', ago: '', usd: '$0.00', in: '10000', out: '1000', cap: '40', parts: '' }
+const FILL = { how: 'measured in November 2026', d: '100', n: '12', turns: '3', pct: '93', name: 'cachito', ago: '', usd: '$0.00', in: '10000', out: '1000', cap: '40', parts: '' }
 const filled = (/** @type {string} */ s, band = '') => s.replace(/\{(\w+)\}/g, (all, k) => k === 'band' ? band : /** @type {Record<string, string>} */ (FILL)[k] ?? all)
 /** The most columns a key may take; undefined for the replies of a command, which are not in the bubble. @param {string} key @param {string | string[]} v */
 function limit(key, v) {
@@ -20,7 +20,7 @@ function limit(key, v) {
   if (Array.isArray(v) && key.startsWith('tone.')) return RULES.voiceMaxCols // the comments' own limit
   if (Array.isArray(v) || /^(egg\.|sleep|wait\.say|greet\.back$)/.test(key)) return LINE // said in one line
   if (key.startsWith('btn.')) return 16
-  if (key === 'comments.ask') return LINE * 5
+  if (key === 'comments.ask') return LINE * 6 // with where the figure comes from and the word on the recap
   if (key === 'say.off.fix') return LINE * 3
   if (/^(cold|stomach|dizzy|loop|heavy|bloated|wait|greet|peer|tidy|cheer)\.|^coffee$/.test(key)) return 72 // two lines at most
   return undefined

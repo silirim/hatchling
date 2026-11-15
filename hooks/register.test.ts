@@ -22,7 +22,7 @@ const prefsOf = (disk: Record<string, any>) => ({ ...disk.prefs, ...Object.fromE
 const elsewhere = (disk: Record<string, any>, patch: Record<string, unknown>) => { for (const [name, value] of Object.entries(patch)) disk[`pref.${name}`] = value }
 /** A store that lost every preference. */
 const forget = (disk: Record<string, any>) => { for (const key of Object.keys(disk)) if (key === 'prefs' || key.startsWith('pref.')) delete disk[key] }
-const KNOWN = ['asked', 'born', 'callme', 'chats', 'cuddled', 'cuddles', 'hatched', 'hidden', 'lang', 'missing', 'name', 'personality', 'seed', 'species', 'stats', 'style', 'voice', 'voiceAsked', 'wear'] // the preferences of this version
+const KNOWN = ['asked', 'born', 'callme', 'chats', 'cuddled', 'cuddles', 'hatched', 'hidden', 'lang', 'missing', 'model', 'name', 'personality', 'seed', 'species', 'stats', 'style', 'voice', 'voiceAsked', 'wear'] // the preferences of this version
 const BAND = { plugin: 'cachito', component: 'AbovePrompt', props: { hasSurvey: false } } as any // the other props are the engine's
 
 test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
@@ -524,7 +524,7 @@ test('a pet is born with a name and a character of its own: on the card and in t
   await k.clock.advance(2_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   // hatched: before anything else it asks whether it may speak, once, and says what a yes comes to
-  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account, about 570 tokens in\nand 20 out a line, at most 40 lines a day,\nand sends it a short summary of the turn.\nDetails: /pet comments')
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account: about 650 tokens in\nand 75 out a line (measured in November\n2026), at most 40 lines a day. It gets a\nshort summary of the turn. The recap is not\nmeasured yet. Details: /pet comments')
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
   await ui.press({ key: 'voice-off' })
@@ -1655,18 +1655,18 @@ test('comments off, as installed: no call to a model, whatever happens, and the 
   expect(k.v.calls).toEqual([])
   expect(k.disk.voice).toBeUndefined()
   expect(await cardOf($)).toMatch(/\ncomments off: fixed lines only, nothing sent\. \/pet comments on lets a small model write them, on your tokens/)
-  expect(await cardOf($, 'comments')).toMatch(/^Comments off: the pet says its fixed lines, and nothing is sent anywhere for it\..*spends tokens of your own account: about 570 tokens in and 20 out a line: the average we measured, replaced by your own after the first line, never more than 40 lines a day\.$/)
+  expect(await cardOf($, 'comments')).toMatch(/^Comments off: the pet says its fixed lines, and nothing is sent anywhere for it\..*spends tokens of your own account: about 650 tokens in and 75 out a line, measured in November 2026 on our own lines and replaced by your own after the first line, never more than 40 lines a day\. The recap after a pause is a larger request, not measured yet\. The model in use: haiku\. \/pet model <alias or id> changes it; a larger model costs more tokens per line\. If it does not answer, the pet stays silent, tells you once a day and never picks another by itself\.$/)
 })
 
 test('comments on: it says what it costs and sends; a line at the end of a turn made of counts and names only, counted with its real tokens', async ($, on) => {
   const k = voiceKit($, on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const says = await cardOf($, 'comments on')
-  expect(says).toMatch(/^Comments on\. They spend tokens of your own account: each line is one request to a small model \(the alias haiku/)
+  expect(says).toMatch(/^Comments on\. They spend tokens of your own account: each line is one request to a small model \(haiku, through Claude Code's own client\)\.\nThe model in use: haiku\. \/pet model <alias or id> changes it; a larger model costs more tokens per line\./)
   expect(says).toMatch(/Sent to the model: the pet's name, animal, five statistics and language; the name you told it with \/pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts \(the tools of your MCP servers too, by their names\); the program names of the commands that failed; how many files changed; the last 600 characters of the assistant's reply \(during a turn, of what it wrote last in it, and how many minutes the turn has lasted\); the pet's own last 2 lines, so that it does not repeat itself \(they are kept in the store and go back to the model in later chats too\); at most 3 lines of its diary/)
   expect(says).toMatch(/\nAfter a pause the pet says once where the work got to and what is left: when 30 minutes pass after a turn with no new prompt, or when you resume a chat left for longer\. For that one line, once per pause and once more each time you resume a closed chat, it sends up to 16000 characters: the first 300 of your last prompt and the end of the text the assistant wrote in the last turn \(text only: nothing a tool was given or answered\)\. It counts in the day's lines and in the tokens like any other line, and it is a larger request than a comment: a few thousand tokens in at the most, not measured yet\. Neither what is sent nor the line is kept on disk\.\n/)
   expect(says).toMatch(/Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap\. But the assistant's text is sent as it is/)
-  expect(says).toMatch(/Cost: about 570 tokens in and 20 out a line: the average we measured, replaced by your own after the first line\. The tokens are the ones each call reports; what they cost in money depends on the model the alias haiku leads to on your account\.\n/)
+  expect(says).toMatch(/Cost: about 650 tokens in and 75 out a line, measured in November 2026 on our own lines and replaced by your own after the first line\. The tokens out are more than the line's own, about 12: the rest is the model's thinking, which a mod cannot switch off \(it can only ask for low effort, and does\)\. The recap is not measured yet\. The tokens are the ones each call reports; what they cost in money depends on the model haiku leads to on your account\.\n/)
   expect(says).not.toContain('$')
   expect(says).toMatch(/at most one line every 10 minutes; without that wait after a failed command, a turn that changed 5 files or more, or a cuddle: each of those waits 30, 30 and 20 seconds since the last line for the same reason\. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too\. Also during a turn that lasts longer than 10 minutes, under the same wait\. Never more than 40 lines a day, over all your chats\./)
   expect(says).toMatch(/Today: 0 of 40 lines, 0 tokens \(0 in all\): 40 left\. \/pet comments off stops them\.$/)
@@ -1696,7 +1696,7 @@ test('comments on: it says what it costs and sends; a line at the end of a turn 
   // the real tokens of the call, and no dollars: none kept, none said
   expect(k.disk.voice).toMatchObject({ today: 1, todayTokens: 320, lines: 1, input: 300, output: 20 })
   expect(Object.keys(k.disk.voice).filter(key => /usd/i.test(key))).toEqual([])
-  expect(await cardOf($)).toMatch(/\ncomments on: about 300 tokens in and 20 out a line, 1 of 40 lines today, 320 tokens today, 320 in all$/m)
+  expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 300 tokens in and 20 out a line, 1 of 40 lines today, 320 tokens today, 320 in all$/m)
   expect(await cardOf($, 'comments')).toMatch(/Cost: 300 tokens in and 20 out a line, measured over the 1 line paid so far\./)
   expect(await cardOf($, 'comments')).toMatch(/\nToday: 1 of 40 lines, 320 tokens \(320 in all\): 39 left\./)
   expect(await cardOf($, 'comments')).not.toContain('$')
@@ -1791,7 +1791,7 @@ test('comments on: the cap of the day stops it, a new day starts the count again
   await $.command.run({ command: 'pet', args: 'pet' } as any)
   await k.settle()
   expect(k.v.calls).toEqual([]) // 40 lines today: not one more, not even for a failure or a cuddle
-  expect(await cardOf($)).toMatch(/\ncomments on: about 300 tokens in and 20 out a line, 40 of 40 lines today, 0 tokens today, 28800 in all$/m)
+  expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 300 tokens in and 20 out a line, 40 of 40 lines today, 0 tokens today, 28800 in all$/m)
   expect(await cardOf($, 'comments')).toMatch(/\nCost: 300 tokens in and 20 out a line, measured over the 90 lines paid so far\..*\nToday: 40 of 40 lines, 0 tokens \(28800 in all\): none left, they come back tomorrow\. \/pet comments off stops them\.$/s)
   expect(await cardOf($, 'comments')).not.toMatch(/\$|0\.0016|0\.0036/)
   // the next day: what the store counted belongs to the day before
@@ -1833,7 +1833,7 @@ test('the voice is asked for once, at the first start of a pet born before: unan
   const k = voiceKit($, on, { voiceAsked: false })
   k.disk.voice = { lines: 10, input: 5000, output: 200 } // lines paid for earlier: the figure in the question is the measured one
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  const Q = 'May I comment on your work? It uses a small\nmodel on your account, about 500 tokens in\nand 20 out a line, at most 40 lines a day,\nand sends it a short summary of the turn.\nDetails: /pet comments'
+  const Q = 'May I comment on your work? It uses a small\nmodel on your account: about 500 tokens in\nand 20 out a line (measured on your lines),\nat most 40 lines a day. It gets a short\nsummary of the turn. The recap is not\nmeasured yet. Details: /pet comments'
   expect(await k.texts()).toContain(Q)
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true]) // marked when it comes up
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -2008,7 +2008,7 @@ test('the bubble in Chinese: wrapped and bordered by width on screen, two column
   k.state = {}
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const ask = await bubble()
-  expect(ask.lines[0]!.split('\n')).toEqual(['我可以点评你的工作吗？会用你账户上的小模型，', '每句约输入 570、输出 20 token，每天最多 40', '句，并发给它一段本轮的简短摘要。详情：/pet', 'comments'])
+  expect(ask.lines[0]!.split('\n')).toEqual(['我可以点评你的工作吗？会用你账户上的小模型，', '每句约输入 650、输出 75 token（2026 年 11 月', '测得），每天最多 40 句，并发给它一段本轮的简', '短摘要。暂停后的回顾还没有测量。详情：/pet', 'comments'])
   expect(ask.width).toBe(48)
   expect(ask.buttons.slice(-2)).toEqual(['开启点评', '保持安静'])
 })
@@ -2771,7 +2771,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'lang', 'share', 'diary', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'model', 'lang', 'share', 'diary', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
@@ -3444,4 +3444,121 @@ test('the recap is part of the comments: off, no call and nothing read from the 
   expect(k.disk.voice.today).toBe(RULES.voiceCapDay)
   expect(JSON.stringify(k.state)).not.toMatch(/"recap":"[^"]/)
   expect((await k.texts()).join('\n')).not.toMatch(/ago: /)
+})
+
+// The model of the comments is the person's choice: /pet model.
+test('/pet model: haiku as installed; a choice is kept, checked for its shape only and used by every call; default goes back; the card, /pet comments and /pet help show it, in the four languages', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  // as installed: the alias haiku, and nothing kept for it
+  expect(await cardOf($, 'model')).toBe('Comments use the model haiku. /pet model <alias or id> changes it, /pet model default goes back to haiku.')
+  expect(await cardOf($, 'help')).toMatch(/\n  \/pet model \[alias\|id\]      the model of the comments, now haiku\n/)
+  expect(prefsOf(k.disk).model ?? '').toBe('')
+  await sayTo($, 'hello')
+  await k.settle()
+  expect(k.v.calls.at(-1).model).toBe('haiku')
+  // a choice: said with what a larger model comes to, kept under its own key, and the next call is asked of it
+  expect(await cardOf($, 'model claude-sonnet-5-5')).toBe('Comments now use the model claude-sonnet-5-5. A larger model costs more tokens per line. /pet model default goes back to haiku.')
+  expect(k.disk['pref.model']).toBe('claude-sonnet-5-5')
+  expect(await cardOf($, 'model')).toBe('Comments use the model claude-sonnet-5-5. /pet model <alias or id> changes it, /pet model default goes back to haiku.')
+  await k.clock.advance(6_000)
+  await sayTo($, 'hello again')
+  await k.settle()
+  expect(k.v.calls.length).toBe(2)
+  expect(k.v.calls[1]).toMatchObject({ model: 'claude-sonnet-5-5', maxTokens: 30, effort: 'low', timeoutMs: 4000 })
+  // shown where the comments are told of
+  expect(await cardOf($)).toMatch(/\ncomments on: model claude-sonnet-5-5, about /)
+  expect(await cardOf($, 'help')).toMatch(/the model of the comments, now claude-sonnet-5-5\n/)
+  const says = await cardOf($, 'comments')
+  expect(says).toMatch(/one request to a small model \(claude-sonnet-5-5, through Claude Code's own client\)\.\nThe model in use: claude-sonnet-5-5 \(the default is haiku\)\. \/pet model <alias or id> changes it; a larger model costs more tokens per line\./)
+  expect(says).toMatch(/depends on the model claude-sonnet-5-5 leads to on your account\./)
+  // an id keeps its capitals; the verb does not mind them
+  expect(await cardOf($, 'MODEL us.anthropic.Claude-Haiku-v1:0')).toMatch(/^Comments now use the model us\.anthropic\.Claude-Haiku-v1:0\./)
+  expect(k.disk['pref.model']).toBe('us.anthropic.Claude-Haiku-v1:0')
+  // a bad shape is refused, told, and the choice stays
+  for (const bad of ['two words', 'ha"iku', 'haiku;rm', '-x', 'modèle', 'a'.repeat(101)]) {
+    expect(await cardOf($, `model ${bad}`)).toMatch(/^Not a model name: .*Give one word, an alias such as haiku or a full model id: letters, digits and \. _ : \/ @ - \[ \], at most 100 characters\.$/)
+    expect(k.disk['pref.model']).toBe('us.anthropic.Claude-Haiku-v1:0')
+  }
+  // the four languages
+  for (const [lang, is, help] of [['es', /^Los comentarios usan el modelo us\.anthropic/, /el modelo de los comentarios, ahora us\.anthropic/], ['pt', /^Os comentários usam o modelo us\.anthropic/, /o modelo dos comentários, agora us\.anthropic/], ['zh', /^点评用的模型是 us\.anthropic/, /点评用的模型，现在是 us\.anthropic/]] as const) {
+    await cardOf($, `lang ${lang}`)
+    expect(await cardOf($, 'model')).toMatch(is)
+    expect(await cardOf($, 'help')).toMatch(help)
+    expect(await cardOf($)).toMatch(/us\.anthropic\.Claude-Haiku-v1:0/)
+  }
+  await cardOf($, 'lang en')
+  // default: back to haiku, in the store and in the next call; a chat that starts over reads the same
+  expect(await cardOf($, 'model default')).toBe('Comments use the default model again: haiku.')
+  expect(k.disk['pref.model']).toBe('')
+  await k.clock.advance(6_000)
+  await sayTo($, 'and now')
+  await k.settle()
+  expect(k.v.calls.at(-1).model).toBe('haiku')
+  await cardOf($, 'model opus')
+  k.state = {}
+  expect(await cardOf($, 'model')).toMatch(/^Comments use the model opus\./)
+  // a choice in the store that has no shape of a model reads as none
+  k.disk['pref.model'] = 'not a model'
+  k.state = {}
+  expect(await cardOf($, 'model')).toMatch(/^Comments use the model haiku\./)
+})
+
+test('a model that is not there: the pet stays silent, never takes another model, and says so in a toast once a day; any other failure is silent', async ($, on) => {
+  const k = voiceKit($, on, { voice: true, model: 'claude-gone-1' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const GONE = 'Cachito: the model claude-gone-1 did not answer. Choose another with /pet model.'
+  const told = () => k.toasts.filter(t => /did not answer|no respondió/.test(t))
+  const say = async () => { await k.clock.advance(6_000); await sayTo($, 'hello'); await k.settle() }
+  // every other failure: the network, an overload, a wrong request, the account, a call out of time, no text
+  const usage = NONE
+  for (const reply of [
+    { isAnswered: false, reason: 'api-error', status: null, error: 'unknown', usage },
+    { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage },
+    { isAnswered: false, reason: 'api-error', status: 400, error: 'invalid_request', usage },
+    { isAnswered: false, reason: 'api-error', status: 403, error: 'authentication_failed', usage },
+    { isAnswered: false, reason: 'aborted', usage },
+    { isAnswered: false, reason: 'empty-reply', usage },
+  ]) { k.v.reply = reply; await say() }
+  expect(k.v.calls.length).toBe(6)
+  expect(told()).toEqual([])
+  expect(k.disk.voiceGone).toBeUndefined()
+  // the API says there is no such model: silence in the bubble (the fixed line of a lost answer), one toast, and the same model asked again
+  k.v.reply = { isAnswered: false, reason: 'api-error', status: 404, error: 'model_not_found', usage }
+  await say()
+  expect(told()).toEqual([GONE])
+  expect(k.v.calls.at(-1).model).toBe('claude-gone-1')
+  expect((await bubbleOf($)).join(' ')).not.toMatch(/claude-gone-1|did not answer/)
+  // the same day, the same model: not a second time, in this chat or after a /clear
+  // (Claude Code's own refusal of a model rejects the call: the kit skips a hook that throws, so that way is tested in engine/voice.test.js)
+  await say()
+  k.v.reply = { isAnswered: false, reason: 'api-error', status: 404, error: 'unknown', usage }
+  await say()
+  k.state = {}
+  await say()
+  expect(told()).toEqual([GONE])
+  expect(k.v.calls.every((c: any) => c.model === 'claude-gone-1')).toBe(true) // never another model by itself
+  expect(prefsOf(k.disk).model).toBe('claude-gone-1')
+  // the next day: once more
+  k.disk.voiceGone.day--
+  await say()
+  await say()
+  expect(told()).toEqual([GONE, GONE])
+  // another model that is not there either is told of the same day; one that answers is not
+  await cardOf($, 'model claude-gone-2')
+  await say()
+  expect(told().at(-1)).toBe('Cachito: the model claude-gone-2 did not answer. Choose another with /pet model.')
+  expect(told().length).toBe(3)
+  k.v.reply = { isAnswered: true, text: 'Here I am.', usage: USAGE }
+  await cardOf($, 'model default')
+  await say()
+  expect(k.v.calls.at(-1).model).toBe('haiku')
+  expect(await bubbleOf($)).toEqual(['Here I am.'])
+  expect(told().length).toBe(3)
+  // in the pet's language
+  await cardOf($, 'lang es')
+  await cardOf($, 'model claude-gone-3')
+  k.v.reply = { isAnswered: false, reason: 'api-error', status: 404, error: 'model_not_found', usage }
+  await say()
+  expect(told().at(-1)).toBe('Cachito: el modelo claude-gone-3 no respondió. Elige otro con /pet model.')
 })

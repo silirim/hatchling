@@ -8,12 +8,12 @@
 
 import { atom, read, update } from 'claude-code'
 import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
-import { MODEL, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question, lastTurn, recap as recapOf, cleanRecap } from '../engine/voice.js'
+import { MODEL, MODEL_MAX, asModel, unavailable, tellGone, measuredHow, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question, lastTurn, recap as recapOf, cleanRecap } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page } from '../engine/diary.js'
 import { marks, greeting, finished, folder, counts, listing, leftOf } from '../engine/company.js'
 import { bubble, cuddle as cuddleLine, called, ago, since, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
 import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX, cleanCall, CALL_MAX } from '../engine/persona.js'
-import { text, list as listOf, voicedAs, asLang, fromLocale } from '../engine/lang/index.js'
+import { text, put, list as listOf, voicedAs, asLang, fromLocale } from '../engine/lang/index.js'
 import { cols, pad, wrap, tidy } from '../engine/width.js'
 import zoo from '../sprites/zoo.js'
 import { REG, install, coatOf, dressed, portrait, LIMITS as SKIN_LIMITS } from '../engine/skins.js'
@@ -28,7 +28,7 @@ const pet = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'pet' }), null)
 // the bubble until the next prompt, with its time word made anew at each drawing. Here and nowhere else: never in the store
 const ANIM0 = { n: 0, rare: -1, demo: '', sleep: false, egg: 0, love: 0, ask: '', note: '', noteFix: '', noteLeft: 0, skin: 0, idle: '', idleN: 0, spark: 0, hush: 0, sig: '', sigAt: 0, recap: '', recapAt: 0 }
 const anim = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'anim' }), ANIM0)
-const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: false, voiceAsked: false, lang: '', missing: '', chats: true, callme: '' }
+const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: false, voiceAsked: false, lang: '', missing: '', chats: true, callme: '', model: '' }
 const prefs = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'prefs' }), PREFS0)
 
 const DEFAULT = 0x01000000 // the terminal's own colour
@@ -276,13 +276,26 @@ async function askLine(/** @type {any} */ $, /** @type {import('../engine/voice.
     if (!(await storeSet($, 'voice', reserve(t, why, now)).then(() => true, () => false))) return none('lost')
     const p = await getPrefs($)
     const long = why === 'recap'
-    const r = await $.model.complete({ model: MODEL, system: system({ name: p.name, animal: p.species, stats: p.stats, lang: p.lang, person: p.callme, ...sys }), prompt: await prompt(t), maxTokens: long ? RULES.recapMaxTokens : RULES.voiceMaxTokens, effort: 'low', timeoutMs: long ? RULES.recapTimeoutMs : RULES.voiceTimeoutMs }).catch(() => null)
+    const model = p.model || MODEL // the person's choice, never another: a model that fails is told of, not replaced
+    const r = await $.model.complete({ model, system: system({ name: p.name, animal: p.species, stats: p.stats, lang: p.lang, person: p.callme, ...sys }), prompt: await prompt(t), maxTokens: long ? RULES.recapMaxTokens : RULES.voiceMaxTokens, effort: 'low', timeoutMs: long ? RULES.recapTimeoutMs : RULES.voiceTimeoutMs }).catch((/** @type {unknown} */ thrown) => ({ isAnswered: false, usage: undefined, text: '', thrown }))
+    if (unavailable(r)) await modelGone($, model, p.lang).catch(() => {})
     const line = !r?.isAnswered ? '' : long ? cleanRecap(r.text) : clean(r.text)
     // added over the store as it is now: another chat may have spoken meanwhile
     const after = await voiceTally($)
-    if (after && r) await storeSet($, 'voice', settled(after, r.usage, long ? {} : { long: !!r.isAnswered && tooLong(r.text), path: !!r.isAnswered && !tooLong(r.text) && pathy(r.text), line })).catch(() => {})
+    if (after && !('thrown' in r)) await storeSet($, 'voice', settled(after, r.usage, long ? {} : { long: !!r.isAnswered && tooLong(r.text), path: !!r.isAnswered && !tooLong(r.text) && pathy(r.text), line })).catch(() => {})
     return { asked: true, line, stop: '' }
   } finally { speaking = false }
+}
+/**
+ * The model of the comments did not answer because it is not there for this person (engine/voice.js `unavailable`): said in a toast,
+ * once a day for a model over all the chats (the day and the model told are kept in the store). The pet stays silent as for any
+ * failed call and never takes another model by itself: the choice is the person's, with /pet model.
+ */
+async function modelGone(/** @type {any} */ $, /** @type {string} */ model, /** @type {string} */ lang) {
+  const now = await $.clock.now()
+  if (!tellGone(await storeGet($, 'voiceGone'), model, now)) return
+  await storeSet($, 'voiceGone', { day: dayOf(now), model })
+  await $.ui.toast(text(lang, 'model.gone', { model }))
 }
 /**
  * The person's skin packs: the .json files of ~/.claude/cachito-skins (or of the config folder Claude Code was given), in the order
@@ -725,7 +738,7 @@ async function storedPrefs(/** @type {any} */ $) {
   const cuddles = Math.max(0, Math.floor(Number(raw?.cuddles) || 0)), cuddled = Number(raw?.cuddled) || 0
   // the language: the one chosen; a newborn takes the system's when it is one of ours (LC_ALL before LANG); a pet born before the languages keeps English
   const lang = asLang(raw?.lang) ?? (raw ? 'en' : fromLocale(await $.env.get('LC_ALL').catch(() => undefined), await $.env.get('LANG').catch(() => undefined)))
-  return { raw, lost, ...who, hidden: !!raw?.hidden, wear: String(raw?.wear ?? ''), species: /** @type {string} */ (born), born: /** @type {string} */ (isAnimal(raw?.born) ? raw.born : born), style: !!raw?.style, cuddles, cuddled, voice: !!raw?.voice, voiceAsked: !!raw?.voiceAsked, lang, chats: raw?.chats !== false, missing: back ? '' : gone || (typeof raw?.missing === 'string' ? raw.missing : '') }
+  return { raw, lost, ...who, hidden: !!raw?.hidden, wear: String(raw?.wear ?? ''), species: /** @type {string} */ (born), born: /** @type {string} */ (isAnimal(raw?.born) ? raw.born : born), style: !!raw?.style, cuddles, cuddled, voice: !!raw?.voice, voiceAsked: !!raw?.voiceAsked, model: asModel(raw?.model), lang, chats: raw?.chats !== false, missing: back ? '' : gone || (typeof raw?.missing === 'string' ? raw.missing : '') }
 }
 /**
  * Changes the preferences and keeps them for the next session. Only the fields of `patch` are written, each under its own key: every
@@ -1103,9 +1116,9 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const words = e.args.trim().split(/\s+/), [verb, arg, arg2] = words.map(w => w.toLowerCase())
     // E20: no real pet to show or change while the store cannot be read and this chat holds none: said in a line, and nothing is done
     if (!(await heldPrefs($)) && (await storedPrefs($)).lost) return { text: text(undefined, 'store.lost') }
-    const L0 = (await getPrefs($)).lang
+    const L0 = (await getPrefs($)).lang, modelNow = (await getPrefs($)).model || MODEL
     const onOff = (/** @type {string} */ v) => arg && arg !== 'on' && arg !== 'off' ? { text: text(L0, 'onoff', { verb: v, arg: tidy(arg, 24) }) } : null
-    if (verb === 'help') return { text: listOf(L0, 'help').join('\n') }
+    if (verb === 'help') return { text: listOf(L0, 'help').map(line => put(line, { model: modelNow })).join('\n') }
     if (verb === 'hide' || verb === 'show') {
       await setPrefs($, { hidden: verb === 'hide' })
       return { text: text((await getPrefs($)).lang, verb === 'hide' ? 'toast.hidden' : 'toast.shown') }
@@ -1167,22 +1180,34 @@ export function register(/** @type {import('claude-code').On} */ on) {
       if (!p.style) return { text: `Lean off. /pet lean on adds the style to the system prompt: short answers, the least code, read-only calls sent together. ${STYLE_BENCH}` }
       return { text: `${wait ? 'Lean chosen: this chat is already long, so the style starts at the next compaction or the next chat. Switching now would re-send the whole conversation.' : 'Lean on: every request carries the style, these lines in the system prompt. Switching rewrites the cache once.'} ${STYLE_BENCH}\n\n${STYLE}` }
     }
+    if (verb === 'model') { // the model the comments are asked of: an alias or a full id, checked for its shape only; `default` goes back to MODEL
+      const typed = e.args.trim().split(/\s+/).slice(1) // as typed: an id keeps its capitals
+      if (!typed.length) return { text: text(L0, 'model.is', { model: modelNow, default: MODEL }) }
+      if (typed.length === 1 && arg === 'default') { await setPrefs($, { model: '' }); return { text: text(L0, 'model.back', { default: MODEL }) } }
+      const model = typed.length === 1 ? asModel(typed[0]) : ''
+      if (!model) return { text: text(L0, 'model.bad', { arg: tidy(typed.join(' '), 40), max: MODEL_MAX }) }
+      await setPrefs($, { model })
+      return { text: text(L0, 'model.now', { model, default: MODEL }) }
+    }
     if (verb === 'comments' || verb === 'voice') { // `voice` was its name: kept, unlisted, for who typed it before
       if (await bench($)) return { text: 'Comments off: under the bench they are never used.' }
       const bad = onOff('comments')
       if (bad) return bad
       if (arg === 'on' || arg === 'off') await setVoice($, arg === 'on')
       const t = (await voiceTally($)) ?? tally(undefined, await $.clock.now()), avg = average(t)
-      const cost = avg.measured ? `${avg.input} tokens in and ${avg.output} out a line, measured over the ${t.lines} line${t.lines === 1 ? '' : 's'} paid so far` : `about ${avg.input} tokens in and ${avg.output} out a line: the average we measured, replaced by your own after the first line`
+      const cost = avg.measured ? `${avg.input} tokens in and ${avg.output} out a line, measured over the ${t.lines} line${t.lines === 1 ? '' : 's'} paid so far` : `about ${avg.input} tokens in and ${avg.output} out a line, ${measuredHow(t)} on our own lines and replaced by your own after the first line`
+      const thinks = "The tokens out are more than the line's own, about 12: the rest is the model's thinking, which a mod cannot switch off (it can only ask for low effort, and does)."
+      const which = `The model in use: ${modelNow}${modelNow === MODEL ? '' : ` (the default is ${MODEL})`}. /pet model <alias or id> changes it; a larger model costs more tokens per line. If it does not answer, the pet stays silent, tells you once a day and never picks another by itself.`
       const cap = `${RULES.voiceCapDay} lines a day`
-      if (!(await getPrefs($)).voice) return { text: `Comments off: the pet says its fixed lines, and nothing is sent anywhere for it. /pet comments on lets a small model write one line about the turn. That spends tokens of your own account: ${cost}, never more than ${cap}.` }
+      if (!(await getPrefs($)).voice) return { text: `Comments off: the pet says its fixed lines, and nothing is sent anywhere for it. /pet comments on lets a small model write one line about the turn. That spends tokens of your own account: ${cost}, never more than ${cap}. The recap after a pause is a larger request, not measured yet. ${which}` }
       return { text: [
-        `Comments on. They spend tokens of your own account: each line is one request to a small model (the alias ${MODEL}, through Claude Code's own client).`,
+        `Comments on. They spend tokens of your own account: each line is one request to a small model (${modelNow}, through Claude Code's own client).`,
+        which,
         `Sent to the model: the pet's name, animal, five statistics and language; the name you told it with /pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts (the tools of your MCP servers too, by their names); the program names of the commands that failed; how many files changed; the last ${RULES.voiceTailChars} characters of the assistant's reply (during a turn, of what it wrote last in it, and how many minutes the turn has lasted); the pet's own last ${RULES.voiceRecall} lines, so that it does not repeat itself (they are kept in the store and go back to the model in later chats too); at most ${RULES.diaryRecall} lines of its diary, as memories it may hint at (times, counts, a folder's name: /pet diary shows all of it). When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it.`,
         `/pet say <text> speaks to the pet: what you write after it (its first ${RULES.saySaidChars} characters) is sent to the same model, which answers in the bubble with one line. It is a request of its own, not a turn of the chat, and counts in the day's lines.`,
         `After a pause the pet says once where the work got to and what is left: when ${RULES.recapAfterMs / 60_000} minutes pass after a turn with no new prompt, or when you resume a chat left for longer. For that one line, once per pause and once more each time you resume a closed chat, it sends up to ${RULES.recapChars} characters: the first ${RULES.recapPromptChars} of your last prompt and the end of the text the assistant wrote in the last turn (text only: nothing a tool was given or answered). It counts in the day's lines and in the tokens like any other line, and it is a larger request than a comment: a few thousand tokens in at the most, not measured yet. Neither what is sent nor the line is kept on disk.`,
         `Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap. But the assistant's text is sent as it is: the last ${RULES.voiceTailChars} characters of a reply, and in a recap the end of the last turn's text, can hold a path, a name or a piece of code the assistant wrote there.`,
-        `Cost: ${cost}. The tokens are the ones each call reports; what they cost in money depends on the model the alias ${MODEL} leads to on your account.`,
+        `Cost: ${cost}. ${thinks} The recap is not measured yet. The tokens are the ones each call reports; what they cost in money depends on the model ${modelNow} leads to on your account.`,
         `When: at the end of a turn, at most one line every ${RULES.voiceGapMs / 60_000} minutes; without that wait after a failed command, a turn that changed ${RULES.voiceManyFiles} files or more, or a cuddle: each of those waits ${(RULES.voiceEvery.fail ?? 0) / 1000}, ${(RULES.voiceEvery.files ?? 0) / 1000} and ${(RULES.voiceEvery.cuddle ?? 0) / 1000} seconds since the last line for the same reason. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too. Also during a turn that lasts longer than ${RULES.voiceGapMs / 60_000} minutes, under the same wait. Never more than ${cap}, over all your chats. Never while you type, and a call slower than ${RULES.voiceTimeoutMs / 1000} seconds is dropped.`,
         `A line that comes back wider than ${RULES.voiceMaxCols} columns on screen (a Chinese character takes two) is not shown, and is paid for all the same: ${t.dropped} of ${t.lines} so far. Nor is one that names a file or a path: ${t.paths} so far.`,
         `Today: ${t.today} of ${RULES.voiceCapDay} lines, ${t.todayTokens} tokens (${t.input + t.output} in all): ${left(t) ? `${left(t)} left` : 'none left, they come back tomorrow'}. /pet comments off stops them.`,
@@ -1326,7 +1351,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const names = OWNABLE.filter(i => c.owned.includes(i.id)).map(i => itemName(L, i))
     const spoken = await voiceTally($)
     const comments = !(await voiceChosen($)) ? say('card.comments.off')
-      : spoken ? say('card.comments.on', { n: spoken.today, cap: RULES.voiceCapDay, today: spoken.todayTokens, all: spoken.input + spoken.output, in: average(spoken).input, out: average(spoken).output }) : say('card.comments.unread')
+      : spoken ? say('card.comments.on', { model: modelNow, n: spoken.today, cap: RULES.voiceCapDay, today: spoken.todayTokens, all: spoken.input + spoken.output, in: average(spoken).input, out: average(spoken).output }) : say('card.comments.unread')
     const ends = extremes(who.stats), now = await $.clock.now()
     const stage = STATE[c.stage] ?? c.stage, label = Math.max(...STATS.map(name => cols(say(`stat.${name}`)))) + 1
     return {

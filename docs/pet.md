@@ -108,6 +108,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet chats [on\|off]` | the chats board; on by default |
 | `/pet lean <on\|off>` | the eight lines |
 | `/pet comments <on\|off>` | comments by a small model, on your tokens |
+| `/pet model [alias\|id\|default]` | the model of the comments: [comments.md](comments.md) |
 | `/pet say <text>` | speak to the pet: [comments.md](comments.md) |
 | `/pet diary [clear]` | show or empty the diary |
 | `/pet share` | a colour picture to attach to a post, 800×420: the pet with what it wears, its name, animal, stage, character and stars; nothing about your work. Saved as `cachito-share/cachito-<name>.png` in your Claude Code config folder (`~/.claude`), written over each time. Node writes the PNG; without Node on the PATH the same picture is saved as an SVG |
