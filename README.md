@@ -44,6 +44,7 @@ The eight lines alone:
 | `/pet shop [item]` | the catalogue; buy an item |
 | `/pet wear <item>` | put it on or take it off |
 | `/pet chats` | which chat works, waits or asks for your OK |
+| `/pet share` | a card of the pet to paste in a post |
 | `/pet comments on\|off` | comments; off by default |
 | `/pet lean on\|off` | cachito-lean's eight lines, from the pet |
 | `/pet hide`, `/pet show` | put it away, bring it back |

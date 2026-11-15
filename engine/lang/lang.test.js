@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { LANGS, BASE, asLang, fromLocale, text, list, voicedAs } from './index.js'
 import { cols } from '../width.js'
-import { RULES, SOLD, initialState, reduce, view } from '../engine.js'
+import { RULES, OWNABLE, initialState, reduce, view } from '../engine.js'
 import { STATS, personalityOf } from '../persona.js'
 import { bubble, cuddle, ago, ISSUES, CHEERS, TALK } from '../catalog.js'
 import { clean } from '../voice.js'
@@ -53,7 +53,7 @@ test('every language has every key of English, of the same kind and length, with
   // the keys the code builds from a name are all there
   for (const stat of STATS) for (const k of ['cuddle', 'tone', 'peak', 'weak', 'stat']) assert.ok(en[`${k}.${stat}`], `${k}.${stat}`)
   for (const kind of Object.keys(ISSUES)) assert.ok(en[`${kind}.fix`] && en[`${kind}.say`], kind)
-  for (const i of SOLD) assert.equal(en[`item.${i.id}`], i.name)
+  for (const i of OWNABLE) assert.equal(en[`item.${i.id}`], i.name)
   for (const name of Object.keys(zoo.pack.animals)) assert.ok(en[`animal.${name}`], name)
 })
 

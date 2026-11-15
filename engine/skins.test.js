@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import zoo from '../sprites/zoo.js'
 import { validate, parse, compile, install, place, marksFor, coatOf, REG, BUILTIN, LIMITS, FORMAT } from './skins.js'
-import { SHOP, WEARABLE, closetOf, wornOf, putOn, takeOff, turnSlot, view, initialState } from './engine.js'
+import { SHOP, COATS, WEARABLE, EGGSHELL, closetOf, wornOf, putOn, takeOff, turnSlot, view, initialState } from './engine.js'
 
 const EXAMPLE = readFileSync(new URL('../docs/skins-example.json', import.meta.url), 'utf8')
 /** A copy of the example pack, changed. @param {(p: any) => void} [change] */
@@ -19,8 +19,8 @@ test('the shipped drawings are a pack of the same format and pass the same check
   const asMine = validate(zoo.pack, { taken })
   assert.ok(asMine.length > 0 && asMine.every(e => /taken already|unknown field "weight"|more$/.test(e)), asMine.join('\n'))
   assert.deepEqual(Object.keys(BUILTIN.species), ['penguin', 'chick', 'dog', 'bunny', 'fox', 'cactus', 'axolotl'])
-  assert.deepEqual(Object.entries(BUILTIN.items).map(([id, i]) => [id, i.slot]), SHOP.map(i => [i.id, i.slot]))
-  assert.deepEqual(Object.keys(BUILTIN.coats), ['golden'])
+  assert.deepEqual(Object.entries(BUILTIN.items).map(([id, i]) => [id, i.slot]), [...SHOP, EGGSHELL].map(i => [i.id, i.slot])) // what is sold, then the founder's eggshell
+  assert.deepEqual(Object.keys(BUILTIN.coats), COATS.map(i => i.id))
   for (const sp of Object.values(BUILTIN.species)) { assert.equal(sp.pack, ''); assert.ok(sp.weight > 0); assert.ok(sp.states.sleep.at === undefined && sp.states.adult.at.length) }
   assert.ok(JSON.stringify(zoo).length < LIMITS.bytes) // the real drawings fit the size a pack may have
 })
@@ -206,7 +206,7 @@ test('a coat on an animal: its own tint for it, else its colours set on the coat
   assert.equal(golden?.palette, BUILTIN.species.fox?.tints.golden) // drawn for it
   assert.equal(golden?.edge, zoo.pack.coats.golden.ramp[0])
   const mint = coatOf('mint', 'penguin')
-  assert.deepEqual(Object.keys(mint?.palette ?? {}).sort(), ['1', '2', 'B', 'W', 'a', 'o']) // every colour of the body that can change; eyes, cheeks and the fixed ones stay
+  assert.deepEqual(Object.keys(mint?.palette ?? {}).sort(), ['1', '2', '3', 'B', 'W', 'a', 'o']) // every colour of the body that can change; eyes, cheeks and the fixed ones stay
   assert.equal(mint?.palette.W, '#aadcd7') // white: near the light end
   assert.equal(mint?.palette.B, '#29998d') // dark slate: near the dark end
   assert.equal(mint?.edge, '#00796b')
@@ -287,4 +287,88 @@ test('security: a text of a pack follows the rule of every text from outside: no
   }
   // a script that needs its marks keeps them: up to three on a character
   assert.deepEqual(validate(pack(p => { p.name = 'Việt  é'.replace('  ', ' ') }), { taken }), [])
+})
+
+test('every thing of the shop is drawn by hand for every animal of the shipped pack, the hidden one too, adult and baby', () => {
+  install([])
+  const animals = Object.keys(zoo.pack.animals)
+  assert.deepEqual([Object.keys(zoo.pack.items), animals.length], [[...SHOP, EGGSHELL].map(i => i.id), 7])
+  for (const [id, item] of Object.entries(zoo.pack.items)) {
+    assert.equal(item.part, [...SHOP, EGGSHELL].find(i => i.id === id)?.slot, id)
+    assert.ok(item.fallback.length > 0, id) // and by its anchors on an animal of a pack
+    assert.deepEqual(Object.keys(item.draw), animals, id)
+    for (const animal of animals) for (const body of /** @type {const} */ (['adult', 'baby'])) {
+      const d = /** @type {Record<string, Record<string, { at: number[], art: string[] }>>} */ (item.draw)[animal]?.[body], marks = marksFor(id, animal, body)
+      assert.ok(d && d.art.length > 0 && marks.length >= 4, `${id} on the ${body} ${animal}`) // a drawing, not a dot
+      assert.equal(marks.length, d.art.join('').replaceAll('.', '').length) // the hand-made one is what is drawn, not the fallback
+      for (const [r, c, ch] of marks) assert.ok(r >= -2 && r < zoo.height + zoo.under && c >= -zoo.side && c < zoo.width + zoo.side && zoo.fixed.includes(ch), `${id} on the ${body} ${animal}`)
+    }
+  }
+  // a head thing never reaches the eyes, so it goes with glasses or the eye patch; a thing of the face never leaves the head's rows
+  for (const [name, a] of Object.entries(zoo.pack.animals)) for (const body of /** @type {const} */ (['adult', 'baby'])) {
+    const eye = /** @type {number} */ (a.anchors[body].eyes[0]?.[0])
+    for (const i of SHOP.filter(i => i.slot === 'head' && i.id !== 'headphones')) assert.ok(marksFor(i.id, name, body).every(m => m[0] < eye), `${i.id} on the ${body} ${name}`)
+    for (const i of SHOP.filter(i => i.slot === 'face')) assert.ok(marksFor(i.id, name, body).every(m => Math.abs(m[0] - eye) <= 1), `${i.id} on the ${body} ${name}`)
+  }
+})
+
+test('the plain coats: a tint drawn for every shipped animal with the eyes on a light tone, the ramp for an animal of a pack, the same edge on a light theme as the golden one', () => {
+  install([file('a.json', EXAMPLE)])
+  const luma = (/** @type {string} */ h) => 0.299 * parseInt(h.slice(1, 3), 16) + 0.587 * parseInt(h.slice(3, 5), 16) + 0.114 * parseInt(h.slice(5, 7), 16)
+  for (const coat of ['pastel', 'terminal']) {
+    const ramp = /** @type {Record<string, { ramp: string[] }>} */ (zoo.pack.coats)[coat]?.ramp ?? []
+    assert.ok(ramp.length === 3 && luma(String(ramp[0])) < luma(String(ramp[1])) && luma(String(ramp[1])) < luma(String(ramp[2])), coat) // dark to light
+    for (const [name, a] of Object.entries(zoo.pack.animals)) {
+      const c = coatOf(coat, name), tint = /** @type {Record<string, Record<string, string>>} */ (a.tints)[coat]
+      assert.ok(tint && Object.keys(tint).length > 0, `${coat} on the ${name}`)
+      assert.deepEqual([c?.palette, c?.edge], [tint, ramp[0]]) // the path of every coat: its tint, and the coat's darkest colour for the edge
+      assert.equal(a.gold[coat], undefined) // no glint, no sparkle: those are the golden coat's
+      // the face stays readable: each eye has a far lighter tone next to it, and nothing next to it is nearly as dark (an ear may be), on the adult and on the baby
+      const pal = /** @type {Record<string, string>} */ ({ ...zoo.common, ...a.palette, ...tint })
+      for (const body of /** @type {const} */ (['adult', 'baby'])) for (const [r, col] of a.anchors[body].eyes) {
+        const frame = /** @type {string[]} */ (a.states[body].frames[0]), row = String(frame[r])
+        assert.equal(row[col], 'k')
+        const apart = [row[col - 1], row[col + 1]].map(ch => luma(String(pal[String(ch)])) - luma(zoo.common.k))
+        assert.ok(Math.max(...apart) > 90 && Math.min(...apart) > 50, `${coat} on the ${body} ${name}: ${apart}`)
+      }
+    }
+    // an animal of a pack has no tint for it: its colours on the ramp
+    assert.match(String(coatOf(coat, 'robot')?.palette.B), /^#[0-9a-f]{6}$/)
+    assert.equal(coatOf(coat, 'robot')?.edge, ramp[0])
+  }
+  install([])
+})
+
+test('a pack may not reuse the name of a thing or a coat of the shop, the new ones too', () => {
+  for (const id of [...SHOP.map(i => i.id), ...COATS.map(i => i.id)]) {
+    assert.match(validate(pack(p => { p.items[id] = p.items.tophat }), { taken }).join('\n'), new RegExp(`the name "${id}" is taken already`), id)
+  }
+})
+
+test('the redraws of the second pass: brown boots with a darker sole, glasses that stay on the face and leave the eyes seen, a strap that shows on a dark head, a face under the terminal coat', () => {
+  install([])
+  const dark = (/** @type {string} */ hex) => { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); return 0.299 * (r ?? 0) + 0.587 * (g ?? 0) + 0.114 * (b ?? 0) }
+  for (const [name, a] of Object.entries(/** @type {Record<string, any>} */ (zoo.pack.animals))) for (const body of /** @type {const} */ (['adult', 'baby'])) {
+    const base = /** @type {string[]} */ (a.states[body].frames[0]), eyes = /** @type {[number, number][]} */ (a.anchors[body].eyes), at = `${name} ${body}`
+    const inside = (/** @type {number} */ r, /** @type {number} */ c) => (base[r]?.[c] ?? '.') !== '.'
+    // boots: the leg brown, the sole under it darker and a pixel longer at the toe, at least two rows in all; never green
+    const boots = marksFor('boots', name, body), rows = [...new Set(boots.map(m => m[0]))].sort((x, y) => x - y)
+    assert.deepEqual([...new Set(boots.map(m => m[2]))].sort(), ['N', 'n'], at)
+    assert.ok(rows.length >= 2 && boots.filter(m => m[0] === rows.at(-1)).every(m => m[2] === 'N') && boots.filter(m => m[0] !== rows.at(-1)).every(m => m[2] === 'n'), at)
+    assert.ok(boots.filter(m => m[2] === 'N').length > boots.filter(m => m[0] === rows.at(-2)).length, at)
+    // glasses: a dark frame, every pixel of it on the body (nothing above the head), no pixel on an eye, and a frame at both sides of each eye
+    const glasses = marksFor('glasses', name, body)
+    assert.ok(glasses.length > 0 && glasses.every(m => m[2] === 'n' && inside(m[0], m[1])), at)
+    for (const [r, c] of eyes) { assert.ok(!glasses.some(m => m[0] === r && m[1] === c), at); assert.ok([-1, 1].every(d => glasses.some(m => m[0] === r && m[1] === c + d)), at) }
+    // the eye patch: its strap is never the body's own darkness
+    const strap = marksFor('eyepatch', name, body).filter(m => m[0] < (eyes[0]?.[0] ?? 0))
+    assert.ok(strap.length > 0, at)
+    for (const [r, c, ch] of strap) assert.ok(Math.abs(dark(/** @type {any} */ (zoo.common)[ch]) - dark({ ...zoo.common, ...a.palette }[/** @type {string} */ (base[r]?.[c])] ?? '#000000')) > 25, `${at} ${r},${c}`)
+    // the terminal coat: the eyes keep their near black, and what is next to an eye is a green lighter than it by far: the darkest of the three at least
+    const tint = { ...zoo.common, ...a.palette, ...a.tints.terminal }
+    assert.equal(tint.k, '#1b1b1b', at)
+    for (const [r, c] of eyes) for (const [dr, dc] of [[1, 0], [0, 1], [0, -1], [-1, 0]]) { const ch = base[r + (dr ?? 0)]?.[c + (dc ?? 0)]; if (ch && ch !== '.' && ch !== 'k') assert.ok(dark(tint[ch]) > 75, `${at}: ${ch} next to an eye`) }
+  }
+  // the eggshell: on every animal, with the white of the egg and one of its spots, and a broken edge
+  assert.deepEqual(zoo.pack.items.eggshell.fallback[0]?.art, ['.iiii.', 'iihiii', 'i.ii.i'])
 })

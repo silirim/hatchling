@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initialState, reduce, view, card, dayOf, shared, merge, RULES, SHOP, SOLD, GOLDEN, SLOTS, WEARABLE, closetOf, wornOf, putOn, takeOff, turnSlot } from './engine.js'
+import { initialState, reduce, view, card, dayOf, shared, merge, RULES, SHOP, SOLD, COATS, GOLDEN, SLOTS, WEARABLE, EGGSHELL, FOUNDER_UNTIL, founder, birth, sells, closetOf, wornOf, putOn, takeOff, turnSlot } from './engine.js'
 import { existsSync } from 'node:fs'
 import { bubble, CHEERS, ISSUES, CALM, DOCS } from './catalog.js'
 
@@ -358,7 +358,7 @@ test('a prompt after a pause over the cache life, in a chat of 100k or more, get
 test('the skin: one thing on each part, a new one takes the part of the old, and a choice from before the parts still counts', () => {
   const all = SHOP.map(i => i.id)
   assert.deepEqual(SLOTS, ['head', 'face', 'body', 'feet', 'accessory', 'coat'])
-  assert.deepEqual(SHOP.filter(i => i.slot === 'feet').map(i => `${i.id} ${i.price}`), ['sneakers 35', 'skateboard 55'])
+  assert.deepEqual(SHOP.filter(i => i.slot === 'feet').map(i => `${i.id} ${i.price}`), ['sneakers 35', 'boots 35', 'skateboard 55'])
   assert.deepEqual(SHOP.map(i => i.price), SHOP.map(i => i.price).toSorted((a, b) => a - b)) // the catalogue goes from the cheapest up
   assert.ok(SHOP.every(i => SLOTS.includes(i.slot)))
   // before the places: no choice is the last thing owned, one id is that thing, a thing not owned falls back, none is nothing
@@ -397,7 +397,7 @@ test('the skin: one thing on each part, a new one takes the part of the old, and
 
 test('the crown is a thing of the head: on by itself once the pet is fully grown, off under a hat or by choice, and never sold', () => {
   assert.ok(!SHOP.some(i => i.id === 'crown'))
-  assert.deepEqual(WEARABLE.map(i => i.id), ['crown', ...SHOP.map(i => i.id), 'golden'])
+  assert.deepEqual(WEARABLE.map(i => i.id), ['crown', 'eggshell', ...SHOP.map(i => i.id), 'pastel', 'terminal', 'golden'])
   assert.deepEqual([closetOf(['cap'], 'healthy'), closetOf(['cap'], 'bloom')], [['cap'], ['crown', 'cap']])
   // a pet's own view and card carry it only at the last stage
   const grown = { ...initialState(), owned: ['cap'], days: RULES.bloomAt.days, affection: RULES.bloomAt.affection }
@@ -428,4 +428,79 @@ test('the crown is a thing of the head: on by itself once the pet is fully grown
   w = 'scarf'
   for (let i = 0; i < 4; i++) { w = turnSlot(has, w, 'head'); seen.push(wornOf(has, w).join(' ')) }
   assert.deepEqual(seen, ['cap scarf', 'scarf', 'crown scarf', 'cap scarf'])
+})
+
+test('the things added for the launch: eleven with their part and price, and the two plain coats', () => {
+  const added = { balloon: ['accessory', 15], glasses: ['face', 20], eyepatch: ['face', 20], duck: ['accessory', 25], partyhat: ['head', 25], boots: ['feet', 35], santa: ['head', 40], hoodie: ['body', 45], wand: ['accessory', 50], laptop: ['accessory', 65], wizard: ['head', 80] }
+  for (const [id, [slot, price]] of Object.entries(added)) assert.deepEqual([id, SHOP.find(i => i.id === id)?.slot, SHOP.find(i => i.id === id)?.price], [id, slot, price])
+  assert.equal(SHOP.length, 22)
+  assert.equal(new Set(SOLD.map(i => i.id)).size, SOLD.length) // no id twice
+  // one thing on a part: the hoodie takes the scarf's, the glasses and the eye patch the sunglasses', a new hat an old one's; a hat and glasses go together
+  const all = SHOP.map(i => i.id)
+  assert.deepEqual(wornOf(all, putOn(all, 'scarf', 'hoodie')), ['hoodie'])
+  assert.deepEqual(wornOf(all, putOn(all, putOn(all, 'shades', 'glasses'), 'eyepatch')), ['eyepatch'])
+  assert.deepEqual(wornOf(all, putOn(all, putOn(all, putOn(all, 'cap', 'wizard'), 'glasses'), 'boots')), ['wizard', 'glasses', 'boots'])
+  // under a new hat the crown is off, as under an old one, and back when the hat goes
+  const grown = closetOf(['santa', 'cap'], 'bloom')
+  assert.deepEqual([wornOf(grown, putOn(grown, '', 'santa')), wornOf(grown, putOn(grown, '', 'cap')), wornOf(grown, turnSlot(grown, 'cap', 'head'))], [['santa'], ['cap'], ['santa']])
+  assert.deepEqual(wornOf(grown, takeOff(grown, 'santa', 'santa')), [])
+
+  // the coats: cheapest first, the golden one last; the plain ones are bought, never had at birth, and go on by choice only
+  assert.deepEqual(COATS.map(i => [i.id, i.slot, i.price]), [['pastel', 'coat', 150], ['terminal', 'coat', 200], ['golden', 'coat', 300]])
+  assert.deepEqual([initialState(0.001).owned, initialState(0.5).owned], [['golden'], []])
+  const rich = { ...initialState(0.5), coins: 360 }
+  const two = reduce(reduce(rich, { type: 'buy', id: 'pastel', t: 1 }), { type: 'buy', id: 'terminal', t: 2 })
+  assert.deepEqual([two.coins, two.affection, two.owned], [10, 0, ['pastel', 'terminal']])
+  assert.deepEqual(reduce({ ...rich, coins: 149 }, { type: 'buy', id: 'pastel', t: 1 }).owned, [])
+  assert.deepEqual([wornOf(['cap', 'pastel'], ''), wornOf(['pastel'], '')], [['cap'], []]) // not the thing a pet of before the parts wears by itself
+  const closet = ['shades', 'pastel', 'terminal', 'golden']
+  assert.deepEqual(wornOf(closet, 'shades'), ['shades', 'golden']) // golden still comes on by itself...
+  let w = putOn(closet, 'shades', 'pastel')
+  assert.deepEqual(wornOf(closet, w), ['shades', 'pastel']) // ...and a coat picked goes over it
+  const seen = []
+  for (let i = 0; i < 4; i++) { w = turnSlot(closet, w, 'coat'); seen.push(wornOf(closet, w).join(' ')) }
+  assert.deepEqual(seen, ['shades terminal', 'shades golden', 'shades', 'shades pastel']) // each coat owned, then the pet's own colour
+  assert.deepEqual(wornOf(closet, takeOff(closet, w, 'none')), ['pastel']) // a colour: taking everything off leaves it
+  assert.deepEqual(wornOf(closet, takeOff(closet, w, 'pastel')), ['shades'])
+})
+
+test('the Santa hat is sold in December only, by the clock of the machine; who has it keeps and wears it all year', () => {
+  const at = (/** @type {number} */ y, /** @type {number} */ m, /** @type {number} */ d, h = 12, min = 0, s = 0) => new Date(y, m - 1, d, h, min, s).getTime() // local time, as the rule reads it
+  assert.deepEqual(SHOP.filter(i => i.month).map(i => [i.id, i.month]), [['santa', 12]])
+  assert.deepEqual([at(2026, 11, 30), at(2026, 11, 30, 23, 59, 59), at(2026, 12, 1, 0), at(2026, 12, 1), at(2026, 12, 31), at(2026, 12, 31, 23, 59, 59), at(2027, 1, 1, 0), at(2027, 1, 1)].map(t => sells('santa', t)),
+    [false, false, true, true, true, true, false, false])
+  for (const t of [at(2026, 11, 30), at(2026, 12, 1), at(2026, 12, 31), at(2027, 1, 1)]) assert.deepEqual([sells('wizard', t), sells('golden', t), sells('nothing', t)], [true, true, true]) // the rule is the Santa hat's alone
+  const rich = { ...initialState(0.5), coins: 100 }
+  const buy = (/** @type {number} */ t) => reduce(rich, { type: 'buy', id: 'santa', t })
+  assert.deepEqual([at(2026, 11, 30), at(2026, 12, 1), at(2026, 12, 31), at(2027, 1, 1)].map(t => [buy(t).owned, buy(t).coins]), [[[], 100], [['santa'], 60], [['santa'], 60], [[], 100]])
+  // bought in December, in January it is still owned, in the closet and on
+  const mine = buy(at(2026, 12, 24)), later = reduce(mine, { type: 'prompt', t: at(2027, 1, 15) })
+  assert.deepEqual([later.owned, view(later, at(2027, 7, 1)).closet, wornOf(view(later, at(2027, 7, 1)).closet, 'santa'), shared(later).owned], [['santa'], ['santa'], ['santa'], ['santa']])
+})
+
+test("the founder's eggshell: a pet born on or before FOUNDER_UNTIL has it, one born after never, and who has it keeps it", () => {
+  const at = (/** @type {number[]} */ ...d) => new Date(d[0] ?? 0, (d[1] ?? 1) - 1, d[2] ?? 1, d[3] ?? 12, d[4] ?? 0, d[5] ?? 0).getTime() // the machine's own clock
+  const [y, m, d] = FOUNDER_UNTIL.split('-').map(Number), last = at(y ?? 0, m, d, 23, 59, 59), after = at(y ?? 0, m, (d ?? 0) + 1, 0, 0, 0)
+  assert.equal(FOUNDER_UNTIL, '2027-01-31') // provisional: the person sets it at launch
+  assert.deepEqual([at(2026, 11, 15), at(y ?? 0, m, d, 0), last, after, at(2027, 6, 1), 0].map(founder), [true, true, true, false, false, false]) // the whole last day, by the local date
+  assert.ok(!SOLD.includes(EGGSHELL) && !SHOP.some(i => i.id === 'eggshell') && EGGSHELL.slot === 'head' && EGGSHELL.price === 0) // never sold
+  // a newborn: born now, and a founder's when now is in time
+  const early = birth(initialState(1), last), late = birth(initialState(1), after)
+  assert.deepEqual([early.born, early.owned, late.born, late.owned], [last, ['eggshell'], after, []])
+  assert.deepEqual(wornOf(card(early).closet, ''), ['eggshell']) // with nothing else it is on by itself
+  // a pet of before this version kept no birth: its first start is taken, or an earlier moment that is known (its diary's first)
+  const old = { ...initialState(1), owned: ['cap'] }
+  assert.deepEqual([birth(old, last).owned, birth(old, after).owned, birth(old, after, last).owned, birth(old, after, last).born], [['eggshell', 'cap'], ['cap'], ['eggshell', 'cap'], last])
+  assert.equal(birth(old, last, after).born, last) // a moment after now is not known
+  // the birth, once known, is the rule's ground whatever the clock says later; and nothing changes twice
+  assert.deepEqual(birth(late, last).owned, [])
+  assert.equal(birth(early, after), early)
+  // owned, it survives the date: the store's reading keeps it, a merge keeps it, a buy refuses it, and it is still worn
+  const kept = shared({ ...early, coins: 500 })
+  assert.deepEqual([kept.owned, kept.born, shared({ owned: ['eggshell', 'cap'] }).owned], [['eggshell'], last, ['eggshell', 'cap']])
+  assert.deepEqual(merge(shared(late), shared(late), kept).owned, ['eggshell'])
+  assert.deepEqual([merge(shared(late), shared(late), kept).born, merge(kept, kept, shared({ ...kept, born: 0 })).born], [last, last]) // the earliest birth known
+  const later = reduce({ ...initialState(1), ...kept }, { type: 'buy', id: 'eggshell', t: at(2030, 1, 1) })
+  assert.deepEqual([later.owned, later.coins, wornOf(card(birth(later, at(2030, 1, 1))).closet, 'eggshell')], [['eggshell'], 500, ['eggshell']])
+  assert.deepEqual(wornOf(card({ ...later, owned: ['eggshell', 'cap'] }).closet, putOn(['eggshell', 'cap'], 'eggshell', 'cap')), ['cap']) // a hat takes its place, as any thing of the head
 })

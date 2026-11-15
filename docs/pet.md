@@ -21,18 +21,24 @@ As installed everything the pet says is fixed text on your screen: no model is a
 
 `/pet shop` shows the catalogue, `/pet shop <item>` buys and puts on, `/pet wear <item>` puts on or takes off. Nothing sold changes what the pet does.
 
-| Item | Stars | Item | Stars |
-|---|---|---|---|
-| `shades` | 10 | `headphones` | 45 |
-| `mug` | 12 | `backpack` | 50 |
-| `scarf` | 30 | `suitcase` | 60 |
-| `cap` | 30 | `sombrero` | 70 |
-| `lamp` | 40 | an animal | 100 |
-| | | `golden` coat | 300 |
+| Item | Stars | Item | Stars | Item | Stars |
+|---|---|---|---|---|---|
+| `shades` | 10 | `sneakers` | 35 | `suitcase` | 60 |
+| `mug` | 12 | `boots` | 35 | `laptop` | 65 |
+| `balloon` | 15 | `lamp` | 40 | `sombrero` | 70 |
+| `glasses` | 20 | `santa` (December) | 40 | `wizard` | 80 |
+| `eyepatch` | 20 | `headphones` | 45 | an animal | 100 |
+| `duck` | 25 | `hoodie` | 45 | `pastel` coat | 150 |
+| `partyhat` | 25 | `backpack` | 50 | `terminal` coat | 200 |
+| `scarf` | 30 | `wand` | 50 | `golden` coat | 300 |
+| `cap` | 30 | `skateboard` | 55 | | |
 
 - **Parts**: one thing on each of `head`, `face`, `body`, `feet`, and one `accessory` beside the pet.
 - **The crown** is not sold: a pet at its last stage has it.
-- **The golden coat** is a colour only. One pet in a hundred is born with it; `/pet wear golden` and `/pet wear plain` switch it.
+- **Coats** (`pastel`, `terminal`, `golden`) are a colour only. One pet in a hundred is born golden; `/pet wear <coat>` and `/pet wear plain` switch.
+- **The Santa hat** is sold from 1 to 31 December; once yours, it stays all year.
+- **The founder's eggshell** (`eggshell`, half the shell as a hat) is not sold: a pet hatched by 31 January 2027 has it, and keeps it for ever.
+  It is a keepsake kept in the pet's file on your machine, not something anyone checks or enforces.
 - **Animals**: the one your pet was born as is yours. Each other common one (penguin, chick, dog, bunny, fox, cactus) is unlocked once with `/pet shop <animal>`; `/pet animal <name>` then switches freely. Name and character stay. A rare seventh is not sold.
 - **Skin packs**: more animals, things and coats from JSON files in `~/.claude/cachito-skins/`. Data, never code; free. See [skins.md](skins.md).
 
@@ -103,6 +109,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet comments <on\|off>` | comments by a small model, on your tokens |
 | `/pet say <text>` | speak to the pet: [comments.md](comments.md) |
 | `/pet diary [clear]` | show or empty the diary |
+| `/pet share` | a small card in plain text to paste in a post: the pet in block characters, its name, animal, character, stars and what it wears; nothing about your work |
 | `/pet lang <en\|es\|pt\|zh>` | the pet's language |
 | `/pet audit [days]` | where your sessions' money went, from your local transcripts |
 | `/pet adopt` | take your old `/buddy`'s name and personality: [privacy.md](privacy.md) |

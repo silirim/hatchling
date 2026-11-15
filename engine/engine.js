@@ -63,6 +63,7 @@ export const RULES = {
   animals: ['penguin', 'chick', 'dog', 'bunny', 'fox', 'cactus'], // the animals that can be unlocked: the six common ones of sprites/zoo.py. The rare one is had only by who is born as it, and the ones of a skin pack by who installed it
   animalPrice: 100,        // what unlocking one costs, once: the animal a pet is born as is free, and one unlocked stays
   goldenPrice: 300,        // what the golden coat costs who was not born with it: a colour and nothing else, about a week of full days
+  coatPrices: /** @type {Record<string, number>} */ ({ pastel: 150, terminal: 200 }), // the plain coats: a colour too, with no glint and no sparkle, and nobody is born with one
 
   // Coins and affection. Every coin earned by use or by a cuddle is also a point of affection; affection is never spent and never drops.
   // No streak of days, no timer, no random prize: the same use always earns the same.
@@ -74,7 +75,7 @@ export const RULES = {
   coinsWelcome: 10,        // the gift at a return after backAfterMs: coins only, once per absence
   // What the shop asks. Only things to wear: nothing bought changes what the pet does. The cheapest come within a first session
   // (5 + a few turns or cuddles), the others in 1 to 3 days at 20 to 41 coins a day
-  prices: /** @type {Record<string, number>} */ ({ shades: 10, mug: 12, scarf: 30, cap: 30, sneakers: 35, lamp: 40, headphones: 45, backpack: 50, skateboard: 55, suitcase: 60, sombrero: 70 }),
+  prices: /** @type {Record<string, number>} */ ({ shades: 10, mug: 12, balloon: 15, glasses: 20, eyepatch: 20, duck: 25, partyhat: 25, scarf: 30, cap: 30, sneakers: 35, boots: 35, lamp: 40, santa: 40, headphones: 45, hoodie: 45, backpack: 50, wand: 50, skateboard: 55, suitcase: 60, laptop: 65, sombrero: 70, wizard: 80 }),
   heartsAt: [10, 50, 150, 300, 500], // affection at which each of the five hearts fills
   // The stages: days the pet was used on, and affection gathered. Not the cache, not how lean a chat was
   grownAt: { days: 3, affection: 60 },
@@ -151,37 +152,77 @@ const RANK = /** @type {CheerKind[]} */ (['evolve', 'lean'])
 /** The parts a thing is worn on, in the order they are told: one thing on each at a time. `accessory` is a thing standing on the ground next to the pet. */
 export const SLOTS = ['head', 'face', 'body', 'feet', 'accessory', 'coat']
 
-/** The shop: things to wear, bought with coins, each with its part. The order is the catalogue's, and the one of the drawings (sprites/zoo.py WEAR). */
+/**
+ * The shop: things to wear, bought with coins, each with its part. The order is the catalogue's, and the one of the drawings (sprites/zoo.py WEAR).
+ * `month` (1 to 12) is the only month a thing is sold in: see `sells`.
+ * @type {{ id: string, name: string, slot: string, price: number, month?: number }[]}
+ */
 export const SHOP = [
   { id: 'shades', name: 'sunglasses', slot: 'face' },
   { id: 'mug', name: 'a coffee mug', slot: 'accessory' },
+  { id: 'balloon', name: 'a balloon', slot: 'accessory' },
+  { id: 'glasses', name: 'round glasses', slot: 'face' },
+  { id: 'eyepatch', name: 'an eye patch', slot: 'face' },
+  { id: 'duck', name: 'a rubber duck', slot: 'accessory' },
+  { id: 'partyhat', name: 'a party hat', slot: 'head' },
   { id: 'scarf', name: 'a red scarf', slot: 'body' },
   { id: 'cap', name: 'a travel cap', slot: 'head' },
   { id: 'sneakers', name: 'sneakers', slot: 'feet' },
+  { id: 'boots', name: 'boots', slot: 'feet' },
   { id: 'lamp', name: 'a desk lamp', slot: 'accessory' },
+  { id: 'santa', name: 'a Santa hat', slot: 'head', month: 12 },
   { id: 'headphones', name: 'headphones', slot: 'head' },
+  { id: 'hoodie', name: 'a hoodie', slot: 'body' },
   { id: 'backpack', name: 'a backpack', slot: 'accessory' },
+  { id: 'wand', name: 'a magic wand', slot: 'accessory' },
   { id: 'skateboard', name: 'a skateboard', slot: 'feet' },
   { id: 'suitcase', name: 'a suitcase', slot: 'accessory' },
+  { id: 'laptop', name: 'a laptop', slot: 'accessory' },
   { id: 'sombrero', name: 'a sombrero', slot: 'head' },
+  { id: 'wizard', name: "a wizard's hat", slot: 'head' },
 ].map(i => ({ ...i, price: RULES.prices[i.id] ?? 0 }))
+
+/**
+ * Whether the shop sells a thing at a moment: always, but for one with a `month`, sold only from the first to the last day of that
+ * month by the clock of the person's machine. Who has it keeps it and wears it all year.
+ * @param {string} id @param {number} t
+ */
+export function sells(id, t) {
+  const month = SHOP.find(i => i.id === id)?.month
+  return month === undefined || new Date(t).getMonth() + 1 === month
+}
 
 /** The crown: not sold. A pet grown to its last stage has it, on its head unless the person takes it off or picks a hat. */
 export const CROWN = { id: 'crown', name: 'the crown', slot: 'head', price: 0 }
 /** The golden coat: the pet's own colour turned to gold, on any animal at any stage. Sold apart from the things to wear, and a pet born golden has it. */
 export const GOLDEN = { id: 'golden', name: 'a golden coat', slot: 'coat', price: RULES.goldenPrice }
-/** Everything that can be bought: the things to wear, then the coat. */
-export const SOLD = [...SHOP, GOLDEN]
+/** The coats, cheapest first. The two plain ones are a colour like the golden one, with no glint and no sparkle; they go on by choice only. */
+export const COATS = [
+  { id: 'pastel', name: 'a pastel coat', slot: 'coat', price: RULES.coatPrices.pastel ?? 0 },
+  { id: 'terminal', name: 'a terminal coat', slot: 'coat', price: RULES.coatPrices.terminal ?? 0 },
+  GOLDEN,
+]
+/** Everything that can be bought: the things to wear, then the coats. */
+export const SOLD = [...SHOP, ...COATS]
 /**
- * Everything a pet can have on: the crown, then what is sold in its order, then what the person's skin packs bring (`extend`).
+ * The founder's keepsake: half the shell the pet hatched from, worn as a hat. Not sold. A pet born on or before FOUNDER_UNTIL has it
+ * (`birth`), and who has it keeps it for ever. The one place the date is written: a local date of the person's machine.
+ * Provisional: the person sets it at launch.
+ */
+export const FOUNDER_UNTIL = '2027-01-31'
+export const EGGSHELL = { id: 'eggshell', name: 'half an eggshell', slot: 'head', price: 0 }
+/** What a pet can own, in the order it is kept and told: the keepsake, then what is sold. */
+export const OWNABLE = [EGGSHELL, ...SOLD]
+/**
+ * Everything a pet can have on: the crown, the founder's eggshell, then what is sold in its order, then what the person's skin packs bring (`extend`).
  * @type {{ id: string, name: string, slot: string, price: number, pack?: string, names?: Record<string, string> }[]}
  */
-export const WEARABLE = [CROWN, ...SOLD]
+export const WEARABLE = [CROWN, EGGSHELL, ...SOLD]
 /** The things and coats of the person's skin packs (engine/skins.js): theirs from the moment the pack is installed. Never bought, never kept in the pet. */
 let extra = /** @type {string[]} */ ([])
 /** Sets what the skin packs bring, in place of what they brought before. @param {{ id: string, name: string, slot: string, price: number, pack: string, names: Record<string, string> }[]} items */
 export function extend(items) {
-  WEARABLE.splice(1 + SOLD.length, WEARABLE.length, ...items)
+  WEARABLE.splice(1 + OWNABLE.length, WEARABLE.length, ...items)
   extra = items.map(i => i.id)
 }
 /** In what is kept: the head was left bare by choice, so the crown stays off. */
@@ -211,7 +252,7 @@ export function wornOf(closet, wear) {
   const have = WEARABLE.filter(i => closet.includes(i.id)), said = String(wear ?? '').split(/\s+/).filter(Boolean)
   const on = new Map()
   for (const id of said) { const item = have.find(i => i.id === id); if (item) on.set(item.slot, item.id) }
-  const last = have.filter(i => i !== CROWN && i !== GOLDEN && !i.pack).at(-1) // a thing of a pack is put on by choice only
+  const last = have.filter(i => i !== CROWN && i.slot !== GOLDEN.slot && !i.pack).at(-1) // a coat, or a thing of a pack, is put on by choice only
   if (!on.size && last && !said.includes('none') && !said.includes(BARE) && !(last.slot === 'head' && have.includes(CROWN))) on.set(last.slot, last.id) // a hat nobody named does not hide the crown
   if (!on.has('head') && have.includes(CROWN) && !said.includes(BARE)) on.set('head', CROWN.id)
   if (have.includes(GOLDEN) && !said.includes(PLAIN) && !on.has(GOLDEN.slot)) on.set(GOLDEN.slot, GOLDEN.id) // a coat of a pack, picked, goes over it
@@ -224,7 +265,7 @@ export const putOn = (closet, wear, id) => kept(closet, closet.includes(id) && s
 /** What is kept with one thing taken off, or with `none` everything worn: the coat is a colour, and stays as it is. @param {string[]} closet @param {string} wear @param {string} id */
 export const takeOff = (closet, wear, id) => kept(closet, wornOf(closet, wear).filter(x => id === 'none' ? slotOf(x) === GOLDEN.slot : x !== id))
 
-/** One part turned: the next thing owned for it (the crown first, then the shop's order), and after the last one nothing: for the coat, golden and then plain. @param {string[]} closet @param {string} wear @param {string} slot */
+/** One part turned: the next thing owned for it (the crown first, then the shop's order), and after the last one nothing: for the coat, each one owned and then plain. @param {string[]} closet @param {string} wear @param {string} slot */
 export function turnSlot(closet, wear, slot) {
   const have = WEARABLE.filter(i => i.slot === slot && closet.includes(i.id)).map(i => i.id)
   const now = wornOf(closet, wear).find(id => slotOf(id) === slot)
@@ -235,6 +276,24 @@ export function turnSlot(closet, wear, slot) {
 /** The day a moment falls in, by the clock of the person's machine. @param {number} t */
 export const dayOf = (t) => Math.floor((t - new Date(t).getTimezoneOffset() * 60_000) / 86_400_000)
 
+/** The date a moment falls on, by the clock of the person's machine: `2027-01-31`. @param {number} t */
+const dateOf = (t) => { const d = new Date(t); return [String(d.getFullYear()).padStart(4, '0'), d.getMonth() + 1, d.getDate()].map(n => String(n).padStart(2, '0')).join('-') }
+
+/** Whether a pet born at a moment is a founder's: born on or before FOUNDER_UNTIL, the whole of that day included. @param {number} born */
+export const founder = (born) => born > 0 && dateOf(born) <= FOUNDER_UNTIL
+
+/**
+ * A pet with its birth known and what comes with it. One without a birth (a newborn, or a pet of a version before this one) takes
+ * `known`, an earlier moment it is known to have lived at, else `now`: it was born by then. A founder's pet has the eggshell from
+ * then on; a pet born later never gets it, and one that has it keeps it whatever the date: nothing here takes it away.
+ * @template {{ born: number, owned: string[] }} T @param {T} s @param {number} now @param {number} [known] @returns {T}
+ */
+export function birth(s, now, known = 0) {
+  const born = s.born > 0 ? s.born : known > 0 && known < now ? known : now
+  const owned = founder(born) && !s.owned.includes(EGGSHELL.id) ? [EGGSHELL.id, ...s.owned] : s.owned
+  return born === s.born && owned === s.owned ? s : { ...s, born, owned }
+}
+
 /** How many of the five hearts an affection fills. @param {number} affection */
 export const hearts = (affection) => RULES.heartsAt.filter(n => affection >= n).length
 
@@ -242,6 +301,7 @@ export const hearts = (affection) => RULES.heartsAt.filter(n => affection >= n).
 export function initialState(roll = Math.random()) {
   return {
     /** @type {'golden' | null} */ variant: roll < RULES.rareChance ? 'golden' : null,
+    born: 0,        // when the pet was born; 0 until the adapter says (`birth`)
     life: { input: 0, cacheRead: 0 }, // all-time token counters, for the pet card
     turn: 0,
     coins: 0,
@@ -427,9 +487,9 @@ export function reduce(prev, e) {
       if (s.dayCuddles < RULES.coinCuddlesDay) { s.dayCuddles++; gain(RULES.coinsCuddle) }
       break
 
-    case 'buy': { // refused without a word when unknown, owned already or too dear: the adapter says why
+    case 'buy': { // refused without a word when unknown, owned already, too dear or out of its month: the adapter says why
       const item = SOLD.find(i => i.id === e.id)
-      if (item && !s.owned.includes(item.id) && s.coins >= item.price) { s.coins -= item.price; s.owned.push(item.id) }
+      if (item && !s.owned.includes(item.id) && s.coins >= item.price && sells(item.id, e.t)) { s.coins -= item.price; s.owned.push(item.id) }
       break
     }
 
@@ -609,7 +669,7 @@ export function card(s) {
 // One pet per person. Chats open together each hold a copy of the pet; the store holds the shared one. What is shared is listed here:
 // everything else (the session, the notes and the cheer on screen) is the chat's own. `turn` is kept in the store only to start a new
 // chat from: each chat counts its own, since its notes expire by it.
-/** @typedef {{ variant: 'golden' | null, life: { input: number, cacheRead: number }, turn: number, coins: number, affection: number, days: number, day: number, lately: number[], dayTurns: number, dayCuddles: number, cuddledAt: number, giftAt: number, owned: string[], animals: string[], lastCheerAt: number }} Shared */
+/** @typedef {{ variant: 'golden' | null, born: number, life: { input: number, cacheRead: number }, turn: number, coins: number, affection: number, days: number, day: number, lately: number[], dayTurns: number, dayCuddles: number, cuddledAt: number, giftAt: number, owned: string[], animals: string[], lastCheerAt: number }} Shared */
 
 const MAX_TIME = 8.64e15 // the last moment a date can hold
 const DEBT_MAX = 100_000 // how far under zero the stars are let go
@@ -630,6 +690,7 @@ export function shared(s) {
   const had = Array.isArray(s?.owned) ? s.owned : Object.keys(RULES.legacyUnlocks).filter(id => n(s?.efficientSessions) >= (RULES.legacyUnlocks[id] ?? Infinity))
   return {
     variant: s?.variant === 'golden' ? 'golden' : null,
+    born: when(s?.born),
     life: { input: count(s?.life?.input), cacheRead: count(s?.life?.cacheRead) },
     turn: count(s?.turn),
     // the stars can be under zero for a while: two chats spent the same ones at once (`merge`)
@@ -642,7 +703,7 @@ export function shared(s) {
     dayCuddles: count(s?.dayCuddles),
     cuddledAt: when(s?.cuddledAt),
     giftAt: when(s?.giftAt),
-    owned: SOLD.map(i => i.id).filter(id => had.includes(id) || (id === GOLDEN.id && s?.variant === 'golden')),
+    owned: OWNABLE.map(i => i.id).filter(id => had.includes(id) || (id === GOLDEN.id && s?.variant === 'golden')),
     animals: RULES.animals.filter(id => Array.isArray(s?.animals) && s.animals.includes(id)),
     lastCheerAt: when(s?.lastCheerAt),
   }
@@ -672,6 +733,7 @@ export function merge(stored, base, mine) {
   const gift = mine.giftAt > base.giftAt && stored.giftAt > base.giftAt ? RULES.coinsWelcome : 0
   return {
     variant: stored.variant ?? mine.variant,
+    born: stored.born && mine.born ? Math.min(stored.born, mine.born) : stored.born || mine.born, // the earliest known
     life: { input: add(stored.life.input, base.life.input, mine.life.input), cacheRead: add(stored.life.cacheRead, base.life.cacheRead, mine.life.cacheRead) },
     turn: Math.max(stored.turn, mine.turn),
     coins: stored.coins + mine.coins - base.coins - twice - gift, // not held at zero: see the debt above
@@ -683,7 +745,7 @@ export function merge(stored, base, mine) {
     dayCuddles: today('dayCuddles'),
     cuddledAt: Math.max(stored.cuddledAt, mine.cuddledAt),
     giftAt: Math.max(stored.giftAt, mine.giftAt),
-    owned: SOLD.map(i => i.id).filter(id => stored.owned.includes(id) || mine.owned.includes(id)),
+    owned: OWNABLE.map(i => i.id).filter(id => stored.owned.includes(id) || mine.owned.includes(id)),
     animals: RULES.animals.filter(id => stored.animals.includes(id) || mine.animals.includes(id)),
     lastCheerAt: Math.max(stored.lastCheerAt, mine.lastCheerAt),
   }

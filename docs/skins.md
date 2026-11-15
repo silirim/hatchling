@@ -118,6 +118,7 @@ Every animal can use these shared colours:
 | `S` | dark slate | | `n` | brown |
 | `h` | tan | | `q` | cyan |
 | `i` | off-white | | `x` | pale glint |
+| `N` | dark brown | | | |
 
 All of them but `W` and `r` are **fixed**: a tint or a coat never changes them. Things to wear are drawn with the fixed colours
 only, so a hat looks the same on every animal and under every coat.
@@ -216,6 +217,9 @@ rows are above the head (down to -2), rows 10 and 11 are under the feet, columns
 
 Which drawing is used for an item on an animal: the item's `draw` for that animal, else the animal's `wear` for that item,
 else the item's `fallback`.
+
+A thing of the `body` drawn above the animal's `neck` (a hood) gives way to a hat: while a thing is on the `head`, its
+pixels above the neck are not drawn. The crown is not a hat for this.
 
 ### Coat
 

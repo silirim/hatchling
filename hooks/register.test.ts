@@ -1,5 +1,5 @@
 import { expect, mock, test as kitTest } from 'claude-code/testing'
-import { dayOf, RULES, SHOP, SOLD } from '../engine/engine.js'
+import { dayOf, RULES, SHOP, SOLD, EGGSHELL, FOUNDER_UNTIL } from '../engine/engine.js'
 import zoo from '../sprites/zoo.js'
 import { BUILTIN, REG, marksFor } from '../engine/skins.js'
 import { open as diaryOpened, whole as diaryOf, bandOf, dated } from '../engine/diary.js'
@@ -362,7 +362,7 @@ test('the companion: a greeting from the marks, a mark of its own with nothing o
   await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
   let b = await band()
   expect(b.texts).toContain('Miro: a chat here stopped mid-turn 20 min\nago. pick it up?')
-  expect(b.buttons).toEqual(['pet', 'resume']) // the pet's own in the row of the name, the phrase's under the bubble
+  expect(b.buttons).toEqual(['skin', 'pet', 'resume']) // (a newborn of these days has the founder's eggshell, so a skin to turn) the pet's own in the row of the name, the phrase's under the bubble
   await b.ui.press({ key: 'fix' })
   expect(filled).toBe('/resume')
   await b.ui.unmount()
@@ -405,7 +405,7 @@ test('the companion: a greeting from the marks, a mark of its own with nothing o
   await $.turn.complete({ answer: '', reason: 'answer' } as any)
   b = await band()
   expect(b.texts).toContain('long chat: shall we put our thoughts in\norder?')
-  expect(b.buttons).toEqual(['pet', 'outline'])
+  expect(b.buttons).toEqual(['skin', 'pet', 'outline'])
   await b.ui.press({ key: 'fix' })
   expect(filled).toMatch(/^Write an outline of this chat that I can paste into a new one\..*where we are.*where we need to get to.*still missing/)
   await b.ui.unmount()
@@ -499,11 +499,14 @@ const CONFIG = { userID: 'u-123', oauthAccount: { emailAddress: 'me@example.com'
 
 const SKINS = '/home/me/.claude/cachito-skins'
 /** The kit of a person at the prompt whose config holds `config`; `disk` is the store, `state` the session's, `reads` and `writes` the files touched. */
-function home(on: any, config: object, prefs?: object) {
+const LATE = new Date(2027, 5, 1, 12).getTime() // a birth after FOUNDER_UNTIL
+function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 12, 12)) {
   const k = { env: {} as Record<string, string>, box: '', disk: (prefs ? { prefs: { voiceAsked: true, ...prefs } } : {}) as Record<string, any>, state: {} as Record<string, { value: unknown, version: number }>, reads: [] as string[], writes: [] as string[], toasts: [] as string[], filled: '', sets: [] as string[], lost: false, skins: {} as Record<string, unknown> | null, skinReads: [] as string[], meanwhile: null as (() => void) | null }
-  const clock = mock.clock(on, { now: Date.UTC(2026, 10, 12, 12) })
+  const clock = mock.clock(on, { now })
   // `meanwhile` is what another chat does right after each read of this one, so before the write that follows it; `lost` is a store that cannot be read; `sets` the keys written
-  on('store.get', (_: any, e: any) => { if (k.lost) throw new Error('unreadable'); const value = structuredClone(k.disk[e.key]); k.meanwhile?.(); return { value } })
+  // a pet a test puts in the store with no birth is one born after the founders' date (LATE): it has no eggshell, as every pet born
+  // from February 2027 on. The tests of the eggshell say `born` themselves, or start from an empty store
+  on('store.get', (_: any, e: any) => { if (k.lost) throw new Error('unreadable'); const kept = k.disk[e.key]; if (e.key === 'pet' && kept && typeof kept === 'object' && kept.born === undefined) kept.born = LATE; const value = structuredClone(kept); k.meanwhile?.(); return { value } })
   on('store.set', (_: any, e: any) => { if ((k as any).ro) throw new Error('read-only'); k.sets.push(e.key); k.disk[e.key] = structuredClone(e.value); return { value: undefined } })
   on('store.keys', () => { if (k.lost) throw new Error('unreadable'); return { value: Object.keys(k.disk) } })
   on('store.delete', (_: any, e: any) => { delete k.disk[e.key]; return { value: undefined } })
@@ -1054,7 +1057,7 @@ test('the golden coat: the last row of the shop for 300 stars, a part of the ski
   const WHITE = 0xf5f5f5, GOLD = 0xffcb14, GLINT = 0xfff6cf // the bunny's white, the same under the golden coat, and the pale glint on it
 
   // not owned: sold apart from the things to wear, after them, and nothing of it on the pet
-  expect(await cardOf($, 'shop')).toMatch(/\n  sombrero +a sombrero +70  head\n\n  golden +a golden coat +300  coat\n\n  penguin +penguin +100  animal\n/)
+  expect(await cardOf($, 'shop')).toMatch(/\n  wizard +a wizard's hat +80  head\n\n  pastel +a pastel coat +150  coat\n  terminal +a terminal coat +200  coat\n  golden +a golden coat +300  coat\n\n  eggshell +half an eggshell +–  head +founders only\n\n  penguin +penguin +100  animal\n/)
   expect(await cardOf($, 'wear golden')).toMatch(/^Not yours yet: golden\./)
   const plain = await look()
   expect([plain.inks.has(WHITE), plain.inks.has(GOLD), plain.keys.includes('skin')]).toEqual([true, false, false])
@@ -1067,7 +1070,7 @@ test('the golden coat: the last row of the shop for 300 stars, a part of the ski
   const golden = await look()
   expect([golden.inks.has(WHITE), golden.inks.has(GOLD), golden.inks.has(GLINT), plain.inks.has(GLINT)]).toEqual([false, true, true, false])
   expect(await cardOf($)).toMatch(/^Miro, Cachito the golden bunny, .*(\n.*)*\n10 stars; owns a golden coat\. \/pet shop\n  wears coat: a golden coat$/m)
-  expect(await cardOf($, 'shop')).toMatch(/\n\n  golden +a golden coat +300  coat +yours, worn\n\n(.*\n)+\nMiro wears coat: a golden coat\.\n/)
+  expect(await cardOf($, 'shop')).toMatch(/\n  terminal .*\n  golden +a golden coat +300  coat +yours, worn\n\n(.*\n)+\nMiro wears coat: a golden coat\.\n/)
   expect(await cardOf($, 'buy golden')).toMatch(/^You already have a golden coat/)
 
   // back to the usual colour and to golden again, by command and by the coat's button; the choice is kept
@@ -1286,10 +1289,10 @@ test('the shop: stars buy things to wear, the catalogue says what is owned, and 
   /** The drawing with the item on, and with it off, at the same instant. */
   const both = async (item: string) => { const worn = await raster(); await cardOf($, `wear ${item}`); const off = await raster(); await cardOf($, `wear ${item}`); return [worn, off] }
 
-  expect(SHOP.map(i => [i.id, i.slot, i.name])).toEqual(Object.entries(zoo.pack.items).map(([id, i]) => [id, i.part, i.name.en])) // every item of the catalogue has its drawing, in the same order, with the same part and name
+  expect([...SHOP, EGGSHELL].map(i => [i.id, i.slot, i.name])).toEqual(Object.entries(zoo.pack.items).map(([id, i]) => [id, i.part, i.name.en])) // every item of the catalogue has its drawing, in the same order, with the same part and name
   const shop = await cardOf($, 'shop')
   expect(shop).toMatch(/^CACHITO SHOP · you have 25 stars$/m)
-  for (const i of SHOP) expect(shop).toMatch(new RegExp(`^  ${i.id} +${i.name} +${i.price}  ${i.slot}$`, 'm')) // each thing with its part, named as the skin menu names it
+  for (const i of SHOP) expect(shop).toMatch(new RegExp(`^  ${i.id} +${i.name} +${i.price}  ${i.slot}${i.month ? ' +in December' : ''}$`, 'm')) // each thing with its part, named as the skin menu names it
   expect(shop).not.toMatch(/crown|beside|neck/) // the crown is not sold
   expect(shop).not.toMatch(/Miro wears/) // nothing owned: nothing to tell
   expect(shop).toContain('Stars: 1 a turn (the first 30 of a day), 2 a cuddle (the first 3 of a day), 5 at the first use of a day.')
@@ -1651,12 +1654,12 @@ for (const [version, held] of Object.entries(RELOADS)) test(`a reload over the s
   for (let i = 0; i < 12; i++) { await k.clock.advance(5_000); await band() }
 
   // the store is today's: the old counters are gone, what the efficient sessions had unlocked is owned, the budget is not kept
-  expect(Object.keys(k.disk.pet).sort()).toEqual(['affection', 'coins', 'cuddledAt', 'day', 'dayCuddles', 'dayTurns', 'days', 'giftAt', 'lastCheerAt', 'life', 'owned', 'turn', 'variant'].concat('animals', 'lately').sort())
-  expect(k.disk.pet).toMatchObject({ owned: ['shades', 'mug', 'scarf', 'sombrero'], coins: 0, affection: 12, days: 1 })
+  expect(Object.keys(k.disk.pet).sort()).toEqual(['affection', 'coins', 'cuddledAt', 'day', 'dayCuddles', 'dayTurns', 'days', 'giftAt', 'lastCheerAt', 'life', 'owned', 'turn', 'variant'].concat('animals', 'lately', 'born').sort())
+  expect(k.disk.pet).toMatchObject({ owned: ['eggshell', 'shades', 'mug', 'scarf', 'sombrero'], coins: 0, affection: 12, days: 1 }) // a pet of before the founders' date: this version's first start gives it the eggshell
   expect(Object.keys(k.disk).filter(key => key.startsWith('pref.') && !KNOWN.includes(key.slice(5)))).toEqual([]) // no key for a budget or a trait
   expect(k.disk.prefs).toEqual(stored) // that version's object is as it was: this one writes each preference under its own key
   expect(prefsOf(k.disk).wear).toMatch(/mug/)
-  expect(await card()).toMatch(/owns sunglasses, a coffee mug, a red scarf, a sombrero\./)
+  expect(await card()).toMatch(/owns half an eggshell, sunglasses, a coffee mug, a red scarf, a sombrero\./)
 })
 
 // The voice. The model is simulated: `reply` is what the next call resolves, `calls` what was asked.
@@ -1995,8 +1998,8 @@ test('the card, the shop and the short replies are in the language; command name
   // every price ends in the same column on screen, though the names differ in letters: 墨西哥草帽 is five characters and ten columns
   const rows = shop.split('\n').filter(r => /^  \w+ +\S+ +\d+/.test(r))
   expect(rows.length).toBe(SOLD.length + RULES.animals.length) // the things to wear, the coat, and the animals
-  expect(shop).toMatch(/\n  sombrero .*\n\n  golden +金色毛色 +300  毛色\n\n/) // the coat in a row of its own, last
-  const col = (r: string) => { const upTo = r.slice(0, r.search(/\d+(?=  \S+(  已拥有.*)?$)/)); return [...upTo].reduce((n, ch) => n + (/[⺀-鿿＀-｠]/.test(ch) ? 2 : 1), 0) + /\d+/.exec(r.slice(upTo.length))![0].length }
+  expect(shop).toMatch(/\n  wizard .*\n\n  pastel .*\n  terminal .*\n  golden +金色毛色 +300  毛色\n\n/) // the coats in rows of their own, last
+  const col = (r: string) => { const upTo = r.slice(0, r.search(/\d+(?=  \S+( +(已拥有.*|12 月出售))?$)/)); return [...upTo].reduce((n, ch) => n + (/[⺀-鿿＀-｠]/.test(ch) ? 2 : 1), 0) + /\d+/.exec(r.slice(upTo.length))![0].length }
   expect(new Set(rows.map(col)).size).toBe(1)
   expect(shop).toMatch(/\n  mug +咖啡杯 +\d+  配饰  已拥有，穿戴中\n/)
   expect(shop).toMatch(/\n\nMiro 现在的装扮：配饰 咖啡杯。\n\n\/pet shop <item> 购买。\/pet wear <item> 戴上，已经戴着就取下；\/pet wear none 全部取下。每个部位一件。/)
@@ -2028,14 +2031,14 @@ test('the bubble in Chinese: wrapped and bordered by width on screen, two column
   const hello = await bubble()
   expect(hello.lines).toEqual(['Miro: 今天的第一场对话。又开始了'])
   expect(hello.width).toBe(6 + 26 + 4)
-  expect(hello.buttons).toEqual(['摸摸']) 
+  expect(hello.buttons).toEqual(['装扮', '摸摸']) 
   // a note: the advice is 17 characters and a stop, 36 columns, one line; in letters it would be 18
   await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
   await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
   const note = await bubble()
   expect(note.lines).toEqual(['重复读取，内容没变：a.txt', '只是提醒。按钮会让助手用已有的内容。'])
   expect(note.width).toBe(36 + 4)
-  expect(note.buttons).toEqual(['摸摸', '修复'])
+  expect(note.buttons).toEqual(['装扮', '摸摸', '修复'])
   expect(note.link).toBe('指南')
   // a line of 26 characters is 52 columns: it wraps after 22, and the border hugs 44
   elsewhere(k.disk, { voiceAsked: false })
@@ -2504,7 +2507,7 @@ test('animals cost stars: the one a pet is born as is free, each other is unlock
   expect((await look()).keys).not.toContain('skin')
   expect(await cardOf($, 'animal')).toBe('Pick one of: fox.\nOthers, 100 stars each, once: penguin, chick, dog, bunny, cactus. /pet shop <animal> unlocks one.')
   const shop = await cardOf($, 'shop')
-  expect(shop).toMatch(/\n  golden +a golden coat +300  coat\n\n  penguin +penguin +100  animal\n  chick +chick +100  animal\n  dog +dog +100  animal\n  bunny +bunny +100  animal\n  fox +fox +100  animal +yours, shown\n  cactus +cactus +100  animal\n\n/)
+  expect(shop).toMatch(/\n  golden +a golden coat +300  coat\n\n  eggshell +half an eggshell +–  head +founders only\n\n  penguin +penguin +100  animal\n  chick +chick +100  animal\n  dog +dog +100  animal\n  bunny +bunny +100  animal\n  fox +fox +100  animal +yours, shown\n  cactus +cactus +100  animal\n\n/)
   expect(shop).not.toMatch(/axolotl/) // the rare one is not sold
   expect(shop).toContain('Animals: the one your pet was born as is free; each other is unlocked once and stays yours. /pet shop <animal> unlocks, /pet animal <name> switches.')
   // not unlocked: /pet animal does not spend stars, it says how
@@ -2734,7 +2737,7 @@ test('E23: the question about the comments: on a surface with no buttons it says
   await cardOf($, 'pet') // a cuddle: its line is over the question for 5 seconds
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/May I comment/)
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin', 'pet'])
   await ui.unmount()
   await k.clock.advance(6_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -2747,10 +2750,10 @@ test('a pack animal with a larger body (an imported Codex pet): drawn at its own
   k.disk.pet = { coins: 0, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['shades', 'mug', 'skateboard', 'cap'] }
   const W = 20, H = 22, row = (y: number) => y < 2 ? '.'.repeat(W) : y === 8 ? '...AAAkAAAAAAkAAA...' : `...${'A'.repeat(W - 6)}...`
   const big = Array.from({ length: H }, (_, y) => row(y))
-  k.skins = { 'codex-duck.json': { format: 1, id: 'codex-duck', name: 'Pixel Duck', credits: { author: 'Some One', license: 'CC BY 4.0', source: 'https://example.org/duck' }, animals: { duck: { name: { en: 'Pixel Duck' }, size: [W, H], palette: { A: '#e0e8f0' }, states: { adult: { frames: [big] }, sleep: { frames: [big] } } } } } }
+  k.skins = { 'codex-duck.json': { format: 1, id: 'codex-duck', name: 'Pixel Duck', credits: { author: 'Some One', license: 'CC BY 4.0', source: 'https://example.org/duck' }, animals: { 'pixel-duck': { name: { en: 'Pixel Duck' }, size: [W, H], palette: { A: '#e0e8f0' }, states: { adult: { frames: [big] }, sleep: { frames: [big] } } } } } }
   await $.session.start(START)
-  expect(await cardOf($, 'skins')).toContain('  codex-duck.json  Pixel Duck (codex-duck)  animals: duck\n                   author: Some One, license: CC BY 4.0, source: https://example.org/duck')
-  await cardOf($, 'animal duck')
+  expect(await cardOf($, 'skins')).toContain('  codex-duck.json  Pixel Duck (codex-duck)  animals: pixel-duck\n                   author: Some One, license: CC BY 4.0, source: https://example.org/duck')
+  await cardOf($, 'animal pixel-duck')
   const raster = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; await ui.unmount(); const d = new Uint32Array(Uint8Array.from(atob(String(r.cells)), ch => ch.charCodeAt(0)).buffer); return { columns: Number(r.columns), rows: Number(r.rows), inks: new Set([...d].filter((_, i) => i % 3 !== 0)) } }
   await cardOf($, 'wear none')
   expect(await raster()).toMatchObject({ columns: W, rows: H / 2 }) // bare, the body alone: 20 columns by 11 rows of text
@@ -2805,7 +2808,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'lang', 'diary', 'audit', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'lang', 'share', 'diary', 'audit', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
@@ -2824,6 +2827,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
 
 test('which chat needs me: beside the name how many other chats work, wait or ask; a word when one needs the person; /pet chats lists them; off turns it all off', async ($, on) => {
   const k = voiceKit($, on, { voice: false })
+  k.disk.pet = { owned: [] } // a pet with nothing to wear: the row of the name has the one button
   const T0 = Date.UTC(2026, 10, 12, 12), MIN = 60_000
   let verdict = 'ask'
   on('tool.check', () => ({ decision: verdict }) as any)
@@ -2956,4 +2960,229 @@ test('which chat needs me: under the bench no chat leaves a mark and there is no
   await k.clock.advance(30_000)
   expect(Object.keys(k.disk).filter(key => key.startsWith('chat'))).toEqual([])
   expect(await cardOf($, 'chats')).toBe('No board of the chats: under the bench no chat leaves a mark.')
+})
+
+test('the Santa hat out of December: the catalogue says "in December" in the four languages and nothing is sold', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.disk.pet = { coins: 100, affection: 100, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
+  await $.session.start(START) // 12 November
+  expect(await cardOf($, 'shop')).toMatch(/^  santa +a Santa hat +40  head +in December$/m)
+  for (const [lang, name, when] of [['es', 'un gorro de Papá Noel', 'en diciembre'], ['pt', 'um gorro de Papai Noel', 'em dezembro'], ['zh', '圣诞帽', '12 月出售'], ['en', 'a Santa hat', 'in December']]) {
+    await cardOf($, `lang ${lang}`)
+    expect(await cardOf($, 'shop')).toMatch(new RegExp(`^  santa +${name} +40  \\S+ +${when}$`, 'm'))
+    expect(await cardOf($, 'shop')).not.toMatch(/undefined|\{\w+\}|shop\.month/)
+  }
+  for (const verb of ['shop', 'buy']) expect(await cardOf($, `${verb} santa`)).toBe('a Santa hat is sold only in December. Whoever has it keeps it all year.')
+  expect([k.disk.pet.coins, k.disk.pet.owned, await cardOf($, 'wear santa')]).toEqual([100, [], expect.stringMatching(/^Not yours yet: santa\./)])
+  // the other things are sold as ever
+  expect(await cardOf($, 'shop wizard')).toMatch(/^Bought a wizard's hat for 80 stars, 20 left\./)
+})
+
+const MIRO = { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true }
+test('the Santa hat in December: a row like any other, bought and on at once', async ($, on) => {
+  const k = home(on, {}, MIRO, Date.UTC(2026, 11, 10, 12))
+  k.disk.pet = { coins: 100, affection: 100, days: 1, day: dayOf(Date.UTC(2026, 11, 10, 12)), owned: [] }
+  await $.session.start(START)
+  expect(await cardOf($, 'shop')).toMatch(/^  santa +a Santa hat +40  head$/m)
+  expect(await cardOf($, 'shop santa')).toBe('Bought a Santa hat for 40 stars, 60 left. Miro wears it now, head: /pet wear santa takes it off.')
+  expect([k.disk.pet.owned, prefsOf(k.disk).wear]).toEqual([['santa'], 'santa'])
+})
+
+test('the Santa hat after December: who has it keeps it, sees it as theirs in the catalogue and wears it', async ($, on) => {
+  const k = home(on, {}, { ...MIRO, wear: 'santa' }, Date.UTC(2027, 1, 10, 12))
+  k.disk.pet = { coins: 100, affection: 100, days: 1, day: dayOf(Date.UTC(2027, 1, 10, 12)), owned: ['santa'] }
+  await $.session.start(START)
+  expect(await cardOf($, 'shop')).toMatch(/^  santa +a Santa hat +40  head +yours, worn$/m)
+  expect(await cardOf($, 'shop santa')).toMatch(/^You already have a Santa hat/)
+  expect(await cardOf($, 'wear santa')).toBe('a Santa hat comes off.\nMiro wears nothing.')
+  expect(await cardOf($, 'wear santa')).toBe('a Santa hat goes on, head.\nMiro wears head: a Santa hat.')
+})
+
+test('the plain coats: bought, on at once, a colour with no glint that things to wear leave alone, turned by the coat\'s button; on a light theme each takes its own darkest colour at the edge', async ($, on) => {
+  const k = home(on, {}, { species: 'bunny', born: 'bunny', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  k.disk.pet = { coins: 360, affection: 360, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
+  await $.session.start(START)
+  const look = async () => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const cells = new Uint32Array(Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells as string), c => c.charCodeAt(0)).buffer)
+    const keys = (await ui.findAll({ type: 'Button' })).map((b: any) => b.key)
+    await ui.unmount()
+    return { inks: new Set([...cells].filter((_, i) => i % 3 !== 0)), keys }
+  }
+  const press = async (key: string) => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key }); await k.clock.advance(1); await ui.unmount() }
+  const WHITE = 0xf5f5f5, SKY = 0xaee0fa, PINK = 0xf9b9d4, PHOSPHOR = 0x2ed158, GLOW = 0x8cffa8, GLINT = 0xfff6cf, EYE = 0x1b1b1b
+  const has = async (...inks: number[]) => { const seen = (await look()).inks; return inks.map(i => seen.has(i)) }
+
+  expect(await cardOf($, 'wear pastel')).toMatch(/^Not yours yet: pastel\./)
+  expect(await cardOf($, 'shop pastel')).toBe('Bought a pastel coat for 150 stars, 210 left. Miro wears it now, coat: /pet wear pastel takes it off.')
+  expect(await has(WHITE, SKY, PINK, GLINT, EYE)).toEqual([false, true, true, false, true]) // the bunny's white is gone, its eyes are not, and nothing shines
+  expect(await cardOf($)).toMatch(/^Miro, Cachito the bunny, .*(\n.*)*\n210 stars; owns a pastel coat\. \/pet shop\n  wears coat: a pastel coat$/m) // golden is the golden coat's word
+  expect(await cardOf($, 'shop terminal')).toBe('Bought a terminal coat for 200 stars, 10 left. Miro wears it now, coat: /pet wear terminal takes it off.')
+  expect(await has(WHITE, SKY, PHOSPHOR, GLOW, GLINT, EYE)).toEqual([false, false, true, true, false, true])
+  expect(await cardOf($, 'shop')).toMatch(/\n  pastel +a pastel coat +150  coat +yours\n  terminal +a terminal coat +200  coat +yours, worn\n  golden +a golden coat +300  coat\n/)
+  expect(k.disk.pet).toMatchObject({ coins: 10, affection: 360, owned: ['pastel', 'terminal'] })
+
+  // a colour: taking everything off leaves it, plain takes it off, and the coat's button goes through each one owned and then the pet's own
+  expect(await cardOf($, 'wear none')).toBe('Miro wears nothing; the coat stays.')
+  expect(prefsOf(k.disk).wear).toBe('terminal')
+  expect(await cardOf($, 'wear plain')).toBe('Miro wears nothing.')
+  expect(await has(WHITE, PHOSPHOR)).toEqual([true, false])
+  expect(await cardOf($, 'wear pastel')).toBe('a pastel coat goes on, coat.\nMiro wears coat: a pastel coat.')
+  await press('skin')
+  const seen = []
+  for (let i = 0; i < 3; i++) { await press('slot-coat'); seen.push(prefsOf(k.disk).wear) }
+  expect(seen).toEqual(['terminal', 'none', 'pastel'])
+
+  // a light theme: a pale colour of the coat takes the coat's darkest where it touches the background, never the grey a darkened pastel is
+  Object.assign(k, { theme: 'light' })
+  await $.session.start(START)
+  expect(await has(SKY, 0xd184b0, 0x688696, EYE)).toEqual([true, true, false, true])
+  await cardOf($, 'wear terminal')
+  expect(await has(PHOSPHOR, 0x157a36, 0x549965, EYE)).toEqual([true, true, false, true])
+})
+
+const EARLY = Date.UTC(2026, 10, 12, 12), AFTER = new Date(2027, 1, 1, 12).getTime() // a day before FOUNDER_UNTIL, and the day after it
+test("the founder's eggshell: a pet hatched in time has it and wears it; the catalogue lists it apart, and nobody can buy it", async ($, on) => {
+  expect(FOUNDER_UNTIL).toBe('2027-01-31')
+  const k = home(on, {}) // an empty store, on 12 November 2026
+  await $.session.start(START)
+  await k.clock.advance(9_000)
+  expect(k.disk.pet).toMatchObject({ owned: ['eggshell'], born: EARLY })
+  expect(prefsOf(k.disk).wear ?? '').toBe('') // on by itself: nothing had to be kept
+  expect(await cardOf($)).toMatch(/owns half an eggshell\. \/pet shop\n  wears head: half an eggshell\n/)
+  expect(await cardOf($, 'shop')).toMatch(/\n  golden +a golden coat +300  coat\n\n  eggshell +half an eggshell +–  head +yours, worn\n\n/)
+  expect(await cardOf($, 'shop eggshell')).toBe('You already have half an eggshell. /pet wear eggshell puts it on.')
+  expect([await cardOf($, 'wear eggshell'), await cardOf($, 'shop')]).toEqual([expect.stringMatching(/^half an eggshell comes off\./), expect.stringMatching(/^  eggshell +half an eggshell +–  head +yours$/m)])
+  expect(await cardOf($, 'wear eggshell')).toMatch(/half an eggshell/)
+  // drawn: the white of the shell is over the head
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const cells = new Uint32Array(Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells as string), c => c.charCodeAt(0)).buffer)
+  expect([...cells]).toContain(parseInt(zoo.common.i.slice(1), 16))
+  await ui.unmount()
+})
+
+test("the founder's eggshell after the date: a newborn has none, in the four languages the catalogue says founders only, and who has it keeps it", async ($, on) => {
+  const k = home(on, {}, undefined, AFTER)
+  await $.session.start(START)
+  await k.clock.advance(9_000)
+  expect(k.disk.pet).toMatchObject({ owned: [], born: AFTER })
+  expect(await cardOf($)).toMatch(/owns nothing yet/)
+  for (const [lang, name, only, no] of [['es', 'media cáscara de huevo', 'solo fundadores', /^media cáscara de huevo no se vende: .* 2027-01-31\.$/], ['pt', 'meia casca de ovo', 'só fundadores', /^meia casca de ovo não é vendida: .* 2027-01-31\.$/], ['zh', '半个蛋壳', '仅限创始宠物', /^半个蛋壳不出售：.* 2027-01-31 /], ['en', 'half an eggshell', 'founders only', /^half an eggshell is not sold: it is the keepsake of the pets hatched by 2027-01-31\.$/]] as const) {
+    await cardOf($, `lang ${lang}`)
+    const shop = await cardOf($, 'shop')
+    expect(shop).toMatch(new RegExp(`^  eggshell +${name} +–  \\S+ +${only}$`, 'm'))
+    expect(shop).not.toMatch(/undefined|\{\w+\}|shop\.founder/)
+    for (const verb of ['shop', 'buy']) expect(await cardOf($, `${verb} eggshell`)).toMatch(no)
+  }
+  expect([k.disk.pet.owned, await cardOf($, 'wear eggshell')]).toEqual([[], expect.stringMatching(/^Not yours yet: eggshell\./)])
+  // a pet born in time that has it still has it and wears it after the date; a new start takes nothing away
+  k.state = {}
+  k.disk.pet = { ...k.disk.pet, owned: ['eggshell', 'cap'], born: EARLY }
+  elsewhere(k.disk, { wear: 'eggshell' })
+  await $.session.start(START)
+  expect(k.disk.pet).toMatchObject({ owned: ['eggshell', 'cap'], born: EARLY })
+  expect(await cardOf($)).toMatch(/owns half an eggshell, a travel cap\. \/pet shop\n  wears head: half an eggshell\n/)
+  expect(await cardOf($, 'shop')).toMatch(/^  eggshell +half an eggshell +–  head +yours, worn$/m)
+})
+
+// `born: 0` is a pet kept by a version that knew no birth (without it the kit says born late, see `home`)
+const OLD = { coins: 5, affection: 100, days: 9, born: 0 }
+test("the founder's eggshell for a pet born before this version: the first start gives it, and puts it on a head with nothing on", async ($, on) => {
+  const k = home(on, {}, { ...MIRO, wear: 'scarf' })
+  k.disk.pet = { ...OLD, day: dayOf(EARLY), owned: ['scarf', 'cap'] }
+  await $.session.start(START)
+  expect(k.disk.pet).toMatchObject({ owned: ['eggshell', 'scarf', 'cap'], born: EARLY })
+  expect(prefsOf(k.disk).wear).toBe('eggshell scarf') // the head was free
+  // a hat on, a head left bare, or everything taken off by choice: owned, and not put on
+  for (const wear of ['cap', 'scarf nohead', 'none']) {
+    k.state = {}; k.disk.pet = { ...OLD, day: dayOf(EARLY), owned: ['scarf', 'cap'] }; elsewhere(k.disk, { wear })
+    await $.session.start(START)
+    expect([k.disk.pet.owned, prefsOf(k.disk).wear]).toEqual([['eggshell', 'scarf', 'cap'], wear])
+  }
+})
+
+test("the founder's eggshell for a pet first started on this version after the date: none, unless its diary began in time", async ($, on) => {
+  const k = home(on, {}, MIRO, AFTER)
+  k.disk.pet = { ...OLD, day: dayOf(AFTER), owned: [] }
+  await $.session.start(START)
+  expect(k.disk.pet).toMatchObject({ owned: [], born: AFTER })
+  k.state = {}; k.disk.pet = { ...OLD, day: dayOf(AFTER), owned: [] }; k.disk.diary = diaryOpened(diaryOf(undefined), { now: EARLY, folder: 'w' })
+  await $.session.start(START)
+  expect(k.disk.pet).toMatchObject({ owned: ['eggshell'], born: EARLY })
+})
+
+test("the founder's eggshell under the bench: the same rule on the bench's own pet, in time and after the date, and nothing of it on the disk", async ($, on) => {
+  const k = home(on, {})
+  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  await $.session.start({ ...START, isInteractive: false })
+  expect(await cardOf($)).toMatch(/owns half an eggshell\. \/pet shop\n  wears head: half an eggshell\n/)
+  expect(k.disk.pet).toBeUndefined()
+})
+test("the founder's eggshell under the bench after the date: none", async ($, on) => {
+  const k = home(on, {}, undefined, AFTER)
+  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  await $.session.start({ ...START, isInteractive: false })
+  expect(await cardOf($)).toMatch(/owns nothing yet/)
+  expect(k.disk.pet).toBeUndefined()
+})
+
+test('the hood of the hoodie gives way to a hat: with a thing on the head only the body of the hoodie is drawn; the crown and the hood go together', async ($, on) => {
+  const k = home(on, {}, { ...MIRO, wear: 'hoodie' })
+  k.disk.pet = { coins: 0, affection: 100, days: 9, day: dayOf(EARLY), owned: ['sombrero', 'hoodie'] }
+  await $.session.start(START)
+  const BLUE = parseInt(zoo.common.u.slice(1), 16)
+  const blue = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const cells = new Uint32Array(Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells as string), c => c.charCodeAt(0)).buffer); await ui.unmount(); return [...cells].filter(c => c === BLUE).length }
+  const up = await blue()
+  await cardOf($, 'wear sombrero')
+  const under = await blue()
+  expect(under).toBeGreaterThan(0)
+  expect(up).toBeGreaterThan(under) // the hood is gone, the body stays
+  await cardOf($, 'wear sombrero') // off again: the hood is back
+  expect(await blue()).toBe(up)
+  // every animal, adult and baby: a hood above the neck, drawn outside the body only, so behind the ears
+  for (const [name, a] of Object.entries(zoo.pack.animals) as [string, any][]) for (const body of ['adult', 'baby'] as const) {
+    const hood = marksFor('hoodie', name, body).filter(m => m[0] < a.anchors[body].neck), base = a.states[body].frames[0] as string[]
+    expect([name, body, hood.length > 4]).toEqual([name, body, true])
+    for (const [r, c] of hood) expect([name, body, r, c, base[r]?.[c] ?? '.']).toEqual([name, body, r, c, '.'])
+  }
+})
+
+test('/pet share: a card in plain text to paste in a post, at most 60 columns and 13 lines, with the pet, a few words about it and nothing of the work', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, personality: 'A secret adopted line.', hatched: 1_700_000_000_000, cuddles: 4141, wear: 'sombrero hoodie skateboard suitcase golden' })
+  k.disk.pet = { variant: 'golden', coins: 123, affection: 98_765, days: 5151, day: dayOf(EARLY), life: { input: 77_777_777, cacheRead: 88_888_888 }, owned: ['sombrero', 'hoodie', 'skateboard', 'suitcase', 'golden'], animals: ['penguin'] }
+  await $.session.start({ ...START, cwd: '/w/secretproj' })
+  const check = (card: string) => {
+    const lines = card.split('\n'), end = lines.lastIndexOf('```')
+    expect(lines.length).toBeLessThanOrEqual(13) // 13 with a hat and a board at once: seven lines of blocks
+    for (const line of lines) expect([line, [...line].reduce((n, ch) => n + (/[⺀-ￜ]/.test(ch) && !/[▀-▟]/.test(ch) ? 2 : 1), 0) <= 60]).toEqual([line, true])
+    expect(card).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f]/) // no escape, no colour code: text and line breaks only
+    expect([lines[0], end > 1, lines.at(-1)]).toEqual(['```', true, 'cachito · github.com/silirim/cachito-pet'])
+    for (const line of lines.slice(1, end)) expect(line).toMatch(/^[ ▀▄█]+$/) // the drawing: half blocks only
+    expect(card).not.toMatch(/secretproj|\/w\/|secret adopted|4141|98.?765|5151|7{8}|8{8}|\$|token|undefined|\{\w+\}/i) // no folder, no path, nothing else of the store
+    return lines
+  }
+  const en = check(await cardOf($, 'share'))
+  expect(en.slice(en.lastIndexOf('```') + 1)).toEqual([
+    'Miro, Cachito the golden fox, crown',
+    'Checks everything twice · ★ 123 stars',
+    'wears a sombrero, a hoodie, a skateboard, a suitcase', // the golden coat is said in the first line
+    'cachito · github.com/silirim/cachito-pet',
+  ])
+  expect(en.lastIndexOf('```')).toBeGreaterThanOrEqual(6) // the fox with a hat and a board under it: at least five lines of blocks
+  for (const [lang, head] of [['es', /^Miro, Cachito: zorro \(versión dorada\), /], ['pt', /^Miro, Cachito: raposa \(versão dourada\), /], ['zh', /^Miro，Cachito，金色狐狸，/]] as const) {
+    await cardOf($, `lang ${lang}`)
+    const lines = check(await cardOf($, 'share'))
+    expect(lines[lines.lastIndexOf('```') + 1]).toMatch(head)
+    expect(lines.join('\n')).toMatch(/★ 123/)
+  }
+})
+
+test('/pet share for a rare animal with nothing on: it says so, and the drawing has a face', async ($, on) => {
+  const k = home(on, {}, { species: 'axolotl', born: 'axolotl', seed: 9, name: 'Lola', stats: [80, 30, 60, 20, 50], asked: true }, AFTER)
+  k.disk.pet = { coins: 1, affection: 3, days: 1, day: dayOf(AFTER), owned: [] }
+  await $.session.start(START)
+  const lines = (await cardOf($, 'share')).split('\n'), end = lines.lastIndexOf('```')
+  expect(lines.slice(end + 1)).toEqual(['Lola, Cachito the axolotl, baby · a rare one', expect.stringMatching(/ · ★ 1 star$/), 'cachito · github.com/silirim/cachito-pet'])
+  expect(lines.slice(1, end).some(l => /█ +█|█[▀▄]+█/.test(l))).toBe(true) // the eyes are holes in the one colour
+  expect(lines.length).toBeLessThanOrEqual(12)
 })

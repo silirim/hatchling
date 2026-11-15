@@ -18,15 +18,19 @@ SIDE = 8  # columns an item may take next to the body, each side
 UNDER = 2  # rows an item may take under the feet: the adapter makes the frame that much taller
 COMMON = {"k": "#1b1b1b", "W": "#f5f5f5", "r": "#f48fb1",                    # eyes, white, cheeks
           "y": "#ffd54f", "K": "#ffb300", "S": "#263238", "h": "#d4a056", "M": "#43a047", "w": "#81d4fa", "v": "#ab47bc", "R": "#ef5350",      # sparkle/crown, water, dizzy eyes, alarm
-          "u": "#42a5f5", "n": "#795548", "q": "#26c6da", "i": "#eceff1",      # shop items: blue, brown, cyan, white
+          "u": "#42a5f5", "n": "#795548", "N": "#4e342e", "q": "#26c6da", "i": "#eceff1",      # shop items: blue, brown, a sole's darker brown, cyan, white
           "x": "#fff6cf"}                                                      # the glint on a golden coat
-FIXED = "kyvwRKShMunqix"
+FIXED = "kyvwRKShMunNqix"
 LIGHT = {"y": "#f9a825", "w": "#29b6f6"}  # light terminals: the pale effects would vanish. White and what is as pale get a darker edge, drawn by the adapter
 SCARF = {"penguin": 5, "chick": 6, "cactus": 6}  # row of the adult's neck, 7 when not listed
 # the shop's items, in its order: the part each is worn on and its English name (engine/engine.js SHOP has the same, a test compares them)
-ITEMS = {"shades": ("face", "sunglasses"), "mug": ("accessory", "a coffee mug"), "scarf": ("body", "a red scarf"), "cap": ("head", "a travel cap"),
-         "sneakers": ("feet", "sneakers"), "lamp": ("accessory", "a desk lamp"), "headphones": ("head", "headphones"), "backpack": ("accessory", "a backpack"),
-         "skateboard": ("feet", "a skateboard"), "suitcase": ("accessory", "a suitcase"), "sombrero": ("head", "a sombrero")}
+ITEMS = {"shades": ("face", "sunglasses"), "mug": ("accessory", "a coffee mug"), "balloon": ("accessory", "a balloon"), "glasses": ("face", "round glasses"),
+         "eyepatch": ("face", "an eye patch"), "duck": ("accessory", "a rubber duck"), "partyhat": ("head", "a party hat"), "scarf": ("body", "a red scarf"),
+         "cap": ("head", "a travel cap"), "sneakers": ("feet", "sneakers"), "boots": ("feet", "boots"), "lamp": ("accessory", "a desk lamp"),
+         "santa": ("head", "a Santa hat"), "headphones": ("head", "headphones"), "hoodie": ("body", "a hoodie"), "backpack": ("accessory", "a backpack"),
+         "wand": ("accessory", "a magic wand"), "skateboard": ("feet", "a skateboard"), "suitcase": ("accessory", "a suitcase"), "laptop": ("accessory", "a laptop"),
+         "sombrero": ("head", "a sombrero"), "wizard": ("head", "a wizard's hat"),
+         "eggshell": ("head", "half an eggshell")}  # the last one is not sold: the founder's keepsake (engine/engine.js EGGSHELL)
 WEAR = list(ITEMS)
 
 # name: (rarity weight, own palette, adult, adult eyes, adult cheeks, skin behind a closed eye, baby, baby eyes)
@@ -127,18 +131,47 @@ MUG = ["..i...", ".i....", "..i...", "......", "qqqq..", "qqqqq.", "qyyq.q", "qq
 LAMP = [".yyy.", "yyyyy", "yyyyy", "KKKKK", "..h..", "..h..", "..h..", ".hhh."]  # the lit shade with its rim, the arm, the foot
 BACKPACK = ["..MM..", ".M..M.", ".MMMM.", "MMMMMM", "MKKKKM", "MMKKMM", "MMMMMM", "MMMMMM"]  # the loop on top, the flap and its buckle
 SUITCASE = ["..nnn..", "..n.n..", "nnnnnnn", "KKKKKKK", "nnnnnnn", "nnnnnnn"]  # the handle and a strap round it
+BALLOON = [".RRR.", "RiRRR", "RRRRR", ".RRR.", "..R..", "..i..", ".i...", "..i..", "..i..", ".i..."]  # its shine, the knot, the string down to the ground
+DUCK = ["...yy.", "...ykK", "y.yyy.", "yyyyy.", ".yyy.."]  # looking right: the eye, the beak, the tail up
+WAND = ["..y..", ".yxy.", "..y..", "..i..", ".i...", ".i...", "i...."]  # the star with its pale heart, the stick leaning
+LAPTOP = ["iiiiii.", "iqSSSi.", "iSqqSi.", "iiiiii.", "iiiiiii"]  # open: two lines of text on a dark screen, the base a pixel longer
+# the hats that sit on the head: two rows above it and one over its top row
+PARTYHAT = ["..yy..", ".qvqv.", "vqvqvq"]  # a striped cone, its tip yellow
+SANTA = ["..RRRR.", ".RRRRRi", "iiiiii."]  # leaning to the right, the bobble at its end, the white trim
+WIZARD = ["....vv..", "..vyvv..", "vvvvvvvv"]  # the bent tip, a star, the wide brim
+EGGSHELL = [".iiii.", "iihiii", "i.ii.i"]  # half the shell a pet hatched from: the egg's white and its spots, the broken edge down
+RING = [(a, b) for a in (-1, 0, 1) for b in (-1, 0, 1) if a or b]
+HEM = {"cactus": 0}  # rows the hoodie goes down from the neck when not to the feet: the cactus keeps its pot
+HOOD = {"cactus": {"adult": 3, "baby": 4}}  # the last row of the head, for the hood, when the rows down to the neck are not all head
+STRAP = {"penguin": {"adult": "h"}, "cactus": {"adult": "h", "baby": "h"}}  # the eye patch's strap on a dark head, where the dark one is lost
 
 
-def shoes(base):
-    """Sneakers, on the row of the feet only, so they never reach the face: each foot purple with a white toe pointing out.
-    A body with one base in place of two feet (a pot, a shell) gets a shoe at each end of it."""
+def feet(base):
+    """The columns of each foot. A body with one base in place of two feet (a pot, a shell) has one at each end of it."""
     cols = [c for c in range(W) if base[H - 1][c] != "."]
     runs = [[c for c in cols if c < W // 2], [c for c in cols if c >= W // 2]]
     if cols == list(range(cols[0], cols[-1] + 1)): runs = [cols[:2], cols[-2:]]
+    return runs
+
+
+def shoes(base):
+    """Sneakers, on the row of the feet only, so they never reach the face: each foot purple with a white toe pointing out."""
+    runs = feet(base)
     return [(H - 1, c, "v") for run in runs for c in run] + [(H - 1, runs[0][0] - 1, "i"), (H - 1, runs[1][-1] + 1, "i")]
 
 
-def wear(base, eyes, neck):
+def boots(base):
+    """Boots, the suitcase's brown: the leg up each foot, three rows tall where the face ends high enough, else two, and under it a
+    darker sole with the toe pointing out. A body on one base (a pot) has them under it: two short boots it stands in."""
+    runs = feet(base)
+    if "." not in base[H - 1].strip("."):  # one base, no two feet
+        return [(H, c, "n") for run in runs for c in run] + [(H + 1, c, "N") for c in [runs[0][0] - 1, *runs[0], *runs[1], runs[1][-1] + 1]]
+    face = max(r for r in range(H) if set(base[r]) & set("kr"))
+    tall = 3 if H - 3 > face else 2
+    return [(r, c, "n") for run in runs for c in run for r in range(H - tall, H - 1)] + [(H - 1, c, "N") for c in [runs[0][0] - 1, *runs[0], *runs[1], runs[1][-1] + 1]]
+
+
+def wear(base, eyes, neck, hem=H - 2, head=None, strap="S"):
     """Each shop item on one body (the adult or the baby), as marks (row, column, colour) in the body's own 12x10 coordinates.
     Rows above 0 fall on the effect canvas; columns outside 0..11 widen the frame (the adapter pads it), so one set of marks serves
     every state drawn from that body. Nothing that stands against the background is dark: it would vanish on a dark terminal.
@@ -154,9 +187,41 @@ def wear(base, eyes, neck):
     band = [(top - 1, c, "u") for c in range(left + 2, right - 1)] + [(r, c, "u") for c in (left, right) for r in range(top + 1, r0 - 1)]
     band += [(top, c, "u") for c in (left + 1, right - 1) if top < r0 - 1]
     cups = [(r, c, "R") for r in range(r0 - 1, r0 + 2) for c in (left - 1, left, right, right + 1)]
+    inside = lambda r, c: 0 <= r < H and 0 <= c < W and base[r][c] != "."
+    # round glasses: a brown frame round each eye, a pixel on each of its four sides, so the eye, which is black, is seen in the middle,
+    # and the bridge between the two. Eyes too close for two frames get a simpler pair: a rim at each side of each eye and one under it.
+    # Never a pixel outside the body: nothing above the head
+    close = hi - lo < 5
+    rims = [(r + a, c + b, "n") for r, c in eyes for a, b in (((1, 0), (0, -1), (0, 1)) if close else RING)] + [(r0, c, "n") for c in range(lo + 2, hi - 1)]
+    rims = [m for m in rims if inside(m[0], m[1])]
+    # the eye patch: dark, so on the body only. Over the eye on the right and the pixel under it, two wide, and its strap over the head
+    # to the other side, in `strap`: a colour that shows on that head
+    out = hi + 1 if inside(r0, hi + 1) else hi - 1
+    patch = [(r0 - 1, c, strap) for c in span(r0 - 1) if c < min(hi, out)] + [(r, c, "S") for r in (r0, r0 + 1) for c in (hi, out) if inside(r, c)]
+    # the hoodie: from the neck down to the feet, with two white strings when it is two rows tall, and its hood up: a line of its
+    # colour round the top and the sides of the head, outside it, so behind the ears, which stay in front. `head` is the last row
+    # of the head when it is not the one above the neck. Every mark of it is above the neck: with a hat on the mod leaves those out
+    low = min(max(hem, neck), H - 2)
+    hoodie = [(r, c, "u") for r in range(neck, low + 1) for c in span(r)]
+    if low > neck: hoodie += [(neck + 1, c, "i") for c in (4, 7) if inside(neck + 1, c)]
+    mid = lambda r: [c for c in span(r) if all(inside(r, x) for x in range(min(c, 5), max(c, 6) + 1))]  # the head: what joins the centre, not an arm
+    skull = {(r, c) for r in range(top, (neck - 1 if head is None else head) + 1) for c in mid(r)}
+    hoodie += sorted({(r + a, c + b, "u") for r, c in skull for a, b in ((-1, 0), (0, -1), (0, 1)) if not inside(r + a, c + b) and r + a < neck})
+    beside = max(W + 1, right + 3)  # one empty column between a thing on the right and the body, and between it and a cup of the headphones
     marks = {
         "shades": [(r0, c, "S") for c in range(lo, hi + 1)],
-        "mug": art(MUG, H - len(MUG), max(W + 1, right + 3)),  # one empty column between it and the body, and between it and a cup of the headphones
+        "mug": art(MUG, H - len(MUG), beside),
+        "balloon": art(BALLOON, H - len(BALLOON), -len(BALLOON[0]) - 1),
+        "glasses": rims,
+        "eyepatch": patch,
+        "duck": art(DUCK, H - len(DUCK), beside),
+        "partyhat": art(PARTYHAT, top - 2, 3),
+        "boots": boots(base),
+        "santa": art(SANTA, top - 2, 3),
+        "hoodie": hoodie,
+        "wand": art(WAND, H - 1 - len(WAND), beside),  # held up: a pixel off the ground
+        "laptop": art(LAPTOP, H - len(LAPTOP), W + 1),
+        "wizard": art(WIZARD, top - 2, 2),
         "scarf": [(neck, c, "R") for c in n] + [(neck + 1, n[0] + 2, "R")],
         "sneakers": shoes(base),
         "cap": [(top - 2, 5, "u"), (top - 2, 6, "u")] + [(top - 1, c, "u") for c in range(4, 8)] + [(top - 1, 8, "R"), (top - 1, 9, "R")],  # the peak to the right
@@ -166,6 +231,7 @@ def wear(base, eyes, neck):
         "suitcase": art(SUITCASE, H - len(SUITCASE), W),
         "skateboard": [(H, c, "v") for c in range(W)] + [(H + 1, c, "K") for c in (2, 3, 8, 9)],  # the deck as wide as the body, two wheels
         "sombrero": [(top - 2, c, "R") for c in range(4, 8)] + [(top - 1, c, "h") for c in range(1, 11)],
+        "eggshell": art(EGGSHELL, top - 2, 3),
     }
     return {k: marks[k] for k in WEAR}
 
@@ -325,10 +391,10 @@ def zone(spec):
 
 # animal: [(zone key, the colour key it is cut from, the adult's cells, the baby's cells)]
 ZONES = {
-    "penguin": [("1", "B", "5:0,11 6:0,11 7:1,10 8:2-3,8-9", ""), ("2", "a", "", "7:2,9 8:3-4,7-8")],
-    "chick": [("1", "c", "6:0,11 7:1-2,9-10 8:2-9", "7:3-8"), ("2", "c", "0:5-6 1:3-4", "3:4-5")],
+    "penguin": [("1", "B", "5:0,11 6:0,11 7:1,10 8:2-3,8-9", ""), ("2", "a", "", "7:2,9 8:3-4,7-8"), ("3", "o", "9:2-3,8-9", "9:3-4,7-8")],  # 3: the feet, the beak's colour
+    "chick": [("1", "c", "6:0,11 7:1-2,9-10 8:2-9", "7:3-8"), ("2", "c", "0:5-6 1:3-4", "3:4-5"), ("3", "o", "9:3-4,7-8", "")],
     "dog": [("1", "t", "8:2-9 9:2-3,8-9", "9:3-4,7-8")],
-    "bunny": [("1", "W", "7:1,10 8:2-9 9:2-3,8-9", "8:3,8 9:3-4,7-8"), ("2", "W", "0:2-3,8-9", "2:3-4,7-8")],
+    "bunny": [("1", "W", "7:1,10 8:2-9 9:2-3,8-9", "8:3,8 9:3-4,7-8"), ("2", "W", "0:2-3,8-9", "2:3-4,7-8"), ("3", "r", "6:5-6", "7:5-6")],  # 3: its nose, the cheeks' pink
     "fox": [("1", "o", "8:3-8 9:3-4,7-8", "9:3-4,7-8"), ("2", "o", "0:0-1,10-11", "3:2,9")],
     "axolotl": [("1", "P", "8:3-8 9:3-4,7-8", "8:3,8 9:4,7")],
 }
@@ -344,11 +410,41 @@ GILT = {
 }
 
 
+# The two plain coats: colours only, no glint and no sparkle, and nobody is born with one. As with gold each animal is told its
+# tones by hand, so the face stays readable: the eyes are dark, and sit on a light tone in both.
+PINK, DEEP_PINK, SKY, DEEP_SKY = "#f9b9d4", "#ee93b8", "#aee0fa", "#82c4ec"  # pastel: soft pink and light blue, each with its shadow
+PASTEL_RAMP = ["#d184b0", PINK, SKY]
+PASTEL = {
+    "penguin": {"B": SKY, "a": SKY, "1": DEEP_SKY, "2": DEEP_SKY, "o": DEEP_PINK},
+    "chick": {"c": PINK, "1": DEEP_PINK, "2": SKY, "o": DEEP_SKY},
+    "dog": {"t": PINK, "E": DEEP_SKY, "1": DEEP_PINK},
+    "bunny": {"W": SKY, "1": DEEP_SKY, "2": PINK},
+    "fox": {"o": PINK, "1": DEEP_PINK, "2": SKY},
+    "cactus": {"g": SKY, "G": DEEP_SKY, "L": PINK, "P": DEEP_PINK, "p": PINK},
+    "axolotl": {"P": SKY, "1": DEEP_SKY, "m": DEEP_PINK},
+}
+DIM, PHOSPHOR, GLOW = "#157a36", "#2ed158", "#8cffa8"  # terminal: an old monitor's green, in three strengths
+TERMINAL_RAMP = [DIM, PHOSPHOR, GLOW]
+INK = COMMON["k"]  # a beak, a nose, a mouth: as dark as the eyes, so the face stays a face
+TERMINAL = {  # the lightest on the belly and the muzzle; the cheeks are light or the body's, never dark: a dark cheek reads as an eye
+    "penguin": {"B": PHOSPHOR, "a": PHOSPHOR, "1": DIM, "2": DIM, "W": GLOW, "o": INK, "3": DIM, "r": PHOSPHOR},
+    "chick": {"c": PHOSPHOR, "1": DIM, "2": GLOW, "W": GLOW, "o": INK, "3": DIM, "r": GLOW},
+    "dog": {"t": PHOSPHOR, "E": DIM, "1": DIM, "W": GLOW, "r": INK},
+    "bunny": {"W": PHOSPHOR, "1": DIM, "2": GLOW, "r": GLOW, "3": INK},
+    "fox": {"o": PHOSPHOR, "1": DIM, "2": GLOW, "W": GLOW},
+    "cactus": {"g": PHOSPHOR, "G": DIM, "L": GLOW, "P": DIM, "p": PHOSPHOR, "r": PHOSPHOR},
+    "axolotl": {"P": PHOSPHOR, "1": DIM, "m": GLOW, "r": GLOW},
+}
+# the coats in the shop's order, cheapest first: id -> (English name, ramp for an animal with no tint of its own, the tints drawn here)
+COATS = {"pastel": ("a pastel coat", PASTEL_RAMP, PASTEL), "terminal": ("a terminal coat", TERMINAL_RAMP, TERMINAL),
+         "golden": ("a golden coat", [SHADE, GOLD, PALE_GOLD], None)}
+
+
 def zoned(name, own, adult, baby):
     """The two bodies with their zones cut in, and the palette with a key for each."""
     own, bodies = dict(own), [grid(adult), grid(baby)]
     for key, base, *cells in ZONES.get(name, []):
-        own[key] = (own | {"W": COMMON["W"]})[base]
+        own[key] = (COMMON | own)[base]
         for g, spec in zip(bodies, cells):
             for r, c in zone(spec):
                 assert g[r][c] == base, (name, key, r, c, g[r][c])
@@ -376,8 +472,8 @@ def art_of(marks):
 
 def fallbacks():
     """Each shop item for an animal it has no drawing for (one from a pack): pieces set by the animal's anchors, see docs/skins.md."""
-    piece = lambda anchor, art, dx=0: {"anchor": anchor, "art": art, **({"dx": dx} if dx else {})}
-    return {
+    piece = lambda anchor, art, dx=0, dy=0: {"anchor": anchor, "art": art, **({"dx": dx} if dx else {}), **({"dy": dy} if dy else {})}
+    made = {
         "shades": [piece("face", ["SSSSSS"])],
         "mug": [piece("right", MUG)],
         "scarf": [piece("neck", ["RRRRRRRR", "..R....."])],
@@ -389,7 +485,20 @@ def fallbacks():
         "skateboard": [piece("under", ["v" * W, "..KK....KK.."])],
         "suitcase": [piece("right", SUITCASE)],
         "sombrero": [piece("head", ["...RRRR...", "hhhhhhhhhh"])],
+        "balloon": [piece("left", BALLOON)],
+        "glasses": [piece("face", [".n....n.", "n.nnnn.n", ".n....n."])],
+        "eyepatch": [piece("face", ["hhhhhh..", "......SS", "......SS"], 0, 1)],
+        "duck": [piece("right", DUCK)],
+        "partyhat": [piece("head", PARTYHAT, 0, 1)],
+        "boots": [piece("feet", [".nn..nn.", "NNN..NNN"])],
+        "santa": [piece("head", SANTA, 0, 1)],
+        "hoodie": [piece("neck", ["uuuuuuuu", "uuiuuiuu"])],
+        "eggshell": [piece("head", EGGSHELL, 0, 1)],
+        "wand": [piece("right", WAND, 0, -1)],
+        "laptop": [piece("right", LAPTOP)],
+        "wizard": [piece("head", WIZARD, 0, 1)],
     }
+    return {k: made[k] for k in WEAR}
 
 
 def animal(name, spec, gilt=None):
@@ -402,7 +511,8 @@ def animal(name, spec, gilt=None):
     states["baby"]["idle"], states["adult"]["idle"], states["crown"]["idle"] = idle(baby, baby_eyes), idle(adult, eyes), idle(adult, eyes, crown)
     # the items on each body; the baby's neck is under its face, which takes most of it
     necks = {"adult": SCARF.get(name, 7), "baby": min(baby_eyes[0][0] + 3, 8)}
-    items = {"adult": wear(adult, eyes, necks["adult"]), "baby": wear(baby, baby_eyes, necks["baby"])}
+    hem = {body: neck + HEM[name] if name in HEM else H - 2 for body, neck in necks.items()}
+    items = {body: wear(base, look, necks[body], hem[body], HOOD.get(name, {}).get(body), STRAP.get(name, {}).get(body, "S")) for body, base, look in (("adult", adult, eyes), ("baby", baby, baby_eyes))}
     for body in items.values():
         assert list(body) == WEAR and all(ch in FIXED for marks in body.values() for _, _, ch in marks) and all(-2 <= r < H + UNDER and -SIDE <= c < W + SIDE for marks in body.values() for r, c, _ in marks), name
     for st, frames in OVERRIDE.get(name, {}).items(): states[st]["frames"] = frames
@@ -419,6 +529,7 @@ def animal(name, spec, gilt=None):
         "gold": {"adult": gold(adult), "baby": gold(baby)},
         # the cheeks stay rosy under the coat; what GILT does not name keeps its colour
         "tints": {"sick": {k: mix(v, "#9ccc65", 0.45) for k, v in tintable.items()}, "ghost": {k: grey(v) for k, v in tintable.items()},
+                  **{coat: tints[name] for coat, (_, _, tints) in COATS.items() if tints and name in tints},
                   "golden": {"r": ROSY, **(gilt or GILT[name])}},
     }, {body: {k: art_of(marks) for k, marks in worn.items()} for body, worn in items.items()}
 
@@ -433,7 +544,7 @@ def main():
            "egg": {"palette": {"W": COMMON["W"], "h": "#d4a056", "k": COMMON["k"]}, "frames": EGG},  # whole, leaning left, leaning right, cracked
            # a coat is a ramp of colours, dark to light, for an animal with no tint of its own for it; on a light theme its first colour is the edge
            "pack": {"format": 1, "id": "cachito", "name": "Cachito", "animals": animals, "items": items,
-                    "coats": {"golden": {"name": {"en": "a golden coat"}, "ramp": [SHADE, GOLD, PALE_GOLD]}}}}
+                    "coats": {coat: {"name": {"en": en}, "ramp": ramp} for coat, (en, ramp, _) in COATS.items()}}}
     base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zoo")
     with open(base + ".json", "w") as fh:
         json.dump(out, fh, indent=1)

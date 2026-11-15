@@ -7,7 +7,7 @@
 // The pet speaks English, Spanish, Portuguese or Simplified Chinese (engine/lang/): /pet lang picks, and a newborn takes the system's.
 
 import { atom, read, update } from 'claude-code'
-import { initialState, reduce, view, card, sync, adopt, shared, whole, program, SHOP, SOLD, GOLDEN, PLAIN, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
+import { initialState, reduce, view, card, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
 import { MODEL, tally, due, left, reserve, settle as settled, average, money, system, summary, news, reply, clean, tooLong, pathy, question } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page } from '../engine/diary.js'
 import { marks, greeting, finished, folder, counts, listing } from '../engine/company.js'
@@ -557,6 +557,39 @@ function drawn(/** @type {ReturnType<typeof view>} */ v, /** @type {{demo: strin
   return { sp, name, worn, st }
 }
 
+/**
+ * A frame with what is worn drawn over it, one thing over the other from the ground up to the head. A thing of the body that goes
+ * above the neck (the hood of the hoodie) gives way to a hat: with a thing on the head, its marks above the neck are not drawn.
+ * The crown is no hat here: it sits inside the head, and the hood goes round it.
+ */
+function dressed(/** @type {string[]} */ rows, /** @type {[number, number] | undefined} */ at, /** @type {string[]} */ wear, /** @type {[number, number, string][]} */ glint, /** @type {string} */ animal, /** @type {'adult' | 'baby'} */ body) {
+  if (!wear.length && !glint.length) return rows
+  const sp = species(animal), hat = wear.some(id => partOf(id) === 'head'), neck = Number(sp.anchors[body]?.neck)
+  const marks = (/** @type {string} */ id) => { const all = marksFor(id, animal, body); return hat && partOf(id) === 'body' && neck >= 0 ? all.filter(m => m[0] >= neck) : all }
+  // with a thing under the feet the ground is lower: the accessories stand on it, not at the feet
+  const under = Math.max(0, ...wear.flatMap(id => marks(id).map(m => m[0] - (sp.size[1] - 1))))
+  return dress(rows, [...glint, ...wear.toReversed().flatMap(id => partOf(id) === 'accessory' ? marks(id).map(([r, c, ch]) => /** @type {[number, number, string]} */ ([r + under, c, ch])) : marks(id))], at, sp.size)
+}
+
+const SHARE_COLS = 60 // the card of /pet share: no line wider, so it survives a paste into a post
+const SHARE_ROWS = 13 // ...and no more lines than this, the two of the fence included: 13 only with a hat and a thing under the feet, else 12 or fewer
+const SHARE_LINK = 'cachito · github.com/silirim/cachito-pet'
+/**
+ * The pet as plain text, for /pet share: its calm drawing with what it has on, two pixel rows a line in block characters and no
+ * colour. The eyes, the nose and the mouth are left empty, so a face shows in one colour. Empty rows above and columns at the left are cut.
+ */
+function blocks(/** @type {{ stage: string, closet: string[] }} */ c, /** @type {{ wear: string, species: string }} */ p) {
+  const animal = animalOf(p.species), sp = species(animal), worn = wornOf(c.closet, p.wear), name = STATE[c.stage] ?? 'adult'
+  const st = sp.states[name === 'crown' && !worn.includes('crown') ? 'adult' : name] ?? sp.states.adult
+  const rows = dressed(st.frames[0], st.at?.[0], worn.filter(id => id !== 'crown' && partOf(id) !== GOLDEN.slot), [], animal, name === 'baby' ? 'baby' : 'adult')
+  const full = (/** @type {number} */ r, /** @type {number} */ c) => { const ch = rows[r]?.[c]; return ch !== undefined && ch !== '.' && ch !== 'k' }
+  const lines = []
+  for (let r = 0; r < rows.length; r += 2) lines.push(Array.from(rows[r] ?? '', (_, x) => full(r, x) ? full(r + 1, x) ? '█' : '▀' : full(r + 1, x) ? '▄' : ' ').join('').trimEnd())
+  while (lines.length && !lines[0]) lines.shift()
+  const left = Math.min(...lines.filter(Boolean).map(l => l.length - l.trimStart().length))
+  return lines.map(l => l.slice(left))
+}
+
 /** Sprite for a view. Frames come in two heights, and an item on the ground widens them, so the Raster key carries the size. */
 function sprite(/** @type {ReturnType<typeof view>} */ v, /** @type {{n: number, rare: number, demo: string, sleep: boolean, egg: number, love: number, idle: string, idleN: number, spark: number}} */ a, /** @type {{wear: string, species: string}} */ p) {
   const { sp, name, worn, st } = drawn(v, a, p)
@@ -577,12 +610,7 @@ function sprite(/** @type {ReturnType<typeof view>} */ v, /** @type {{n: number,
   const coat = coatId ? coatOf(coatId, animalOf(p.species)) : null
   const gold = coatId === GOLDEN.id && at ? /** @type {{ shine: [number, number][], spark: [number, number][] } | undefined} */ (sp.gold[body]) : null
   const glint = gold ? [...gold.shine.map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'x'])), ...gold.spark.filter((_, n) => a.spark >> n & 1).map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'y']))] : []
-  if (wear.length || glint.length) {
-    const marks = (/** @type {string} */ id) => marksFor(id, animalOf(p.species), body)
-    // with a thing under the feet the ground is lower: the accessories stand on it, not at the feet
-    const under = Math.max(0, ...wear.flatMap(id => marks(id).map(m => m[0] - (sp.size[1] - 1))))
-    rows = dress(rows, [...glint, ...wear.toReversed().flatMap(id => partOf(id) === 'accessory' ? marks(id).map(([r, c, ch]) => /** @type {[number, number, string]} */ ([r + under, c, ch])) : marks(id))], at, sp.size)
-  }
+  rows = dressed(rows, at, wear, glint, animalOf(p.species), body)
   const pal = { ...sp.palette, ...coat?.palette, ...(st.tint ? sp.tints[st.tint] : null), ...(light ? zoo.light : null) }
   const edge = coat && light ? { of: new Set(Object.values(coat.palette).map(hex)), to: hex(coat.edge) } : null
   return { key: `pet-${rows[0].length}x${rows.length}`, columns: rows[0].length, rows: rows.length / 2, cells: cells(rows, pal, a.love, edge) }
@@ -798,14 +826,32 @@ async function load(/** @type {any} */ $) {
   lastActive = lastOwn = await $.clock.now()
   await getPrefs($)
   const held = await heldPet($)
-  if (held) { cur = held; return false } // whatever version kept it, it is whole now
+  if (held) { cur = held; await founding($); return false } // whatever version kept it, it is whole now
   const stored = await storeGet($, 'pet').catch(() => undefined)
   const born = stored && typeof stored === 'object' ? shared(stored) : null
   // CACHITO_PLAIN=1 leaves the golden roll out (the tests, the bench): the pet is born plain
   const plain = (await $.env.get('CACHITO_PLAIN').catch(() => undefined)) === '1'
   cur = reduce(/** @type {any} */ ({ ...initialState(plain ? 1 : undefined), ...born, ...(born && { base: born }) }), { type: 'sessionStart', t: lastActive })
   await update($, pet, () => cur)
+  await founding($)
   return true
+}
+
+/**
+ * The pet's birth and the founder's eggshell (engine.js `birth`): a newborn is born now; a pet of a version before this one, which
+ * kept no birth, at the first moment its diary knows, else now. Born in time, it has the eggshell from here on, and it goes on a
+ * head that has nothing on and was not left bare by choice. Under the bench the rule is the same, on the bench's own store.
+ */
+async function founding(/** @type {any} */ $) {
+  const had = cur.owned.includes(EGGSHELL.id), first = cur.born || await bench($) ? 0 : Number(diaryOf(await storeGet($, 'diary').catch(() => null)).first) || 0 // read even in a headless run, which keeps no diary
+  const next = birth(cur, lastActive, first)
+  if (next === cur) return
+  cur = next
+  await update($, pet, () => cur)
+  await share($, true).catch(() => {})
+  if (had || !cur.owned.includes(EGGSHELL.id)) return
+  const p = await getPrefs($), said = p.wear.split(/\s+/), closet = card(cur).closet
+  if (!said.includes('none') && !said.includes('nohead') && !wornOf(closet, p.wear).some(id => partOf(id) === 'head')) await setPrefs($, { wear: putOn(closet, p.wear, EGGSHELL.id) })
 }
 
 /** Runs the animation: frames while something moves, a rare blink when calm, sleep after 5 idle minutes, a redraw when a mood times out. */
@@ -901,7 +947,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (!(await heldAnim($)).egg) await askVoice($).catch(() => {}) // a pet born before this version is asked once; a newborn after it hatched
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
-    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet audit [days], /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet diary, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
+    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet audit [days], /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet diary, /pet share, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
     $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
     return next(e)
   })
@@ -1161,6 +1207,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const points = (/** @type {number} */ n) => count1(L, 'points', n)
     if (verb === 'shop' || verb === 'buy') {
       const item = SOLD.find(i => i.id === arg), mine = zooOf(c.animals, who)
+      // a thing sold in one month only: out of it the catalogue says the month where a thing owned says `yours`, and buying is refused with the reason
+      const at = await $.clock.now(), monthOf = (/** @type {string} */ id) => sells(id, at) ? 0 : SHOP.find(i => i.id === id)?.month ?? 0
       if (arg && RULES.animals.includes(arg)) { // an animal: unlocked once, shown at once, and then its own for good
         const animal = animalName(L, arg), price = RULES.animalPrice
         if (mine.includes(arg)) return { text: say('animal.have', { animal, id: arg }) }
@@ -1170,9 +1218,11 @@ export function register(/** @type {import('claude-code').On} */ on) {
         await setPrefs($, { species: arg, missing: '' })
         return { text: say('animal.done', { animal, price, left: cur.coins }) }
       }
+      if (arg === EGGSHELL.id) return { text: c.owned.includes(arg) ? say('buy.have', { item: itemName(L, EGGSHELL), id: arg }) : say('founder.not', { item: itemName(L, EGGSHELL), date: FOUNDER_UNTIL }) } // not sold: a founder's pet has it
       if (item) { // /pet shop <item> buys; /pet buy is the same, kept for who learnt it
         const name = itemName(L, item)
         if (c.owned.includes(item.id)) return { text: say('buy.have', { item: name, id: item.id }) }
+        if (monthOf(item.id)) return { text: say(`buy.month.${monthOf(item.id)}`, { item: name }) }
         if (c.coins < item.price) return { text: say('buy.short', { item: name, price: item.price, coins: c.coins, earn: earn(L) }) }
         await feed($, { type: 'buy', id: item.id })
         await diaryDo($, (d, t) => diaryBought(d, item.id, t)).catch(() => {})
@@ -1183,8 +1233,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const wearing = wornOf(c.closet, who.wear), place = Math.max(...[...PARTS, 'animal'].map(part => cols(say(`part.${part}`)))) + 2
       const sold = [...RULES.animals, ...mine.filter(id => !RULES.animals.includes(id) && !REG.species[id].pack)] // the six to unlock, and the pet's own rare one, which nobody can buy. What a skin pack brings is not the shop's
       // the columns are as wide as the widest name on screen: a Chinese name takes two columns a character
-      const wide = Math.max(...SOLD.map(i => cols(itemName(L, i))), ...sold.map(id => cols(animalName(L, id)))) + 2
-      const row = (/** @type {typeof SOLD[number]} */ i) => `  ${i.id.padEnd(12)}${pad(itemName(L, i), wide)}${String(i.price).padStart(3)}  ${pad(say(`part.${i.slot}`), place)}${!c.owned.includes(i.id) ? '' : say(wearing.includes(i.id) ? 'shop.worn' : 'shop.yours')}`.trimEnd()
+      const wide = Math.max(...OWNABLE.map(i => cols(itemName(L, i))), ...sold.map(id => cols(animalName(L, id)))) + 2
+      const row = (/** @type {typeof SOLD[number]} */ i) => `  ${i.id.padEnd(12)}${pad(itemName(L, i), wide)}${String(i.price).padStart(3)}  ${pad(say(`part.${i.slot}`), place)}${c.owned.includes(i.id) ? say(wearing.includes(i.id) ? 'shop.worn' : 'shop.yours') : monthOf(i.id) ? say(`shop.month.${monthOf(i.id)}`) : ''}`.trimEnd()
       return { text: [
         ...(arg ? [say('shop.none', { arg }), ''] : verb === 'buy' ? [say('shop.pick'), ''] : []),
         say('shop.title', { points: points(c.coins) }),
@@ -1192,7 +1242,10 @@ export function register(/** @type {import('claude-code').On} */ on) {
         '',
         ...SHOP.map(row),
         '',
-        row(GOLDEN), // the coat is a colour, not a thing to wear: a row of its own
+        ...COATS.map(row), // a coat is a colour, not a thing to wear: rows of their own
+        '',
+        // the founder's eggshell, apart: no price, and whether it is the pet's
+        `  ${EGGSHELL.id.padEnd(12)}${pad(itemName(L, EGGSHELL), wide)}${'–'.padStart(3)}  ${pad(say(`part.${EGGSHELL.slot}`), place)}${say(!c.owned.includes(EGGSHELL.id) ? 'shop.founder' : wearing.includes(EGGSHELL.id) ? 'shop.worn' : 'shop.yours')}`,
         '',
         // the animals, apart: each with its price and whether it is the pet's own, the one shown marked
         ...sold.map(id => `  ${id.padEnd(12)}${pad(animalName(L, id), wide)}${(RULES.animals.includes(id) ? String(RULES.animalPrice) : '–').padStart(3)}  ${pad(say('part.animal'), place)}${!mine.includes(id) ? '' : say(id === who.species ? 'shop.shown' : 'shop.yours')}`.trimEnd()),
@@ -1212,7 +1265,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const off = arg === 'off' && !!arg2, id = off ? arg2 : arg, item = WEARABLE.find(i => i.id === id), name = item ? itemName(L, item) : ''
       const now = wornOf(c.closet, who.wear)
       const told = (/** @type {string} */ wear) => wornOf(c.closet, wear).length ? say('wears.now', { name: who.name, list: wornLine(L, c.closet, wear) }) : say('wears.none', { name: who.name })
-      if (arg === 'none' || (arg === 'off' && !arg2)) { await setPrefs($, { wear: takeOff(c.closet, who.wear, 'none') }); return { text: say(now.includes(GOLDEN.id) ? 'wears.none.golden' : 'wears.none', { name: who.name }) } } // the coat is a colour: it stays, and the reply says so
+      if (arg === 'none' || (arg === 'off' && !arg2)) { await setPrefs($, { wear: takeOff(c.closet, who.wear, 'none') }); return { text: say(now.includes(GOLDEN.id) ? 'wears.none.golden' : now.some(x => partOf(x) === GOLDEN.slot) ? 'wears.none.coat' : 'wears.none', { name: who.name }) } } // the coat is a colour: it stays, and the reply says so
       if (arg === PLAIN) { const coat = now.find(x => partOf(x) === GOLDEN.slot), wear = coat ? takeOff(c.closet, who.wear, coat) : who.wear; await setPrefs($, { wear }); return { text: told(wear) } } // the pet's own colour: what who has a coat on goes back to
       if (!item || !c.closet.includes(item.id)) return { text: say('wear.not', { arg: id ?? '?', list: c.closet.join(', ') || say('nothing') }) }
       if (off && !now.includes(item.id)) return { text: `${say('wear.notOn', { item: name })}\n${told(who.wear)}` }
@@ -1222,11 +1275,22 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const old = WEARABLE.find(i => i.slot === item.slot && i.id !== item.id && now.includes(i.id)), slot = say(`part.${item.slot}`)
       return { text: `${now.includes(item.id) ? say('wear.off', { item: name }) : old ? say('wear.swap', { item: name, slot, old: itemName(L, old) }) : say('wear.on', { item: name, slot })}\n${told(wear)}` }
     }
+    if (verb === 'share') { // a card to copy into a post: the pet and a few words about it, and nothing about the person's work
+      const worn = wornOf(c.closet, who.wear), rare = !RULES.animals.includes(who.species) && !REG.species[animalOf(who.species)].pack
+      const stage = STATE[c.stage] ?? c.stage, art = blocks(c, who).map(l => cut(l, SHARE_COLS))
+      const head = say(worn.includes(GOLDEN.id) ? 'card.head.golden' : 'card.head', { name: who.name, animal: animalName(L, who.species), stage: text(L, `stage.${stage}`, {}, stage) }) + (rare ? ` · ${say('share.rare')}` : '')
+      const things = worn.filter(id => id !== GOLDEN.id) // the golden coat is in the first line
+      const said = [text(L, `peak.${extremes(who.stats).peak}`), `★ ${points(c.coins)}`, ...(things.length ? [say('card.wears', { list: things.map(id => itemName(L, /** @type {typeof WEARABLE[number]} */ (WEARABLE.find(i => i.id === id)))).join(say('sep')) })] : [])]
+      // what is said, on as few lines as hold it; when the card would be too tall, on one line cut to the width
+      const packed = said.reduce((/** @type {string[]} */ lines, t) => lines.length && cols(`${lines.at(-1)} · ${t}`) <= SHARE_COLS ? [...lines.slice(0, -1), `${lines.at(-1)} · ${t}`] : [...lines, t], [])
+      const room = SHARE_ROWS - art.length - 4 // the fence, the head and the last line
+      return { text: ['```', ...art, '```', cut(head, SHARE_COLS), ...(packed.length > room ? [said.join(' · ')] : packed).map(l => cut(l, SHARE_COLS)), SHARE_LINK].join('\n') }
+    }
     if (verb) return { text: say('cmd.unknown', { verb: tidy(verb, 24) }) } // a word that is no command says so, in one line: the card is /pet alone
     // lean is the style. Neither line claims a saving for this chat: the figures are the bench's, and are labelled so
     const isStyle = await styleOn($)
     const lean = say(isStyle && !styleNext(true) ? 'card.lean.wait' : isStyle ? 'card.lean.on' : await otherStyle($) ? 'card.lean.plugin' : 'card.lean.off', { bench: say('bench') })
-    const names = SOLD.filter(i => c.owned.includes(i.id)).map(i => itemName(L, i))
+    const names = OWNABLE.filter(i => c.owned.includes(i.id)).map(i => itemName(L, i))
     const spoken = await voiceTally($)
     const comments = !(await voiceChosen($)) ? say('card.comments.off')
       : spoken ? say('card.comments.on', { n: spoken.today, cap: RULES.voiceCapDay, today: money(spoken.todayUsd), all: money(spoken.usd) }) : say('card.comments.unread')

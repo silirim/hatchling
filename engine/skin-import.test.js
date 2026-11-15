@@ -98,13 +98,13 @@ test('a Codex pet becomes a pack that passes the same check as any other: three 
   assert.deepEqual(c.species['pixel-duck']?.size, DEFAULTS.size)
   assert.equal(c.credits.license, 'CC BY 4.0')
   // other sizes and palettes, within the limits of a pack
-  const small = convert({ meta: { id: 'duck' }, sheet: sheet(11), size: [12, 10], colours: 4 })
-  assert.deepEqual([validate(small.pack, { taken }), small.pack.animals.duck.size, Object.keys(small.pack.animals.duck.palette).length <= 4, small.pack.credits], [[], [12, 10], true, { author: 'not declared', license: 'not declared' }])
-  assert.deepEqual(validate(convert({ meta: { id: 'duck' }, sheet: sheet(), size: [LIMITS.side, LIMITS.side], colours: 99 }).pack, { taken }), [])
+  const small = convert({ meta: { id: 'otter' }, sheet: sheet(11), size: [12, 10], colours: 4 })
+  assert.deepEqual([validate(small.pack, { taken }), small.pack.animals.otter.size, Object.keys(small.pack.animals.otter.palette).length <= 4, small.pack.credits], [[], [12, 10], true, { author: 'not declared', license: 'not declared' }])
+  assert.deepEqual(validate(convert({ meta: { id: 'otter' }, sheet: sheet(), size: [LIMITS.side, LIMITS.side], colours: 99 }).pack, { taken }), [])
   // what is not a Codex sheet, or a size out of the limits, is said
-  assert.throws(() => convert({ meta: { id: 'duck' }, sheet: { width: 800, height: 600, rgba: new Uint8Array(800 * 600 * 4) } }), /a Codex sheet is 1536 wide/)
-  assert.throws(() => convert({ meta: { id: 'duck' }, sheet: { width: 1536, height: 1872, rgba: new Uint8Array(1536 * 1872 * 4) } }), /idle\) is empty/)
-  assert.throws(() => convert({ meta: { id: 'duck' }, sheet: sheet(), size: [26, 22] }), /even numbers from 8 to 24/)
+  assert.throws(() => convert({ meta: { id: 'otter' }, sheet: { width: 800, height: 600, rgba: new Uint8Array(800 * 600 * 4) } }), /a Codex sheet is 1536 wide/)
+  assert.throws(() => convert({ meta: { id: 'otter' }, sheet: { width: 1536, height: 1872, rgba: new Uint8Array(1536 * 1872 * 4) } }), /idle\) is empty/)
+  assert.throws(() => convert({ meta: { id: 'otter' }, sheet: sheet(), size: [26, 22] }), /even numbers from 8 to 24/)
   assert.equal(convert({ meta: { id: '!!' }, sheet: sheet() }).id, 'pet') // no usable id or name: a plain one
   // a name from the pet's file is cleaned before it is a pack's
   const odd = convert({ meta: { id: 'Evil__Pet', displayName: 'Evil\u001b[31m\nPet ' + 'x'.repeat(60) }, sheet: sheet() })
