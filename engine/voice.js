@@ -125,9 +125,10 @@ const BODY = /** @type {Record<string, string>} */ ({
  * The system prompt: who the pet is, how its five statistics sound together, and the rules of a line. The pet reacts, in the first
  * person, as a companion of that character would: it does not report what happened.
  * With `talk` the person spoke to it (/pet say): it answers them, still as a pet. It gives no technical advice and does no work, and says so in its own way when asked.
- * @param {{ name: string, animal: string, stats: number[], lang?: string, talk?: boolean }} pet
+ * `person` is the name the person asked to be called by (/pet call me): one more line, and none when they told none.
+ * @param {{ name: string, animal: string, stats: number[], lang?: string, talk?: boolean, person?: string }} pet
  */
-export function system({ name, animal, stats, lang, talk = false }) {
+export function system({ name, animal, stats, lang, talk = false, person = '' }) {
   const tongue = text(lang, 'name'), own = (asLang(lang) ?? BASE) === BASE
   const by = STATS.map((stat, i) => ({ stat, value: stats[i] ?? 0 })).sort((x, y) => y.value - x.value)
   const first = by[0]?.stat ?? 'calm', second = by[1]?.stat ?? 'calm', last = by.at(-1)?.stat ?? 'wit'
@@ -140,6 +141,7 @@ export function system({ name, animal, stats, lang, talk = false }) {
       : 'You are told what just happened. React to the moment in the first person, as that companion would: a feeling, a question, a quip. Do not report it: no retelling, and no word, name or detail taken from what you are told.',
     `One line of ${about(lang)}, never more than ${wide(lang) ? RULES.voiceMaxCols / 2 : RULES.voiceMaxWords}. Plain ${tongue}${own ? '' : `: the line is in ${tongue}, whatever language the rest is in`}. No file names, no paths, no quoted text, no quotation marks, no exclamation marks, no emoji, no advice. Never unkind to the person.`,
     `Your tone, for instance: ${list(lang, `tone.${first}`).join(' / ')} Say something new, not one of these, and begin each line your own way: no habitual opening word such as Oh, Ooh, Eek or Well.`,
+    ...(person ? [`The person asked you to call them ${person}. You may say that name now and then, in few of your lines, never in every one.`] : []),
   ].join('\n')
 }
 

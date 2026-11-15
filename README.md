@@ -44,7 +44,7 @@ The eight lines alone:
 | `/pet shop [item]` | the catalogue; buy an item |
 | `/pet wear <item>` | put it on or take it off |
 | `/pet chats` | which chat works, waits or asks for your OK |
-| `/pet share` | a card of the pet to paste in a post |
+| `/pet share` | a picture of the pet to attach to a post |
 | `/pet comments on\|off` | comments; off by default |
 | `/pet lean on\|off` | cachito-lean's eight lines, from the pet |
 | `/pet hide`, `/pet show` | put it away, bring it back |
@@ -78,8 +78,8 @@ Every run and its limits: [bench/RESULTS.md](bench/RESULTS.md). Run it on your o
 
 - **Kept locally**, in Claude Code's plugin store (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, and for each chat the full path of its folder and the times of its last turn (30 chats, 30 days). Never the content of a chat, a prompt, a file or a command. cachito-lean keeps only its switch.
 - **Nothing is sent anywhere**, and no model is asked.
-- **The one exception is comments, off until you say yes.** Each is one request to a small model (Haiku) on your own tokens, at most about $0.003 a day. It gets the pet's character and language, why it speaks, tool names (your MCP servers' too) and counts, the names of programs that failed, how many files changed, the last 600 characters of the assistant's reply, the pet's own last two lines, up to three diary lines, and the folder name and turn times of another chat that finished; diary lines can carry folder names too. With `/pet say`, the first 300 characters you typed.
-- `/pet adopt` reads `~/.claude.json` once, when you run it.
+- **The one exception is comments, off until you say yes.** Each is one request to a small model (Haiku) on your own tokens, at most about $0.003 a day. It gets the pet's character and language, your name if told (`/pet call me`), why it speaks, tool names (your MCP servers' too) and counts, the names of programs that failed, how many files changed, the last 600 characters of the assistant's reply, the pet's own last two lines, up to three diary lines, and the folder name and turn times of another chat that finished; diary lines can carry folder names too. With `/pet say`, the first 300 characters you typed.
+- `/pet adopt` reads `~/.claude.json` once, when you run it. `/pet share` saves a picture in `~/.claude/cachito-share/`.
 - Complete: [docs/privacy.md](docs/privacy.md).
 
 ## Development

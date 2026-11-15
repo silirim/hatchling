@@ -7,16 +7,17 @@
 // The pet speaks English, Spanish, Portuguese or Simplified Chinese (engine/lang/): /pet lang picks, and a newborn takes the system's.
 
 import { atom, read, update } from 'claude-code'
-import { initialState, reduce, view, card, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
+import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
 import { MODEL, tally, due, left, reserve, settle as settled, average, money, system, summary, news, reply, clean, tooLong, pathy, question } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page } from '../engine/diary.js'
 import { marks, greeting, finished, folder, counts, listing } from '../engine/company.js'
-import { bubble, cuddle as cuddleLine, ago, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
-import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX } from '../engine/persona.js'
+import { bubble, cuddle as cuddleLine, called, ago, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
+import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX, cleanCall, CALL_MAX } from '../engine/persona.js'
 import { text, list as listOf, voicedAs, asLang, fromLocale } from '../engine/lang/index.js'
 import { cols, pad, wrap, tidy } from '../engine/width.js'
 import zoo from '../sprites/zoo.js'
-import { REG, install, marksFor, coatOf, LIMITS as SKIN_LIMITS } from '../engine/skins.js'
+import { REG, install, coatOf, dressed, portrait, LIMITS as SKIN_LIMITS } from '../engine/skins.js'
+import { shareLines, picture, png, svg, sharePath } from '../engine/share.js'
 
 const pet = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'pet' }), null)
 // `skin` is the ticks the row of the parts stays open, in place of the buttons, after the skin button.
@@ -25,7 +26,7 @@ const pet = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'pet' }), null)
 // `note` is a line the pet says for a while by itself, over any other line (its answer to /pet say, the line of a cuddle), `noteFix` the dim line under it, `noteLeft` the ticks it stays: then the bubble is what it was
 const ANIM0 = { n: 0, rare: -1, demo: '', sleep: false, egg: 0, love: 0, ask: '', note: '', noteFix: '', noteLeft: 0, skin: 0, idle: '', idleN: 0, spark: 0, hush: 0, sig: '', sigAt: 0 }
 const anim = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'anim' }), ANIM0)
-const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: false, voiceAsked: false, lang: '', missing: '', chats: true }
+const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: false, voiceAsked: false, lang: '', missing: '', chats: true, callme: '' }
 const prefs = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'prefs' }), PREFS0)
 
 const DEFAULT = 0x01000000 // the terminal's own colour
@@ -273,7 +274,7 @@ async function askLine(/** @type {any} */ $, /** @type {import('../engine/voice.
   try {
     if (!(await storeSet($, 'voice', reserve(t, why, now)).then(() => true, () => false))) return none('lost')
     const p = await getPrefs($)
-    const r = await $.model.complete({ model: MODEL, system: system({ name: p.name, animal: p.species, stats: p.stats, lang: p.lang, ...sys }), prompt: await prompt(t), maxTokens: RULES.voiceMaxTokens, effort: 'low', timeoutMs: RULES.voiceTimeoutMs }).catch(() => null)
+    const r = await $.model.complete({ model: MODEL, system: system({ name: p.name, animal: p.species, stats: p.stats, lang: p.lang, person: p.callme, ...sys }), prompt: await prompt(t), maxTokens: RULES.voiceMaxTokens, effort: 'low', timeoutMs: RULES.voiceTimeoutMs }).catch(() => null)
     const line = r?.isAnswered ? clean(r.text) : ''
     // added over the store as it is now: another chat may have spoken meanwhile
     const after = await voiceTally($)
@@ -286,11 +287,12 @@ async function askLine(/** @type {any} */ $, /** @type {import('../engine/voice.
  * of their names. Each is data, checked whole by engine/skins.js before any of it is used; one that is not sound is left out and
  * told by /pet skins. No folder, no packs, and nothing here can fail: the band is drawn all the same. Under the bench none is read.
  */
-async function skinsDir(/** @type {any} */ $) {
+async function configDir(/** @type {any} */ $, /** @type {string} */ folder) {
   const config = await $.env.get('CLAUDE_CONFIG_DIR').catch(() => undefined)
   const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
-  return config ? `${config}/cachito-skins` : home ? `${home}/.claude/cachito-skins` : ''
+  return config ? `${config}/${folder}` : home ? `${home}/.claude/${folder}` : ''
 }
+const skinsDir = (/** @type {any} */ $) => configDir($, 'cachito-skins')
 async function readPacks(/** @type {any} */ $) {
   const dir = (await bench($)) ? '' : await skinsDir($)
   const found = /** @type {{ name: string, kind: string, size: number }[]} */ (dir ? await $.fs.list(dir).catch(() => []) : [])
@@ -518,23 +520,6 @@ function cells(/** @type {string[]} */ rows, /** @type {Record<string, string>} 
   return /** @type {Uint8Array & { toBase64(): string }} */ (new Uint8Array(Uint32Array.from(out).buffer)).toBase64()
 }
 
-/**
- * A frame with shop items drawn over it. The marks are in the body's own coordinates and `at` is where the body sits on the effect
- * canvas, so a calm frame is first set on that canvas: a hat needs the rows above the head. The accessories stand on the ground next
- * to the body: the frame is widened by the columns they take, the same for every frame of that item, so the pet does not jump between
- * moods. A thing under the feet (the skateboard) makes the frame taller by its rows. Without `at` (asleep) the frame only takes
- * that size and nothing is drawn: the rows are then added above, and the pet sleeps on the ground.
- */
-function dress(/** @type {string[]} */ rows, /** @type {[number, number, string][]} */ marks, /** @type {[number, number] | undefined} */ at, /** @type {[number, number]} */ [W, H] = [zoo.width, zoo.height]) {
-  const cols = marks.map(m => m[1]), left = Math.max(0, -Math.min(0, ...cols)), right = Math.max(0, Math.max(0, ...cols) - (W - 1))
-  const under = Math.max(0, ...marks.map(m => m[0] - (H - 1)))
-  const wide = rows.length === H ? ['', '', ...rows].map(r => (r && `.${r}`).padEnd(W + 2, '.')) : rows
-  const more = Array.from({ length: under + under % 2 }, () => '.'.repeat(W + 2))
-  const g = (at ? [...wide, ...more] : [...more, ...wide]).map(r => [...'.'.repeat(left) + r + '.'.repeat(right)])
-  if (at) for (const [r, c, ch] of marks) { const row = g[r + at[0]], x = c + at[1] + left; if (row && x >= 0 && x < row.length) row[x] = ch }
-  return g.map(r => r.join(''))
-}
-
 /** The animal drawn, by a name there is; and the one a new pet is born as: weighted, so the rare ones stay rare. An animal of a skin pack is never rolled. */
 const animalOf = (/** @type {string} */ name) => isAnimal(name) ? name : 'penguin'
 function species(/** @type {string} */ name) { return REG.species[animalOf(name)] }
@@ -555,39 +540,6 @@ function drawn(/** @type {ReturnType<typeof view>} */ v, /** @type {{demo: strin
   const worn = wornOf(v.closet, p.wear)
   const st = sp.states[name === 'crown' && a.demo !== 'bloom' && !worn.includes('crown') ? 'adult' : name] ?? sp.states.adult
   return { sp, name, worn, st }
-}
-
-/**
- * A frame with what is worn drawn over it, one thing over the other from the ground up to the head. A thing of the body that goes
- * above the neck (the hood of the hoodie) gives way to a hat: with a thing on the head, its marks above the neck are not drawn.
- * The crown is no hat here: it sits inside the head, and the hood goes round it.
- */
-function dressed(/** @type {string[]} */ rows, /** @type {[number, number] | undefined} */ at, /** @type {string[]} */ wear, /** @type {[number, number, string][]} */ glint, /** @type {string} */ animal, /** @type {'adult' | 'baby'} */ body) {
-  if (!wear.length && !glint.length) return rows
-  const sp = species(animal), hat = wear.some(id => partOf(id) === 'head'), neck = Number(sp.anchors[body]?.neck)
-  const marks = (/** @type {string} */ id) => { const all = marksFor(id, animal, body); return hat && partOf(id) === 'body' && neck >= 0 ? all.filter(m => m[0] >= neck) : all }
-  // with a thing under the feet the ground is lower: the accessories stand on it, not at the feet
-  const under = Math.max(0, ...wear.flatMap(id => marks(id).map(m => m[0] - (sp.size[1] - 1))))
-  return dress(rows, [...glint, ...wear.toReversed().flatMap(id => partOf(id) === 'accessory' ? marks(id).map(([r, c, ch]) => /** @type {[number, number, string]} */ ([r + under, c, ch])) : marks(id))], at, sp.size)
-}
-
-const SHARE_COLS = 60 // the card of /pet share: no line wider, so it survives a paste into a post
-const SHARE_ROWS = 13 // ...and no more lines than this, the two of the fence included: 13 only with a hat and a thing under the feet, else 12 or fewer
-const SHARE_LINK = 'cachito · github.com/silirim/cachito-pet'
-/**
- * The pet as plain text, for /pet share: its calm drawing with what it has on, two pixel rows a line in block characters and no
- * colour. The eyes, the nose and the mouth are left empty, so a face shows in one colour. Empty rows above and columns at the left are cut.
- */
-function blocks(/** @type {{ stage: string, closet: string[] }} */ c, /** @type {{ wear: string, species: string }} */ p) {
-  const animal = animalOf(p.species), sp = species(animal), worn = wornOf(c.closet, p.wear), name = STATE[c.stage] ?? 'adult'
-  const st = sp.states[name === 'crown' && !worn.includes('crown') ? 'adult' : name] ?? sp.states.adult
-  const rows = dressed(st.frames[0], st.at?.[0], worn.filter(id => id !== 'crown' && partOf(id) !== GOLDEN.slot), [], animal, name === 'baby' ? 'baby' : 'adult')
-  const full = (/** @type {number} */ r, /** @type {number} */ c) => { const ch = rows[r]?.[c]; return ch !== undefined && ch !== '.' && ch !== 'k' }
-  const lines = []
-  for (let r = 0; r < rows.length; r += 2) lines.push(Array.from(rows[r] ?? '', (_, x) => full(r, x) ? full(r + 1, x) ? '█' : '▀' : full(r + 1, x) ? '▄' : ' ').join('').trimEnd())
-  while (lines.length && !lines[0]) lines.shift()
-  const left = Math.min(...lines.filter(Boolean).map(l => l.length - l.trimStart().length))
-  return lines.map(l => l.slice(left))
 }
 
 /** Sprite for a view. Frames come in two heights, and an item on the ground widens them, so the Raster key carries the size. */
@@ -699,7 +651,7 @@ async function storedPrefs(/** @type {any} */ $) {
   // a pet born with the two traits of an earlier version has no statistics yet: the traits give them, once, and are not kept
   const old1 = asTrait(raw?.trait)
   const stats = asStats(raw?.stats) ?? (old1 ? statsOf(seed, old1, asTrait(raw?.trait2)) : own1.stats)
-  const who = { seed, name: cleanName(raw?.name) || own1.name, stats, personality: tidy(raw?.personality, 120), hatched: Number(raw?.hatched) || 0, asked: !!raw?.asked }
+  const who = { seed, name: cleanName(raw?.name) || own1.name, stats, personality: tidy(raw?.personality, 120), hatched: Number(raw?.hatched) || 0, asked: !!raw?.asked, callme: cleanCall(raw?.callme) } // `callme`: what the person typed after /pet call me, and nothing read from anywhere else
   // cuddles: how many and when the last one was, for the card. What they earn is the engine's to count
   const cuddles = Math.max(0, Math.floor(Number(raw?.cuddles) || 0)), cuddled = Number(raw?.cuddled) || 0
   // the language: the one chosen; a newborn takes the system's when it is one of ours (LC_ALL before LANG); a pet born before the languages keeps English
@@ -744,7 +696,7 @@ async function cuddle(/** @type {any} */ $) {
   await share($, true).catch(() => {})
   const p = await getPrefs($), t = (await voiceOn($)) ? await voiceTally($) : null
   const capped = !!t && due(t, 'cuddle', now) === 'cap'
-  const say = capped ? voicedAs(p.lang, 'cuddle.cap', STATS.indexOf(speaker(p.stats, n))) : cuddleLine(speaker(p.stats, n), n, p.lang)
+  const say = capped ? voicedAs(p.lang, 'cuddle.cap', STATS.indexOf(speaker(p.stats, n))) : called(cuddleLine(speaker(p.stats, n), n, p.lang), p.callme, p.lang, n)
   await update($, anim, a => ({ ...a, love: LOVE_TICKS }))
   await hold($, say, '', RULES.cuddleShowMs)
   if (!capped) speak($, 'cuddle', turnInfo).catch(() => {}) // not awaited: the fixed line is on screen at once, the voice's takes its place if it comes
@@ -947,7 +899,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (!(await heldAnim($)).egg) await askVoice($).catch(() => {}) // a pet born before this version is asked once; a newborn after it hatched
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
-    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet audit [days], /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet diary, /pet share, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
+    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet audit [days], /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary, /pet share, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
     $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
     return next(e)
   })
@@ -1158,7 +1110,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       if (!(await getPrefs($)).voice) return { text: `Comments off: the pet says its fixed lines, and nothing is sent anywhere for it. /pet comments on lets a small model write one line about the turn. That spends tokens of your own account: ${cost}, never more than ${cap}. ${PRICE_NOTE}` }
       return { text: [
         `Comments on. They spend tokens of your own account: each line is one request to a small model (the alias ${MODEL}, through Claude Code's own client).`,
-        `Sent to the model: the pet's name, animal, five statistics and language; why it speaks; the names of the tools used in the turn with their counts (the tools of your MCP servers too, by their names); the program names of the commands that failed; how many files changed; the last ${RULES.voiceTailChars} characters of the assistant's reply (during a turn, of what it wrote last in it, and how many minutes the turn has lasted); the pet's own last ${RULES.voiceRecall} lines, so that it does not repeat itself (they are kept in the store and go back to the model in later chats too); at most ${RULES.diaryRecall} lines of its diary, as memories it may hint at (times, counts, a folder's name: /pet diary shows all of it). When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it.`,
+        `Sent to the model: the pet's name, animal, five statistics and language; the name you told it with /pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts (the tools of your MCP servers too, by their names); the program names of the commands that failed; how many files changed; the last ${RULES.voiceTailChars} characters of the assistant's reply (during a turn, of what it wrote last in it, and how many minutes the turn has lasted); the pet's own last ${RULES.voiceRecall} lines, so that it does not repeat itself (they are kept in the store and go back to the model in later chats too); at most ${RULES.diaryRecall} lines of its diary, as memories it may hint at (times, counts, a folder's name: /pet diary shows all of it). When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it.`,
         `/pet say <text> speaks to the pet: what you write after it (its first ${RULES.saySaidChars} characters) is sent to the same model, which answers in the bubble with one line. It is a request of its own, not a turn of the chat, and counts in the day's lines.`,
         `Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant. But the end of the assistant's reply is sent as it is: those ${RULES.voiceTailChars} characters can hold a path, a name or a piece of code the assistant wrote there.`,
         `Cost: ${cost}. ${PRICE_NOTE}`,
@@ -1189,6 +1141,15 @@ export function register(/** @type {import('claude-code').On} */ on) {
       if (!name) return { text: text(now.lang, 'name.is', { name: now.name, max: NAME_MAX }) }
       await setPrefs($, { name })
       return { text: text(now.lang, 'name.now', { name }) }
+    }
+    if (verb === 'call') { // /pet call me <name>: the one way the pet learns the person's name. Alone it says the name, `nobody` or `off` forgets it
+      const typed = e.args.trim().slice(verb.length).trim().replace(/^me(\s+|$)/i, ''), name = cleanCall(typed)
+      const now = await getPrefs($)
+      if (!typed) return { text: now.callme ? text(now.lang, 'call.is', { name: now.callme }) : text(now.lang, 'call.none', { max: CALL_MAX }) }
+      if (/^(nobody|off)$/i.test(typed)) { await setPrefs($, { callme: '' }); return { text: text(now.lang, 'call.gone') } }
+      if (!name) return { text: text(now.lang, 'call.none', { max: CALL_MAX }) }
+      await setPrefs($, { callme: name })
+      return { text: text(now.lang, 'call.now', { name }) }
     }
     if (verb === 'pet') {
       const c = await cuddle($)
@@ -1275,16 +1236,19 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const old = WEARABLE.find(i => i.slot === item.slot && i.id !== item.id && now.includes(i.id)), slot = say(`part.${item.slot}`)
       return { text: `${now.includes(item.id) ? say('wear.off', { item: name }) : old ? say('wear.swap', { item: name, slot, old: itemName(L, old) }) : say('wear.on', { item: name, slot })}\n${told(wear)}` }
     }
-    if (verb === 'share') { // a card to copy into a post: the pet and a few words about it, and nothing about the person's work
-      const worn = wornOf(c.closet, who.wear), rare = !RULES.animals.includes(who.species) && !REG.species[animalOf(who.species)].pack
-      const stage = STATE[c.stage] ?? c.stage, art = blocks(c, who).map(l => cut(l, SHARE_COLS))
-      const head = say(worn.includes(GOLDEN.id) ? 'card.head.golden' : 'card.head', { name: who.name, animal: animalName(L, who.species), stage: text(L, `stage.${stage}`, {}, stage) }) + (rare ? ` · ${say('share.rare')}` : '')
-      const things = worn.filter(id => id !== GOLDEN.id) // the golden coat is in the first line
-      const said = [text(L, `peak.${extremes(who.stats).peak}`), `★ ${points(c.coins)}`, ...(things.length ? [say('card.wears', { list: things.map(id => itemName(L, /** @type {typeof WEARABLE[number]} */ (WEARABLE.find(i => i.id === id)))).join(say('sep')) })] : [])]
-      // what is said, on as few lines as hold it; when the card would be too tall, on one line cut to the width
-      const packed = said.reduce((/** @type {string[]} */ lines, t) => lines.length && cols(`${lines.at(-1)} · ${t}`) <= SHARE_COLS ? [...lines.slice(0, -1), `${lines.at(-1)} · ${t}`] : [...lines, t], [])
-      const room = SHARE_ROWS - art.length - 4 // the fence, the head and the last line
-      return { text: ['```', ...art, '```', cut(head, SHARE_COLS), ...(packed.length > room ? [said.join(' · ')] : packed).map(l => cut(l, SHARE_COLS)), SHARE_LINK].join('\n') }
+    if (verb === 'share') {
+      // a picture to attach to a post: the pet and a few words about it, in English (the font is Latin), and nothing about the
+      // person's work. A mod cannot write bytes: Node writes the PNG (engine/share-save.js), and with no Node the picture is an SVG
+      const worn = wornOf(c.closet, who.wear), animal = animalOf(who.species), stage = STATE[c.stage] ?? 'adult'
+      const lines = shareLines({ name: who.name, animal: animalName('en', who.species), stage: text('en', `stage.${stage}`, {}, stage), peak: text('en', `peak.${extremes(who.stats).peak}`), stars: c.coins,
+        golden: worn.includes(GOLDEN.id), rare: !RULES.animals.includes(who.species) && !REG.species[animal].pack, founder: c.owned.includes(EGGSHELL.id) })
+      const pic = picture(portrait(animal, stage, worn), lines), dir = await configDir($, 'cachito-share'), node = dir ? await nodePath($) : ''
+      if (!dir) return { text: say('share.failed') }
+      const file = sharePath(dir, who.name, 'png')
+      const saved = node ? await $.process.run([node, `${$.plugin.root}/engine/share-save.js`, file], { stdin: /** @type {Uint8Array & { toBase64(): string }} */ (png(pic)).toBase64() }).then((/** @type {{ exitCode: number }} */ r) => r.exitCode === 0, () => false) : false
+      if (saved) return { text: `${say('share.saved', { path: file })}\n${say('share.saved.how')}` }
+      const drawn = sharePath(dir, who.name, 'svg')
+      return { text: await $.fs.write(drawn, svg(pic)).then(() => `${say('share.svg', { path: drawn })}\n${say('share.svg.how')}`, () => say('share.failed')) }
     }
     if (verb) return { text: say('cmd.unknown', { verb: tidy(verb, 24) }) } // a word that is no command says so, in one line: the card is /pet alone
     // lean is the style. Neither line claims a saving for this chat: the figures are the bench's, and are labelled so
@@ -1324,7 +1288,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const v = a.demo ? demoView(real, a.demo) : real
     const sp = species(p.species)
     const hatching = a.egg > 0
-    const L = p.lang, who = { name: p.name, voice: speaker(p.stats, v.turn), lang: L } // the dominant character, now and then the second: by the turn, so a line keeps its voice
+    const L = p.lang, who = { name: p.name, voice: speaker(p.stats, v.turn), lang: L, call: p.callme, callN: dayOf(await $.clock.now()) } // the dominant character, now and then the second: by the turn, so a line keeps its voice
     const quiet = (/** @type {string} */ say) => ({ say, fix: null, link: null, ask: '', label: '', more: null, aside: '' })
     const asking = !hatching && !a.demo && !!a.ask // the question about the voice holds the bubble until it is answered; a cuddle's line passes over it for its seconds
     const mine = zooOf(v.animals, p) // the animals to pick from: with more than one the skin menu has a part for them

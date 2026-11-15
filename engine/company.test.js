@@ -4,7 +4,7 @@ import { initialState, reduce, view, program, dayOf, RULES } from './engine.js'
 import { bubble, ago, TALK, SILLY, OUTLINE, CALM } from './catalog.js'
 import { marks, remember, greeting, finished, folder, stateOf, counts, listing } from './company.js'
 
-const run = (events, s = initialState()) => events.reduce(reduce, s)
+const run = (events, s = initialState(1)) => events.reduce(reduce, s)
 let t = Date.UTC(2026, 10, 12, 12)
 const at = (e, ms = 1000) => ({ t: (t += ms), ...e })
 const MIN = 60_000, H = 60 * MIN, DAY = 24 * H

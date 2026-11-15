@@ -108,7 +108,7 @@ test('each of the five characters says the same lines its own way: short, sober,
 
 test('the bubble: the highest statistic picks the wording, a greeting starts with the name, the offer to adopt has a button', () => {
   const t = 1000
-  const s = reduce(initialState(), { type: 'sessionStart', t })
+  const s = reduce(initialState(1), { type: 'sessionStart', t })
   assert.equal(bubble(view(s, t), { name: 'Miro', voice: 'calm' }).say, VOICE[CALM.short[0] ?? '']?.[2])
   assert.equal(bubble(view(s, t)).say, CALM.short[0])
   const odd = { ...view(s, t), turn: 1 } // one character, turn after turn

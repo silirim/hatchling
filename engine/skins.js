@@ -6,7 +6,7 @@
 // Pure: no file is read here. The mod reads the folder (hooks/register.js), `npm run skin:check` reads one file (engine/skin-check.js).
 
 import zoo from '../sprites/zoo.js'
-import { extend } from './engine.js'
+import { extend, WEARABLE, GOLDEN } from './engine.js'
 import { tidy } from './width.js'
 
 export const FORMAT = 1
@@ -392,4 +392,50 @@ export function coatOf(coat, animal) {
     memo.set(key, !c || !sp ? null : { edge: ramp[0], palette: own(sp.tints, coat) ?? Object.fromEntries(Object.entries(/** @type {Record<string, string>} */ (sp.palette)).filter(([k]) => !zoo.fixed.includes(k) && k !== 'r').map(([k, v]) => [k, on(v)])) })
   }
   return memo.get(key)
+}
+
+const partOf = (/** @type {string} */ id) => WEARABLE.find(i => i.id === id)?.slot ?? ''
+
+/**
+ * A frame with shop items drawn over it. The marks are in the body's own coordinates and `at` is where the body sits on the effect
+ * canvas, so a calm frame is first set on that canvas: a hat needs the rows above the head. The accessories stand on the ground next
+ * to the body: the frame is widened by the columns they take, the same for every frame of that item, so the pet does not jump between
+ * moods. A thing under the feet (the skateboard) makes the frame taller by its rows. Without `at` (asleep) the frame only takes
+ * that size and nothing is drawn: the rows are then added above, and the pet sleeps on the ground.
+ */
+export function dress(/** @type {string[]} */ rows, /** @type {[number, number, string][]} */ marks, /** @type {[number, number] | undefined} */ at, /** @type {[number, number]} */ [W, H] = [zoo.width, zoo.height]) {
+  const cols = marks.map(m => m[1]), left = Math.max(0, -Math.min(0, ...cols)), right = Math.max(0, Math.max(0, ...cols) - (W - 1))
+  const under = Math.max(0, ...marks.map(m => m[0] - (H - 1)))
+  const wide = rows.length === H ? ['', '', ...rows].map(r => (r && `.${r}`).padEnd(W + 2, '.')) : rows
+  const more = Array.from({ length: under + under % 2 }, () => '.'.repeat(W + 2))
+  const g = (at ? [...wide, ...more] : [...more, ...wide]).map(r => [...'.'.repeat(left) + r + '.'.repeat(right)])
+  if (at) for (const [r, c, ch] of marks) { const row = g[r + at[0]], x = c + at[1] + left; if (row && x >= 0 && x < row.length) row[x] = ch }
+  return g.map(r => r.join(''))
+}
+
+/**
+ * A frame with what is worn drawn over it, one thing over the other from the ground up to the head. A thing of the body that goes
+ * above the neck (the hood of the hoodie) gives way to a hat: with a thing on the head, its marks above the neck are not drawn.
+ * The crown is no hat here: it sits inside the head, and the hood goes round it.
+ */
+export function dressed(/** @type {string[]} */ rows, /** @type {[number, number] | undefined} */ at, /** @type {string[]} */ wear, /** @type {[number, number, string][]} */ glint, /** @type {string} */ animal, /** @type {'adult' | 'baby'} */ body) {
+  if (!wear.length && !glint.length) return rows
+  const sp = REG.species[animal], hat = wear.some(id => partOf(id) === 'head'), neck = Number(sp.anchors[body]?.neck)
+  const marks = (/** @type {string} */ id) => { const all = marksFor(id, animal, body); return hat && partOf(id) === 'body' && neck >= 0 ? all.filter(m => m[0] >= neck) : all }
+  // with a thing under the feet the ground is lower: the accessories stand on it, not at the feet
+  const under = Math.max(0, ...wear.flatMap(id => marks(id).map(m => m[0] - (sp.size[1] - 1))))
+  return dress(rows, [...glint, ...wear.toReversed().flatMap(id => partOf(id) === 'accessory' ? marks(id).map(([r, c, ch]) => /** @type {[number, number, string]} */ ([r + under, c, ch])) : marks(id))], at, sp.size)
+}
+
+/**
+ * The pet standing calm, in colour, with what it has on and its coat, the golden one with its glint and every sparkle lit: the
+ * picture of /pet share. `stage` names the drawing: baby, adult or crown. `worn` is what is on (engine.js `wornOf`).
+ * @param {string} animal @param {string} stage @param {string[]} worn @returns {{ rows: string[], palette: Record<string, string> }}
+ */
+export function portrait(animal, stage, worn) {
+  const sp = REG.species[animal], body = stage === 'baby' ? 'baby' : 'adult'
+  const st = sp.states[stage === 'crown' && !worn.includes('crown') ? 'adult' : stage] ?? sp.states.adult
+  const coat = worn.find(id => partOf(id) === GOLDEN.slot), gold = coat === GOLDEN.id ? /** @type {{ shine: [number, number][], spark: [number, number][] } | undefined} */ (sp.gold[body]) : null
+  const glint = gold ? [...gold.shine.map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'x'])), ...gold.spark.map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'y']))] : []
+  return { rows: dressed(st.frames[0], st.at?.[0], worn.filter(id => id !== 'crown' && partOf(id) !== GOLDEN.slot), glint, animal, body), palette: { ...sp.palette, ...(coat ? coatOf(coat, animal)?.palette : null) } }
 }

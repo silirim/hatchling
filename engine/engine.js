@@ -207,7 +207,7 @@ export const SOLD = [...SHOP, ...COATS]
 /**
  * The founder's keepsake: half the shell the pet hatched from, worn as a hat. Not sold. A pet born on or before FOUNDER_UNTIL has it
  * (`birth`), and who has it keeps it for ever. The one place the date is written: a local date of the person's machine.
- * Provisional: the person sets it at launch.
+ * The rule: 30 days after the day the repository goes public. The value here is provisional until that day: the person sets it then.
  */
 export const FOUNDER_UNTIL = '2027-01-31'
 export const EGGSHELL = { id: 'eggshell', name: 'half an eggshell', slot: 'head', price: 0 }

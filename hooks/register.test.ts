@@ -3,6 +3,7 @@ import { dayOf, RULES, SHOP, SOLD, EGGSHELL, FOUNDER_UNTIL } from '../engine/eng
 import zoo from '../sprites/zoo.js'
 import { BUILTIN, REG, marksFor } from '../engine/skins.js'
 import { open as diaryOpened, whole as diaryOf, bandOf, dated } from '../engine/diary.js'
+import { picture, TEXT_X } from '../engine/share.js'
 
 // One pet in a hundred is born golden, and a golden one has a `skin` button and another card: every test here runs with the roll
 // left out (CACHITO_PLAIN, read by the mod when a pet is born), over whatever the test itself answers for the environment.
@@ -21,7 +22,7 @@ const prefsOf = (disk: Record<string, any>) => ({ ...disk.prefs, ...Object.fromE
 const elsewhere = (disk: Record<string, any>, patch: Record<string, unknown>) => { for (const [name, value] of Object.entries(patch)) disk[`pref.${name}`] = value }
 /** A store that lost every preference. */
 const forget = (disk: Record<string, any>) => { for (const key of Object.keys(disk)) if (key === 'prefs' || key.startsWith('pref.')) delete disk[key] }
-const KNOWN = ['asked', 'born', 'chats', 'cuddled', 'cuddles', 'hatched', 'hidden', 'lang', 'missing', 'name', 'personality', 'seed', 'species', 'stats', 'style', 'voice', 'voiceAsked', 'wear'] // the preferences of this version
+const KNOWN = ['asked', 'born', 'callme', 'chats', 'cuddled', 'cuddles', 'hatched', 'hidden', 'lang', 'missing', 'name', 'personality', 'seed', 'species', 'stats', 'style', 'voice', 'voiceAsked', 'wear'] // the preferences of this version
 const BAND = { plugin: 'cachito', component: 'AbovePrompt', props: { hasSurvey: false } } as any // the other props are the engine's
 
 test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
@@ -524,7 +525,7 @@ function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 
     if (String(e.path).startsWith(SKINS)) { k.skinReads.push(e.path); const v = k.skins?.[String(e.path).slice(SKINS.length + 1)]; return { value: typeof v === 'string' ? v : JSON.stringify(v) } }
     k.reads.push(e.path); return { value: JSON.stringify(config) }
   })
-  on('fs.write', (_: any, e: any) => { k.writes.push(e.path); return { value: undefined } })
+  on('fs.write', (_: any, e: any) => { if ((k as any).sealed) throw new Error('EACCES'); k.writes.push(e.path); return { value: undefined } })
   on('ui.toast', (_: any, e: any) => { k.toasts.push(String(e.message ?? e.text ?? JSON.stringify(e))); return { value: undefined } })
   on('prompt.read', () => ({ value: { text: k.box, cursor: 0 } }))
   on('prompt.fill', (_: any, e: any) => { k.filled = e.text; return { isFilled: true, text: e.text, cursor: 0 } })
@@ -1704,7 +1705,7 @@ test('comments on: it says what it costs and sends; a line at the end of a turn 
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const says = await cardOf($, 'comments on')
   expect(says).toMatch(/^Comments on\. They spend tokens of your own account: each line is one request to a small model \(the alias haiku/)
-  expect(says).toMatch(/Sent to the model: the pet's name, animal, five statistics and language; why it speaks; the names of the tools used in the turn with their counts \(the tools of your MCP servers too, by their names\); the program names of the commands that failed; how many files changed; the last 600 characters of the assistant's reply \(during a turn, of what it wrote last in it, and how many minutes the turn has lasted\); the pet's own last 2 lines, so that it does not repeat itself \(they are kept in the store and go back to the model in later chats too\); at most 3 lines of its diary/)
+  expect(says).toMatch(/Sent to the model: the pet's name, animal, five statistics and language; the name you told it with \/pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts \(the tools of your MCP servers too, by their names\); the program names of the commands that failed; how many files changed; the last 600 characters of the assistant's reply \(during a turn, of what it wrote last in it, and how many minutes the turn has lasted\); the pet's own last 2 lines, so that it does not repeat itself \(they are kept in the store and go back to the model in later chats too\); at most 3 lines of its diary/)
   expect(says).toMatch(/Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant\. But the end of the assistant's reply is sent as it is/)
   expect(says).toMatch(/Cost: about \$0\.00007 a line: an estimate, replaced by the measured figure after the first line\./)
   expect(says).toMatch(/at most one line every 10 minutes; without that wait after a failed command, a turn that changed 5 files or more, or a cuddle: each of those waits 30, 30 and 20 seconds since the last line for the same reason\. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too\. Also during a turn that lasts longer than 10 minutes, under the same wait\. Never more than 40 lines a day, about \$0\.00280, over all your chats\./)
@@ -2808,7 +2809,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'lang', 'share', 'diary', 'audit', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'lang', 'share', 'diary', 'audit', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
@@ -3147,42 +3148,138 @@ test('the hood of the hoodie gives way to a hat: with a thing on the head only t
   }
 })
 
-test('/pet share: a card in plain text to paste in a post, at most 60 columns and 13 lines, with the pet, a few words about it and nothing of the work', async ($, on) => {
+// The picture /pet share hands to Node: the path it is to be written at, and its rows of palette indexes (the PNG is stored, not compressed)
+const shared = (run: { argv: string[], stdin: string }) => {
+  const b = Uint8Array.from(atob(run.stdin), ch => ch.charCodeAt(0)), view = new DataView(b.buffer)
+  expect([...b.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  expect([view.getUint32(16), view.getUint32(20)]).toEqual([800, 420])
+  let at = 8
+  while (String.fromCharCode(...b.subarray(at + 4, at + 8)) !== 'IDAT') at += 12 + view.getUint32(at)
+  const raw: number[] = []
+  for (let z = at + 10, last = 0; !last; z += 5 + view.getUint16(z + 1, true)) { last = b[z]!; raw.push(...b.subarray(z + 5, z + 5 + view.getUint16(z + 1, true))) }
+  expect(raw.length).toBe(801 * 420)
+  return { file: run.argv[2]!, argv: run.argv, words: Array.from({ length: 420 }, (_, y) => raw.slice(y * 801 + 1 + TEXT_X, (y + 1) * 801).join('')).join('\n'), pet: raw.filter((c, i) => c > 4 && (i % 801) - 1 < TEXT_X).length }
+}
+/** The same part of a picture with these words and no pet. */
+const wordsOf = (lines: string[]) => { const p = picture({ rows: [], palette: {} }, lines); return Array.from({ length: 420 }, (_, y) => [...p.px.subarray(y * 800 + TEXT_X, (y + 1) * 800)].join('')).join('\n') }
+
+test('/pet share: a colour picture of the pet written by Node in the config folder, its path said, the words from the pet only and nothing of the work', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, personality: 'A secret adopted line.', hatched: 1_700_000_000_000, cuddles: 4141, wear: 'sombrero hoodie skateboard suitcase golden' })
-  k.disk.pet = { variant: 'golden', coins: 123, affection: 98_765, days: 5151, day: dayOf(EARLY), life: { input: 77_777_777, cacheRead: 88_888_888 }, owned: ['sombrero', 'hoodie', 'skateboard', 'suitcase', 'golden'], animals: ['penguin'] }
+  k.disk.pet = { variant: 'golden', coins: 123, affection: 98_765, days: 5151, day: dayOf(EARLY), born: EARLY, life: { input: 77_777_777, cacheRead: 88_888_888 }, owned: ['eggshell', 'sombrero', 'hoodie', 'skateboard', 'suitcase', 'golden'], animals: ['penguin'] }
+  k.env.PATH = '/usr/bin'
+  on('fs.stat', (_: any, e: any) => { if (e.path !== '/usr/bin/node') throw new Error('ENOENT'); return { value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } } })
+  const ran: { argv: string[], stdin: string }[] = []
+  let exitCode = 0
+  on('process.run', (_: any, e: any) => { ran.push({ argv: e.argv, stdin: e.init.stdin }); return { value: { exitCode, stdout: '', stderr: '' } } as any })
   await $.session.start({ ...START, cwd: '/w/secretproj' })
-  const check = (card: string) => {
-    const lines = card.split('\n'), end = lines.lastIndexOf('```')
-    expect(lines.length).toBeLessThanOrEqual(13) // 13 with a hat and a board at once: seven lines of blocks
-    for (const line of lines) expect([line, [...line].reduce((n, ch) => n + (/[⺀-ￜ]/.test(ch) && !/[▀-▟]/.test(ch) ? 2 : 1), 0) <= 60]).toEqual([line, true])
-    expect(card).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f]/) // no escape, no colour code: text and line breaks only
-    expect([lines[0], end > 1, lines.at(-1)]).toEqual(['```', true, 'cachito · github.com/silirim/cachito-pet'])
-    for (const line of lines.slice(1, end)) expect(line).toMatch(/^[ ▀▄█]+$/) // the drawing: half blocks only
-    expect(card).not.toMatch(/secretproj|\/w\/|secret adopted|4141|98.?765|5151|7{8}|8{8}|\$|token|undefined|\{\w+\}/i) // no folder, no path, nothing else of the store
-    return lines
+  const said = await cardOf($, 'share')
+  expect(said).toBe('Saved a picture of the pet: /home/me/.claude/cachito-share/cachito-miro.png\nAttach it to a post. Nothing about your work is on it.')
+  const one = shared(ran[0]!)
+  expect(one.argv).toEqual(['/usr/bin/node', expect.stringMatching(/\/engine\/share-save\.js$/), '/home/me/.claude/cachito-share/cachito-miro.png'])
+  // the words drawn are these and no others: the name, the animal, the stage and what is special, the strong point, the stars, the link
+  expect(one.words).toBe(wordsOf(['Miro', 'Cachito the fox', 'crown · golden · founder', 'Checks everything twice', '★ 123 stars', 'github.com/silirim/cachito-pet']))
+  expect(one.pet).toBeGreaterThan(5000) // and the pet, in colours of its own
+  expect(k.writes).toEqual([]) // nothing written by the mod itself
+  // the picture is in English whatever the pet's language; what is said about it is in that language
+  await cardOf($, 'lang es')
+  expect(await cardOf($, 'share')).toMatch(/^Guardé una imagen de la mascota: \/home\/me\/\.claude\/cachito-share\/cachito-miro\.png\n/)
+  expect(ran[1]!.stdin).toBe(ran[0]!.stdin)
+  await cardOf($, 'lang en')
+  // whatever the name, the file is in the folder; the config folder Claude Code was given is the one used
+  k.env.CLAUDE_CONFIG_DIR = '/cfg'
+  for (const [name, file] of [['../../etc/x', 'cachito-etcx.png'], ["a'b - c", 'cachito-a-b-c.png'], ['--', 'cachito-pet.png']] as const) {
+    k.disk['pref.name'] = name
+    k.state = {}
+    expect(await cardOf($, 'share')).toMatch(new RegExp(`: /cfg/cachito-share/${file}\n`))
+    expect(ran.at(-1)!.argv[2]).toBe(`/cfg/cachito-share/${file}`)
   }
-  const en = check(await cardOf($, 'share'))
-  expect(en.slice(en.lastIndexOf('```') + 1)).toEqual([
-    'Miro, Cachito the golden fox, crown',
-    'Checks everything twice · ★ 123 stars',
-    'wears a sombrero, a hoodie, a skateboard, a suitcase', // the golden coat is said in the first line
-    'cachito · github.com/silirim/cachito-pet',
-  ])
-  expect(en.lastIndexOf('```')).toBeGreaterThanOrEqual(6) // the fox with a hat and a board under it: at least five lines of blocks
-  for (const [lang, head] of [['es', /^Miro, Cachito: zorro \(versión dorada\), /], ['pt', /^Miro, Cachito: raposa \(versão dourada\), /], ['zh', /^Miro，Cachito，金色狐狸，/]] as const) {
-    await cardOf($, `lang ${lang}`)
-    const lines = check(await cardOf($, 'share'))
-    expect(lines[lines.lastIndexOf('```') + 1]).toMatch(head)
-    expect(lines.join('\n')).toMatch(/★ 123/)
-  }
+  // Node fails, or there is none: the same picture as an SVG, written by the mod, and said
+  exitCode = 1
+  expect(await cardOf($, 'share')).toMatch(/^Saved a picture of the pet as an SVG, since `node` is not on the PATH to write a PNG: \/cfg\/cachito-share\/cachito-pet\.svg\n/)
+  k.env.PATH = '/opt/empty'
+  const runs = ran.length
+  expect(await cardOf($, 'share')).toMatch(/cachito-pet\.svg\n/)
+  expect([ran.length, k.writes]).toEqual([runs, ['/cfg/cachito-share/cachito-pet.svg', '/cfg/cachito-share/cachito-pet.svg']])
 })
 
-test('/pet share for a rare animal with nothing on: it says so, and the drawing has a face', async ($, on) => {
+test('/pet share for a rare baby born after the founders: it says so, with no founder and no golden; a folder that cannot be written is said', async ($, on) => {
   const k = home(on, {}, { species: 'axolotl', born: 'axolotl', seed: 9, name: 'Lola', stats: [80, 30, 60, 20, 50], asked: true }, AFTER)
   k.disk.pet = { coins: 1, affection: 3, days: 1, day: dayOf(AFTER), owned: [] }
+  k.env.PATH = '/usr/bin'
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } }))
+  const ran: { argv: string[], stdin: string }[] = []
+  on('process.run', (_: any, e: any) => { ran.push({ argv: e.argv, stdin: e.init.stdin }); if (ran.length > 1) throw new Error('EACCES'); return { value: { exitCode: 0, stdout: '', stderr: '' } } as any })
   await $.session.start(START)
-  const lines = (await cardOf($, 'share')).split('\n'), end = lines.lastIndexOf('```')
-  expect(lines.slice(end + 1)).toEqual(['Lola, Cachito the axolotl, baby · a rare one', expect.stringMatching(/ · ★ 1 star$/), 'cachito · github.com/silirim/cachito-pet'])
-  expect(lines.slice(1, end).some(l => /█ +█|█[▀▄]+█/.test(l))).toBe(true) // the eyes are holes in the one colour
-  expect(lines.length).toBeLessThanOrEqual(12)
+  expect(await cardOf($, 'share')).toMatch(/cachito-lola\.png\n/)
+  expect(shared(ran[0]!).words).toBe(wordsOf(['Lola', 'Cachito the axolotl', 'baby · a rare one', 'Says it dry and short', '★ 1 star', 'github.com/silirim/cachito-pet']))
+  ;(k as any).sealed = true // nothing can be written
+  expect(await cardOf($, 'share')).toBe('The picture could not be saved: the folder cachito-share in your Claude Code config folder could not be written.')
+})
+
+test('/pet call me: the pet learns the person\'s name only from what is typed there, cleaned and cut; says it one cuddle in three; forgets it when told; and reads a name nowhere else', async ($, on) => {
+  const k = home(on, {}, { species: 'bunny', born: 'bunny', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
+  const asked: string[] = [], ran: unknown[] = []
+  on('env.get', (_: any, e: any) => { asked.push(e.name); return { value: e.name === 'HOME' ? '/home/ana-real' : ({ USER: 'ana-real', USERNAME: 'ana-real', LOGNAME: 'ana-real', GIT_AUTHOR_NAME: 'Ana Real' } as Record<string, string>)[e.name] } })
+  on('process.run', (_: any, e: any) => { ran.push(e.argv); return { value: { exitCode: 0, stdout: 'Ana Real', stderr: '' } } as any })
+  await $.session.start({ ...START, cwd: '/home/ana-real/work' })
+  const pat = async () => { await cardOf($, 'pet'); const b = await drawn($); await b.ui.unmount(); return b.said.join('\n') }
+  // none told: it says so, and no line carries a name
+  expect(await cardOf($, 'call me')).toBe('I do not know your name. /pet call me <name> tells me: letters, digits, spaces, up to 24 characters. I only know what you type here.')
+  expect(await cardOf($, 'call')).toMatch(/^I do not know your name\./)
+  expect(prefsOf(k.disk).callme).toBeUndefined()
+  for (const _ of [1, 2, 3]) expect(await pat()).not.toMatch(/Ana|ana-real/)
+  // told: cleaned, cut to 24, kept under its own key
+  expect(await cardOf($, 'call me  \x1b[31mAna\x1b[0m\n María <b> ')).toBe('I will call you Ana María b, now and then.')
+  expect(await cardOf($, 'call me Ana María')).toBe('I will call you Ana María, now and then.')
+  expect([k.disk['pref.callme'], k.sets.at(-1)]).toEqual(['Ana María', 'pref.callme'])
+  expect(await cardOf($, 'call me')).toBe('I call you Ana María. /pet call me <name> changes it, /pet call me nobody forgets it.')
+  expect(await cardOf($, `call me ${'x'.repeat(60)}`)).toBe(`I will call you ${'x'.repeat(24)}, now and then.`)
+  expect(await cardOf($, 'call me {}<>$')).toMatch(/^I do not know your name\./) // nothing of it is a name: nothing changes
+  expect(k.disk['pref.callme']).toBe('x'.repeat(24))
+  await cardOf($, 'call me Ana María')
+  // the cuddles: the sixth carries the name, the fourth and the fifth do not
+  const lines = [await pat(), await pat(), await pat()]
+  expect(lines.map(l => /Ana María, /.test(l))).toEqual([false, false, true])
+  // in the other languages too
+  for (const [lang, is] of [['es', 'Te llamo Ana María.'], ['pt', 'Chamo você de Ana María.'], ['zh', '我叫你 Ana María。']] as const) { await cardOf($, `lang ${lang}`); expect(await cardOf($, 'call me')).toContain(is) }
+  await cardOf($, 'lang en')
+  // not in the diary, not in the marks of the chats, not on the card; only under its key
+  const { 'pref.callme': kept, ...rest } = k.disk
+  expect(kept).toBe('Ana María')
+  expect(JSON.stringify(rest)).not.toMatch(/Ana María/)
+  expect(await cardOf($, 'diary')).not.toMatch(/Ana María/)
+  expect(await cardOf($, 'chats')).not.toMatch(/Ana María/)
+  // forgotten, by either word: the key holds nothing and the lines are the plain ones again
+  expect(await cardOf($, 'call me nobody')).toBe('Forgotten: I no longer know your name.')
+  expect(k.disk['pref.callme']).toBe('')
+  await cardOf($, 'call me Ana'); expect(await cardOf($, 'call me OFF')).toBe('Forgotten: I no longer know your name.')
+  expect(await cardOf($, 'call me')).toMatch(/^I do not know your name\./)
+  for (const _ of [7, 8, 9]) expect(await pat()).not.toMatch(/Ana/)
+  // nothing else reads a name: no variable of the user or of git is asked, no program is run, no file is read
+  expect(asked.filter(name => /USER|LOGNAME|NAME|GIT|MAIL/i.test(name) && name !== 'USERPROFILE')).toEqual([])
+  expect([ran, k.reads]).toEqual([[], []])
+  expect(JSON.stringify(k.disk)).not.toMatch(/Ana Real/)
+})
+
+test('the name told with /pet call me goes to the small model only with comments on, as one more line of the request', async ($, on) => {
+  const k = voiceKit($, on, { callme: 'Ana María' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  // comments off: no request at all, with a name told
+  k.v.fail = true
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't1' } as any))
+  await cardOf($, 'pet'); await cardOf($, 'say hello')
+  await k.settle()
+  expect(k.v.calls).toEqual([])
+  // comments on: the notice says it, and the request carries it
+  expect(await cardOf($, 'comments on')).toMatch(/the name you told it with \/pet call me, when you told one;/)
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't2' } as any))
+  expect(k.v.calls.length).toBe(1)
+  expect(k.v.calls[0].system).toMatch(/\nThe person asked you to call them Ana María\. You may say that name now and then, in few of your lines, never in every one\.$/)
+  expect(k.v.calls[0].prompt).not.toMatch(/Ana María/)
+  // forgotten: the next request has no word of it
+  await cardOf($, 'call me nobody')
+  await cardOf($, 'say hello')
+  await k.settle()
+  expect(k.v.calls.length).toBe(2)
+  expect(k.v.calls[1].system + k.v.calls[1].prompt).not.toMatch(/Ana|call them/)
 })

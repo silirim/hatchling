@@ -137,7 +137,7 @@ test('the bubble speaks the language: notes, cheers, calm lines, greetings, cudd
 })
 
 test('in every language every bubble is short and sober: no exclamation mark, and never over two lines of text', () => {
-  const t = 1000, v = { ...view(initialState(), t), long: true }
+  const t = 1000, v = { ...view(initialState(1), t), long: true }
   // the details each note really gets: the widest of each
   const DETAILS = /** @type {Record<string, string[]>} */ ({ stomach: ['ttl_expired_5m', 'likely_server_side', 'system_prompt_changed', 'tools_changed'], dizzy: ['/src/some/long-file-name.test.js'], loop: ['docker-compose'], heavy: ['1000'], cold: ['1000'], bloated: ['100'] })
   const views = [

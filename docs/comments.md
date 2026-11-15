@@ -17,7 +17,7 @@ The pet asks once, right after it hatches, with two buttons: `comments on` and `
 
 ## What is sent
 
-A summary of the turn made on your machine: tool names and counts, the program names of commands that failed, how many files changed, and **the last 600 characters of the assistant's reply**, as they are. With it the pet's character, its last two lines and at most three lines of the diary.
+A summary of the turn made on your machine: tool names and counts, the program names of commands that failed, how many files changed, and **the last 600 characters of the assistant's reply**, as they are. With it the pet's character, its last two lines, at most three lines of the diary, and the name you told it with `/pet call me`, when you told one.
 
 Never the content of a file, the output or arguments of a command, a file path, or your prompts to the assistant.
 

@@ -115,6 +115,15 @@ export function cleanName(raw) {
   return tidy(tidy(raw).replace(/[^\p{L}\p{M}\p{N} '-]/gu, ''), NAME_MAX)
 }
 
+export const CALL_MAX = 24
+/**
+ * The name the person asked to be called by (/pet call me), cleaned as a pet's name is: letters, marks, digits, spaces, an
+ * apostrophe, a hyphen, a full stop, on one line, CALL_MAX columns at most. Only ever what the person typed there. @param {unknown} raw
+ */
+export function cleanCall(raw) {
+  return tidy(tidy(raw).replace(/[^\p{L}\p{M}\p{N} '.-]/gu, ''), CALL_MAX)
+}
+
 /** A valid trait, or undefined. @param {unknown} raw @returns {Trait | undefined} */
 export const asTrait = (raw) => TRAITS.find(t => t === raw)
 

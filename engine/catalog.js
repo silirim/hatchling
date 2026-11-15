@@ -59,6 +59,12 @@ export const voiced = (say, stat) => VOICE[say]?.[at(stat)] ?? say
 export const CUDDLES = STATS.map(stat => list(BASE, `cuddle.${stat}`))
 /** The line for the `n`th cuddle of a pet of this character. @param {string | undefined} stat @param {number} n @param {string} [lang] */
 export const cuddle = (stat, n, lang) => pick(list(lang, `cuddle.${STATS[at(stat)] ?? 'calm'}`), n)
+/**
+ * A fixed line with the person's name before it, one time in three by `n` (the cuddles counted, the day): the line reads whole
+ * without the name, and a name in every line would wear. With no name told (/pet call me), the line as it is.
+ * @param {string} line @param {string | undefined} name @param {string | undefined} lang @param {number} n
+ */
+export const called = (line, name, lang, n) => name && n % 3 === 0 ? text(lang, 'callme.line', { name, line }) : line
 
 const pick = (/** @type {string[]} */ lines, /** @type {number} */ turn) => /** @type {string} */ (lines[turn % lines.length])
 
@@ -126,7 +132,8 @@ export const TALK = {
  * companion's line is the bubble. Under a warning only the recap, the outline offer and a line of the voice are kept, as a second line: the rest is chatter and stays unseen.
  * The pet's character picks the tone of a line, and a greeting starts with its name.
  * @param {ReturnType<typeof import('./engine.js').view>} v
- * @param {{ name?: string, voice?: string, lang?: string }} [who] the pet's name, the statistic that speaks this line and the language; without them, the plain English lines
+ * @param {{ name?: string, voice?: string, lang?: string, call?: string, callN?: number }} [who] the pet's name, the statistic that speaks this line and the language; without them, the plain English lines.
+ *   `call` is the person's name, when they told it, and `callN` the day: the welcome back and the first greeting of a day carry the name one day in three (`called`)
  * @returns {Bubble}
  */
 export function bubble(v, who = {}) {
@@ -135,6 +142,7 @@ export function bubble(v, who = {}) {
   const t = v.talk && TALK[v.talk.kind]?.(v.talk, lang, tone)
   if (!t?.say) return b
   const hello = who.name && v.talk?.kind === 'greet' ? `${who.name}: ` : ''
+  if (v.talk?.kind === 'greet' && (v.talk.greet === 'back' || v.talk.greet === 'first')) t.say = called(t.say, who.call, lang, who.callN ?? 0)
   // the recap and the outline offer do not silence the comment about the same turn: it is the last line, under theirs
   const aside = (v.talk?.kind === 'recap' || v.talk?.kind === 'tidy') && v.talk.text || ''
   if (v.calm) return { say: hello + t.say, fix: t.fix ?? null, link: null, ask: t.ask ?? '', label: t.label ?? text(lang, 'btn.fix'), more: null, aside }

@@ -149,7 +149,7 @@ test('no folder, an empty one, unreadable and broken files: the shipped drawings
 
 test('what a pack brings is the person\'s at once: in the closet for nothing, worn by choice, gone with the pack', () => {
   install([file('a.json', EXAMPLE)])
-  const s = initialState(), closet = view(s, 0).closet
+  const s = initialState(1), closet = view(s, 0).closet
   assert.deepEqual(closet, ['tophat', 'mint'])
   assert.deepEqual([s.owned, s.coins], [[], 0]) // not bought, no stars given or taken
   assert.deepEqual(WEARABLE.filter(i => i.pack).map(i => [i.id, i.slot, i.price, i.pack]), [['tophat', 'head', 0, 'Example'], ['mint', 'coat', 0, 'Example']])

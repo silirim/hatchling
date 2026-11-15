@@ -4,7 +4,8 @@ import { initialState, reduce, view, card, dayOf, shared, merge, RULES, SHOP, SO
 import { existsSync } from 'node:fs'
 import { bubble, CHEERS, ISSUES, CALM, DOCS } from './catalog.js'
 
-const run = (events, s = initialState()) => events.reduce(reduce, s)
+// the roll is always given: left out, one pet in a hundred is born golden and owns the coat, and a test fails one run in a hundred
+const run = (events, s = initialState(1)) => events.reduce(reduce, s)
 let t = 1_000_000
 const at = (e) => ({ t: (t += 1000), ...e })
 const usage = (input, cacheRead, cacheWrite, contextPct) => at({ type: 'usage', input, cacheRead, cacheWrite, contextPct })
@@ -151,13 +152,13 @@ test('the pet grows with the days it was used on and the affection gathered, not
 
 test('the humour: content after a cuddle or a day of much use, calm otherwise, never sad; hearts fill with affection and never empty', () => {
   let s = run([at({ type: 'sessionStart' })])
-  assert.deepEqual([view(s, t).happy, view(initialState(), 1000).happy], [false, false]) // never cuddled is not cuddled at time zero
+  assert.deepEqual([view(s, t).happy, view(initialState(1), 1000).happy], [false, false]) // never cuddled is not cuddled at time zero
   s = run([at({ type: 'cuddle' })], s)
   assert.deepEqual([view(s, t).happy, view(s, t + RULES.happyCuddleMs).happy], [true, false])
   const busy = run(Array.from({ length: RULES.happyTurns }, () => at({ type: 'turnEnd' })), run([at({ type: 'sessionStart' })]))
   assert.deepEqual([view(busy, t).happy, view(busy, t + 30 * DAY).happy], [true, false])
   assert.deepEqual([view(busy, t).hearts, view(busy, t + 30 * DAY).hearts], [1, 1]) // a month away: calm, and nothing lost
-  assert.deepEqual([0, ...RULES.heartsAt].map(affection => view({ ...initialState(), affection }, t).hearts), [0, 1, 2, 3, 4, 5])
+  assert.deepEqual([0, ...RULES.heartsAt].map(affection => view({ ...initialState(1), affection }, t).hearts), [0, 1, 2, 3, 4, 5])
 })
 
 test('back after a long pause: a warm welcome and a few coins, once, with no word on the absence', () => {
@@ -297,7 +298,7 @@ test('calm bubbles say the real state of the chat', () => {
 })
 
 test('every line is short and sober: one line, no exclamation mark', () => {
-  const v = { ...view(initialState(), t), long: true }
+  const v = { ...view(initialState(1), t), long: true }
   const views = [
     ...Object.keys(ISSUES).flatMap(kind => [undefined, 'ttl_expired_5m', 'likely_server_side', 'tools_changed', '/src/some/file.js'].map(detail => ({ ...v, mood: kind, issue: { kind, detail, untilTurn: 0, until: 0 } }))),
     ...Object.keys(CHEERS).map(kind => ({ ...v, mood: 'cheer', cheer: { kind, at: 0, value: 0 } })),
@@ -334,7 +335,7 @@ test('every guide the bubbles link to exists in docs/fix', () => {
   const docs = [...Object.values(ISSUES).map(i => i.doc), 'long-chat.md']
   for (const doc of docs) assert.ok(existsSync(new URL(`../docs/fix/${doc}`, import.meta.url)), doc)
   // and no bubble links anywhere else
-  const v = { ...view(initialState(), t), long: true }
+  const v = { ...view(initialState(1), t), long: true }
   const views = [...Object.keys(ISSUES).map(kind => ({ ...v, issue: { kind, untilTurn: 0, until: 0 } })), ...['ko', 'wilted', 'seedling'].flatMap(mood => [{ ...v, mood }, { ...v, mood, wait: true }])]
   for (const x of views) { const link = bubble(x).link; if (link) assert.ok(link.startsWith(DOCS) && docs.includes(link.slice(DOCS.length)), link) }
 })
@@ -400,7 +401,7 @@ test('the crown is a thing of the head: on by itself once the pet is fully grown
   assert.deepEqual(WEARABLE.map(i => i.id), ['crown', 'eggshell', ...SHOP.map(i => i.id), 'pastel', 'terminal', 'golden'])
   assert.deepEqual([closetOf(['cap'], 'healthy'), closetOf(['cap'], 'bloom')], [['cap'], ['crown', 'cap']])
   // a pet's own view and card carry it only at the last stage
-  const grown = { ...initialState(), owned: ['cap'], days: RULES.bloomAt.days, affection: RULES.bloomAt.affection }
+  const grown = { ...initialState(1), owned: ['cap'], days: RULES.bloomAt.days, affection: RULES.bloomAt.affection }
   assert.deepEqual([view(grown, 0).closet, card(grown).closet, card(grown).owned], [['crown', 'cap'], ['crown', 'cap'], ['cap']])
   assert.deepEqual(card({ ...grown, affection: 0 }).closet, ['cap'])
   const has = ['crown', 'cap', 'scarf']

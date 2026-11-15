@@ -21,6 +21,8 @@
     "engine/skin-check.js",
     "engine/skin-import.js",
     "engine/image.js",
+    "engine/share-save.js",
+    "engine/share.test.js",
     "bench/*.mjs"
   ]
 }

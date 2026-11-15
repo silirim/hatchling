@@ -425,10 +425,13 @@ PASTEL = {
 }
 DIM, PHOSPHOR, GLOW = "#157a36", "#2ed158", "#8cffa8"  # terminal: an old monitor's green, in three strengths
 TERMINAL_RAMP = [DIM, PHOSPHOR, GLOW]
-INK = COMMON["k"]  # a beak, a nose, a mouth: as dark as the eyes, so the face stays a face
+INK = COMMON["k"]  # a nose, a mouth: as dark as the eyes, where the plain animal has them dark too
+# The eyes are one pixel each, in a colour next to the ground's: they show only on the lightest tone, with nothing else as dark near
+# them. So the penguin's and the chick's faces are GLOW, cheeks included, and their beaks DIM: an INK beak, two pixels wide between
+# the eyes, was all the face one saw. The chick has no belly to be light, so its whole body is, and its tuft and its shell are darker.
 TERMINAL = {  # the lightest on the belly and the muzzle; the cheeks are light or the body's, never dark: a dark cheek reads as an eye
-    "penguin": {"B": PHOSPHOR, "a": PHOSPHOR, "1": DIM, "2": DIM, "W": GLOW, "o": INK, "3": DIM, "r": PHOSPHOR},
-    "chick": {"c": PHOSPHOR, "1": DIM, "2": GLOW, "W": GLOW, "o": INK, "3": DIM, "r": GLOW},
+    "penguin": {"B": PHOSPHOR, "a": PHOSPHOR, "1": DIM, "2": DIM, "W": GLOW, "o": DIM, "3": DIM, "r": GLOW},
+    "chick": {"c": GLOW, "1": PHOSPHOR, "2": DIM, "W": PHOSPHOR, "o": DIM, "3": DIM, "r": GLOW},
     "dog": {"t": PHOSPHOR, "E": DIM, "1": DIM, "W": GLOW, "r": INK},
     "bunny": {"W": PHOSPHOR, "1": DIM, "2": GLOW, "r": GLOW, "3": INK},
     "fox": {"o": PHOSPHOR, "1": DIM, "2": GLOW, "W": GLOW},

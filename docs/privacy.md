@@ -7,6 +7,7 @@
 **The one exception is comments**, off until you turn them on ([comments.md](comments.md) has the cost). Each comment, and each `/pet say`, is one request to a small model on your own account, with:
 
 - the pet's name, animal, statistics and language, and the rules of a line;
+- the name you told the pet with `/pet call me`, when you told one;
 - why the pet speaks, the names of the tools used (those of your MCP servers among them) and how many calls each, the program names of commands that failed (`npm`, never its arguments), how many files changed;
 - **the last 600 characters of the assistant's reply**, as they are: a file or words of yours quoted there go with them;
 - the pet's own last two lines, and at most three lines of the diary;
@@ -21,6 +22,7 @@ In Claude Code's plugin store (`~/.claude/plugins/store/`):
 
 - **The pet**: seed, name, character, affection, days of use, stars, what it owns, how many times you petted it and when last, token totals.
 - **Preferences**: lean, comments, chats, language, what is worn.
+- **Your name, only if you typed it** after `/pet call me`: the pet never reads one from your account, the system user, git or a path. `/pet call me nobody` forgets it. It is not on the picture of `/pet share`, in the diary or in the marks of the chats.
 - **The diary**: at most 40 lines of times, counts and folder names. `/pet diary clear` empties it.
 - **Comments' count**: lines, tokens and cost, the time of the last line, the pet's last two lines.
 - **One mark for each chat**: the **full path of its working folder**, when its last turn started and ended, when it last gave a sign of life, and since when a tool call has waited for your leave. Not which tool or command. The 30 newest are kept, for 30 days at most.
@@ -28,6 +30,8 @@ In Claude Code's plugin store (`~/.claude/plugins/store/`):
 - **cachito-lean**: whether you turned the lines off.
 
 Never the content of a chat, a prompt or a command.
+
+In `~/.claude/cachito-share/` (or the config folder Claude Code was given), only when you run `/pet share`: one picture a pet name, `cachito-<name>.png`, written over each time (an `.svg` when there is no Node to write the PNG). On it: the pet, its name, animal, stage, character and stars. No folder, path, project, token or cost. Nothing is sent: you attach it to a post yourself.
 
 In the session's own memory, which other plugins could read, the pet keeps no path and no command line: only hashes of the files read and of the commands that failed.
 

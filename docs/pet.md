@@ -99,6 +99,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet` | the card: stage, hearts, character, stars, lean, comments and their cost |
 | `/pet pet` | pet it; the `pet` button does the same |
 | `/pet name <name>` | rename it |
+| `/pet call me <name>` | tell the pet your name: it says it now and then, in a greeting or after a cuddle. Alone it shows the name, `nobody` forgets it. The pet knows only what you type here |
 | `/pet shop [item]` | the catalogue; with an item, buy it |
 | `/pet wear <item>` | put on or take off; `none` takes everything off |
 | `/pet skin` | what is on each part; the `skin` button changes each |
@@ -109,7 +110,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet comments <on\|off>` | comments by a small model, on your tokens |
 | `/pet say <text>` | speak to the pet: [comments.md](comments.md) |
 | `/pet diary [clear]` | show or empty the diary |
-| `/pet share` | a small card in plain text to paste in a post: the pet in block characters, its name, animal, character, stars and what it wears; nothing about your work |
+| `/pet share` | a colour picture to attach to a post, 800×420: the pet with what it wears, its name, animal, stage, character and stars; nothing about your work. Saved as `cachito-share/cachito-<name>.png` in your Claude Code config folder (`~/.claude`), written over each time. Node writes the PNG; without Node on the PATH the same picture is saved as an SVG |
 | `/pet lang <en\|es\|pt\|zh>` | the pet's language |
 | `/pet audit [days]` | where your sessions' money went, from your local transcripts |
 | `/pet adopt` | take your old `/buddy`'s name and personality: [privacy.md](privacy.md) |
