@@ -10,7 +10,7 @@
 - the name you told the pet with `/pet call me`, when you told one;
 - why the pet speaks, the names of the tools used (those of your MCP servers among them) and how many calls each, the program names of commands that failed (`npm`, never its arguments), how many files changed;
 - **the last 600 characters of the assistant's reply**, as they are: a file or words of yours quoted there go with them;
-- the pet's own last two lines, and at most three lines of the diary;
+- the pet's own last two lines, and at most three lines of the diary, which can carry folder names;
 - when another chat ends a long turn: its folder name and the times;
 - with `/pet say`, the first 300 characters of what you typed;
 - for the recap, once per pause in an open chat (30 minutes after a turn with no new prompt) and at each resume of a chat left for longer: **up to 16,000 characters of the last turn's text**, as the assistant wrote it, and **the first 300 characters of your last prompt**. Text only: nothing a tool was given or answered.
