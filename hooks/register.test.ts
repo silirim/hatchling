@@ -252,7 +252,7 @@ test('over 30k the style waits: lean is the style alone, the note goes while it 
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
   const styled = async () => (await $.prompt.compose(ask)).sections.some((s: any) => s.id === 'cachito:style')
   const turn = async () => { const has = await styled(); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any); return has }
-  const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.find({ type: 'Text', text: /★/ }))?.text ?? ''; await b.unmount(); return text }
+  const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.findAll({ type: 'Text' })).slice(0, 2).map((x: any) => x.text).join('  '); await b.unmount(); return text } // the name and the phrase
   const cmd = async (args: string) => JSON.stringify(await $.command.run({ command: 'pet', args } as any))
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -446,10 +446,12 @@ test('the phrase sits in a speech bubble: advice inside, keys outside, tail at t
   expect((await ui.find({ type: 'Box', key: 'tail' }))!.props.marginTop).toBe(2)
   await ui.unmount()
 
-  // no Raster, no bubble: the other surfaces keep the one line of text
+  // no Raster, no bubble in the apps: the pet is an Svg there, the phrase a text beside it
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await desk.find({ type: 'Box', key: 'bubble' })).toBeFalsy()
-  expect((await desk.find({ type: 'Text', text: /★/ }))?.text).toMatch(/re-read/)
+  expect(await desk.find({ type: 'Raster' })).toBeFalsy()
+  expect(await desk.find({ type: 'Svg' })).toBeTruthy()
+  expect(await desk.find({ type: 'Text', text: /re-read/ })).toBeTruthy()
   await desk.unmount()
 })
 
@@ -634,7 +636,7 @@ test('with the cachito-lean plugin the style is on whatever /pet lean says: the 
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
   const styles = async () => (await $.prompt.compose(ask)).sections.filter((s: any) => s.id === 'cachito:style').length
   const turn = async () => { const n = await styles(); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any); return n }
-  const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.find({ type: 'Text', text: /★/ }))?.text ?? ''; await b.unmount(); return text }
+  const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.findAll({ type: 'Text' })).slice(0, 2).map((x: any) => x.text).join('  '); await b.unmount(); return text } // the name and the phrase
   const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -1837,7 +1839,8 @@ test('the voice is asked for once, at the first start of a pet born before: unan
   expect(await k.texts()).toContain(Q)
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true]) // marked when it comes up
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect((await desk.find({ type: 'Text', text: /★/ }))?.text).toContain(Q.replace(/\n/g, ' ')) // one line there, and no buttons: /pet comments on answers
+  expect((await desk.findAll({ type: 'Text' })).map(x => x.text)).toContain(Q.replace(/\n/g, ' ')) // the apps wrap it themselves
+  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet']) // and have the buttons to answer it
   await desk.unmount()
   // a cuddle, a slash command and a reload leave it up; the next prompt sent takes it away, with the voice off
   await $.command.run({ command: 'pet', args: 'pet' } as any)
@@ -2365,7 +2368,7 @@ test('the bubble is not always there: a phrase stays about 12 seconds, longer wi
   expect(b.open).toBe(false)
   expect(b.texts).toEqual(['Miro  ★ 4', '·']) // the name and the stars, the dot before the buttons, and no phrase
   expect(b.keys).toEqual(['pet']) // the pet's own buttons stay
-  expect((await look('desktop')).texts).toEqual(['Miro  ★ 4'])
+  expect((await look('desktop')).texts).toEqual(['Miro  ★ 4']) // in the apps too: the name and the stars, and no phrase
 
   // a phrase with a button of its own (a re-read, with its fix and its guide): there after 19 seconds, gone after 31
   await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
@@ -2373,7 +2376,7 @@ test('the bubble is not always there: a phrase stays about 12 seconds, longer wi
   b = await look()
   expect([b.open, b.keys]).toEqual([true, ['pet', 'fix']])
   expect(b.texts.join(' ')).toMatch(/re-read/)
-  expect((await look('desktop')).texts.join(' ')).toMatch(/^Miro  ★ 4  .*re-read/)
+  expect((await look('desktop')).texts.join('  ')).toMatch(/^Miro  ★ 4  .*re-read/)
   await k.clock.advance(19_000)
   expect((await look()).open).toBe(true)
   await k.clock.advance(12_000)
@@ -2692,8 +2695,12 @@ test('E23: the question about the comments: on a surface with no buttons it says
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   expect(prefsOf(k.disk).voiceAsked).toBe(true)
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect((await desk.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/May I comment on your work\?.*Answer with \/pet comments on or \/pet comments off\.$/)
+  expect((await desk.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/May I comment on your work\?/) // the apps have the buttons
+  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
   await desk.unmount()
+  const code = await $.ui.mount({ ...BAND, surface: 'vscode' }) // one line, no buttons: it says how to answer
+  expect((await code.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/May I comment on your work\?.*Answer with \/pet comments on or \/pet comments off\.$/)
+  await code.unmount()
   let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
   await ui.unmount()
@@ -2737,6 +2744,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   k.disk.pet = { coins: 120, affection: 25, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['mug', 'golden'] }
   on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
   on('process.run', () => ({ value: { exitCode: 0, stdout: 'ok', stderr: '' } }) as any)
+  on('session.surfaces', () => ({ value: ['terminal'] }) as any)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const first = async (a: string) => (await cardOf($, a)).split('\n')[0]
   // capitals in the verb and in its argument
@@ -2771,7 +2779,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'model', 'lang', 'share', 'diary', 'adopt', 'hide', 'show', 'demo', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'model', 'lang', 'share', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
@@ -3561,4 +3569,131 @@ test('a model that is not there: the pet stays silent, never takes another model
   k.v.reply = { isAnswered: false, reason: 'api-error', status: 404, error: 'model_not_found', usage }
   await say()
   expect(told().at(-1)).toBe('Cachito: el modelo claude-gone-3 no respondió. Elige otro con /pet model.')
+})
+
+// The terminal's drawing, pinned: the cells of a fixed pet, bare and dressed, on a dark and on a light theme, as they were
+// before the apps got a drawing of their own. A change here is a change of what the terminal shows
+test('the terminal drawing is the same, byte for byte', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  k.disk.pet = { coins: 0, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['shades', 'skateboard', 'golden'] }
+  const hash = (s: string) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0; return h.toString(16) }
+  const shot = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; await ui.unmount(); return `${r.columns}x${r.rows} ${hash(String(r.cells))}` }
+  const seen: string[] = []
+  for (const theme of ['dark', 'light']) {
+    ;(k as any).theme = theme
+    await $.session.start(START)
+    await cardOf($, 'wear none')
+    await cardOf($, 'wear plain')
+    seen.push(await shot())
+    for (const item of ['shades', 'skateboard', 'golden']) await cardOf($, `wear ${item}`)
+    seen.push(await shot())
+  }
+  expect(seen).toEqual(['12x5 f3219565', '14x7 c736b204', '12x5 7a533345', '14x7 538509fc'])
+})
+
+// The pet in the Claude apps: an Svg made from the frame the terminal draws, with the name, the phrase and the buttons beside it
+test('in the desktop and mobile apps the pet is an Svg with its phrase and buttons; vscode keeps its row', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  k.disk.pet = { coins: 0, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['shades', 'golden'] }
+  on('tool.call', () => ({ result: {} }) as any)
+  await $.session.start(START)
+  await cardOf($, 'wear none')
+  await cardOf($, 'wear plain')
+  const look = async (surface: string) => {
+    const ui = await $.ui.mount({ ...BAND, surface }) // the kit refuses a tree that does not validate on the surface
+    const svg = (await ui.find({ type: 'Svg' }))?.props as any, texts = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text as string), keys = (await ui.findAll({ type: 'Button' })).map((x: any) => x.key as string), raster = !!(await ui.find({ type: 'Raster' }))
+    return { ui, svg, texts, keys, raster }
+  }
+  const fills = (source: string) => new Set([...source.matchAll(/fill="(#[0-9a-f]{6})"/g)].map(m => m[1]))
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
+  await $.tool.call({ tool: 'Read', file_path: '/a.txt' }) // a phrase with a button of its own
+  const shots: Record<string, string> = {}
+  for (const surface of ['desktop', 'mobile']) {
+    const d = await look(surface)
+    expect(d.raster).toBe(false)
+    const source = String(d.svg.source)
+    shots[surface] = source
+    expect(source).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="\d+" height="\d+" viewBox="0 0 \d+ \d+" shape-rendering="crispEdges"><rect /)
+    expect(source.length).toBeLessThan(131072)
+    expect(source).not.toMatch(/<(script|style|image|foreignObject)|href|on\w+=/) // rects and nothing else
+    expect([...source.matchAll(/<rect [^>]*>/g)].every(m => /^<rect x="\d+" y="\d+" width="\d+" height="1" fill="#[0-9a-f]{6}"\/>$/.test(m[0]))).toBe(true) // a rect a run: no rect behind the pet
+    expect(d.svg.height).toBeGreaterThanOrEqual(48)
+    expect(d.svg.height).toBeLessThanOrEqual(96)
+    expect(d.svg.alt).toBe('Miro, fox')
+    expect(fills(source).has(REG.species.fox!.palette['1'])).toBe(true) // the fox's own orange
+    expect(d.texts[0]).toBe('Miro  ★ 0')
+    expect(d.texts.join(' ')).toMatch(/re-read.*a\.txt/)
+    expect(d.keys).toEqual(['skin', 'pet', 'fix']) // the pet's own after its name, the phrase's under it
+    k.filled = ''
+    await d.ui.press({ key: 'fix' })
+    expect(k.filled).toMatch(/already in context/)
+    await d.ui.unmount()
+  }
+  expect(shots.mobile).toBe(shots.desktop)
+
+  // no timer moves it: the same picture tick after tick, while the terminal's blinks or breathes
+  const seen = new Set<string>()
+  for (let i = 0; i < 12; i++) { await k.clock.advance(500); const d = await look('desktop'); seen.add(String(d.svg.source)); await d.ui.unmount() }
+  expect([...seen]).toEqual([shots.desktop])
+
+  // what it wears and its coat are in the picture: the golden coat's colours replace the orange
+  await cardOf($, 'wear shades')
+  const worn = await look('mobile')
+  expect(String(worn.svg.source)).not.toBe(shots.desktop)
+  await worn.ui.unmount()
+  await cardOf($, 'wear golden')
+  const gold = await look('desktop')
+  expect(fills(String(gold.svg.source)).has(REG.species.fox!.palette['1'])).toBe(false)
+  await gold.ui.unmount()
+  // a pale or a dark colour that touches the background is not drawn as it is: an outline that reads on a light and on a dark app
+  const grid = (source: string) => { const g: Record<string, string> = {}; for (const m of source.matchAll(/x="(\d+)" y="(\d+)" width="(\d+)" height="1" fill="(#[0-9a-f]{6})"/g)) for (let x = +m[1]!; x < +m[1]! + +m[3]!; x++) g[`${x},${m[2]}`] = m[4]!; return g }
+  const g = grid(shots.desktop!), rim = Object.entries(g).filter(([at]) => { const [x, y] = at.split(',').map(Number) as [number, number]; return [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].some(n => !g[n.join(',')]) }).map(([, ink]) => ink)
+  expect(rim.length).toBeGreaterThan(10)
+  expect(rim.filter(ink => ink === '#f5f5f5' || ink === '#1b1b1b')).toEqual([])
+
+  // the skin button opens the parts in the apps as on the terminal
+  const d = await look('desktop')
+  await d.ui.press({ key: 'skin' })
+  await d.ui.unmount()
+  const parts = await look('desktop')
+  expect(parts.keys.at(-1)).toBe('skin-done')
+  expect(parts.keys.some(key => key.startsWith('slot-'))).toBe(true)
+  await parts.ui.unmount()
+
+  // vscode: the row of text, as before
+  const code = await look('vscode')
+  expect([code.svg, code.raster, code.keys]).toEqual([undefined, false, []])
+  expect(code.texts.length).toBe(1)
+  expect(code.texts[0]).toMatch(/^Miro  ★ 0/)
+  await code.ui.unmount()
+})
+
+test('/pet where: a line a surface, with when a client attached, how many times the band was asked there and what the last answer was', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  k.disk.pet = { coins: 0, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
+  let roster = ['terminal']
+  on('session.surfaces', () => ({ value: roster }) as any)
+  on('session.attach', (_: any, e: any) => ({ clientId: e.clientId }) as any)
+  await $.session.start(START)
+  expect((await cardOf($, 'where')).split('\n')).toEqual([
+    'Where Cachito draws (counts since the mod loaded, in memory only; the roster does not tell a mod which elements an app draws)',
+    '  terminal  in the roster; the terminal raises no attach; band asked 0 times',
+  ])
+  roster = ['terminal', 'mobile', 'vscode']
+  await $.session.attach({ surface: 'mobile', clientId: 'mobile:default', viewport: { columns: 40, rows: 60 } } as any)
+  const ask = async (surface: string, props = {}) => { const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface }); await ui.unmount() }
+  await ask('terminal'); await ask('terminal', { bodyColumns: 5 }) // too narrow for the drawing: the row
+  await ask('mobile')
+  await ask('desktop'); await ask('desktop'); await ask('desktop', { hasSurvey: true }) // a survey holds the band: nothing
+  await ask('vscode')
+  const lines = (await cardOf($, 'where')).split('\n').slice(1)
+  expect(lines).toEqual([
+    '  terminal  in the roster; the terminal raises no attach; band asked 2 times, last answer: the row of text',
+    '  mobile    in the roster; mobile:default attached 12:00:00 UTC, 40x60 cells; band asked 1 time, last answer: the Svg picture',
+    '  vscode    in the roster; no attach heard since the mod loaded; band asked 1 time, last answer: the row of text',
+    '  desktop   not in the roster now; no attach heard since the mod loaded; band asked 3 times, last answer: nothing',
+  ])
+  await ask('terminal')
+  expect((await cardOf($, 'where')).split('\n')[1]).toMatch(/band asked 3 times, last answer: the terminal drawing$/)
+  expect(Object.keys(k.disk).some(key => /where|asked|attach/.test(key))).toBe(false) // in memory only
 })

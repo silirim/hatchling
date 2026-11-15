@@ -575,18 +575,34 @@ const RIM = 0.6 // how dark the outline is, as a share of the colour
 const BRIGHT = 190 // ...and so does a colour brighter than this (luma, 0-255) with a dark channel: the chick's yellow, the axolotl's pink
 const pale = (/** @type {number} */ h) => Math.min(h >> 16, h >> 8 & 255, h & 255) > PALE || 0.299 * (h >> 16) + 0.587 * (h >> 8 & 255) + 0.114 * (h & 255) > BRIGHT
 
-/** Pixel rows to Raster cells: two pixel rows per text row, drawn with half blocks. */
-function cells(/** @type {string[]} */ rows, /** @type {Record<string, string>} */ pal, love = 0, /** @type {{ of: Set<number>, to: number } | null} */ edge = null) {
-  const out = []
+const DARK = 72 // a colour darker than this (luma, 0-255) would vanish on a dark background the same way
+const LIFT = 0.3 // how far its outline goes towards white
+const luma = (/** @type {number} */ h) => 0.299 * (h >> 16) + 0.587 * (h >> 8 & 255) + 0.114 * (h & 255)
+
+/**
+ * The colour of each pixel of a frame, null where it is empty. `ground` is what the drawing stands on: `light` gives the
+ * outline below; `any`, the apps, where a mod is not told the theme, gives it too, and one to the dark colours as well
+ * (lightened where they touch the background), so the shape reads on a light and on a dark app.
+ */
+function inks(/** @type {string[]} */ rows, /** @type {Record<string, string>} */ pal, /** @type {'dark' | 'light' | 'any'} */ ground, /** @type {{ of: Set<number>, to: number } | null} */ edge = null) {
   const hue = (/** @type {number} */ r, /** @type {number} */ c) => { const ch = rows[r]?.[c], h = ch === undefined || ch === '.' ? undefined : pal[ch]; return h ? hex(h) : null }
   // on a light theme white and what is as pale or as bright would vanish: where such a pixel touches the background it is darkened, a thin outline.
   // A colour of a coat takes the coat's own darkest colour there (`edge`): gold darkened turns to mud
-  const color = (/** @type {number} */ r, /** @type {number} */ c) => {
+  return (/** @type {number} */ r, /** @type {number} */ c) => {
     const h = hue(r, c)
-    if (h === null || !light || !pale(h)) return h
+    if (h === null || ground === 'dark') return h
+    const dim = ground === 'any' && luma(h) < DARK
+    if (!dim && !pale(h)) return h
     if (hue(r - 1, c) !== null && hue(r + 1, c) !== null && hue(r, c - 1) !== null && hue(r, c + 1) !== null) return h
-    return edge?.of.has(h) ? edge.to : Math.round((h >> 16) * RIM) << 16 | Math.round((h >> 8 & 255) * RIM) << 8 | Math.round((h & 255) * RIM)
+    const to = dim ? (/** @type {number} */ x) => Math.round(x + (255 - x) * LIFT) : (/** @type {number} */ x) => Math.round(x * RIM)
+    return edge?.of.has(h) ? edge.to : to(h >> 16) << 16 | to(h >> 8 & 255) << 8 | to(h & 255)
   }
+}
+
+/** Pixel rows to Raster cells: two pixel rows per text row, drawn with half blocks. */
+function cells(/** @type {string[]} */ rows, /** @type {Record<string, string>} */ pal, love = 0, /** @type {{ of: Set<number>, to: number } | null} */ edge = null) {
+  const out = []
+  const color = inks(rows, pal, light ? 'light' : 'dark', edge)
   for (let r = 0; r < rows.length; r += 2) {
     const upper = rows[r] ?? '' // frames have an even number of rows
     for (let c = 0; c < upper.length; c++) {
@@ -600,6 +616,36 @@ function cells(/** @type {string[]} */ rows, /** @type {Record<string, string>} 
   }
   // the mod host has toBase64; the es2023 lib the plugin types pin does not declare it yet
   return /** @type {Uint8Array & { toBase64(): string }} */ (new Uint8Array(Uint32Array.from(out).buffer)).toBase64()
+}
+
+// For /pet where, in memory only and since the mod loaded: how many times the band was asked of each surface with what the
+// last answer was, and the clients that attached, with when
+/** @type {Record<string, { n: number, last: 'svg' | 'row' | 'raster' | 'nothing' }>} */ const bandAsks = {}
+/** @type {{ surface: string, clientId: string, at: number, cells: string }[]} */ const attached = []
+const ANSWER = { svg: 'the Svg picture', row: 'the row of text', raster: 'the terminal drawing', nothing: 'nothing' }
+
+const SVG_MAX = 131072 // the characters an Svg's markup may hold
+const SVG_PX = 6 // CSS pixels a pixel of the drawing: a pet of 12 rows is 72 high
+const SVG_HIGH = 96 // ...and a taller drawing gets smaller pixels, to stay under this height
+
+/**
+ * Pixel rows to the markup of an `Svg`, for the apps: one rect per run of a colour, crisp edges, nothing behind the pet.
+ * The empty rows and columns around it are cut, so the picture is as large as what is drawn.
+ */
+function svgOf(/** @type {string[]} */ rows, /** @type {Record<string, string>} */ pal, /** @type {{ of: Set<number>, to: number } | null} */ edge = null) {
+  const color = inks(rows, pal, 'any', edge), wide = Math.max(0, ...rows.map(r => r.length))
+  const grid = rows.map((_, r) => Array.from({ length: wide }, (_, c) => color(r, c)))
+  const ys = grid.flatMap((row, y) => row.some(h => h !== null) ? [y] : []), xs = grid.flatMap(row => row.flatMap((h, x) => h === null ? [] : [x]))
+  if (!ys.length) return null
+  const x0 = Math.min(...xs), y0 = /** @type {number} */ (ys[0]), w = Math.max(...xs) - x0 + 1, h = /** @type {number} */ (ys.at(-1)) - y0 + 1
+  const px = Math.max(1, Math.min(SVG_PX, Math.floor(SVG_HIGH / h)))
+  const out = [`<svg xmlns="http://www.w3.org/2000/svg" width="${w * px}" height="${h * px}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges">`]
+  for (let y = y0; y < y0 + h; y++) for (let x = x0, end = x0; x < x0 + w; x = end) {
+    const c = /** @type {(number | null)[]} */ (grid[y])[x] ?? null
+    for (end = x + 1; end < x0 + w && (/** @type {(number | null)[]} */ (grid[y])[end] ?? null) === c; end++);
+    if (c !== null) out.push(`<rect x="${x - x0}" y="${y - y0}" width="${end - x}" height="1" fill="#${c.toString(16).padStart(6, '0')}"/>`)
+  }
+  return { source: `${out.join('')}</svg>`, width: w * px, height: h * px }
 }
 
 /** The animal drawn, by a name there is; and the one a new pet is born as: weighted, so the rare ones stay rare. An animal of a skin pack is never rolled. */
@@ -624,13 +670,28 @@ function drawn(/** @type {ReturnType<typeof view>} */ v, /** @type {{demo: strin
   return { sp, name, worn, st }
 }
 
+/** @typedef {{n: number, rare: number, demo: string, sleep: boolean, egg: number, love: number, idle: string, idleN: number, spark: number}} Pose */
+
 /** Sprite for a view. Frames come in two heights, and an item on the ground widens them, so the Raster key carries the size. */
-function sprite(/** @type {ReturnType<typeof view>} */ v, /** @type {{n: number, rare: number, demo: string, sleep: boolean, egg: number, love: number, idle: string, idleN: number, spark: number}} */ a, /** @type {{wear: string, species: string}} */ p) {
+function sprite(/** @type {ReturnType<typeof view>} */ v, /** @type {Pose} */ a, /** @type {{wear: string, species: string}} */ p) {
+  const { rows, pal, edge } = frame(v, a, p, light)
+  if (a.egg > 0) return { key: `pet-${rows.length}`, columns: /** @type {string} */ (rows[0]).length, rows: rows.length / 2, cells: cells(rows, pal) }
+  return { key: `pet-${/** @type {string} */ (rows[0]).length}x${rows.length}`, columns: /** @type {string} */ (rows[0]).length, rows: rows.length / 2, cells: cells(rows, pal, a.love, edge) }
+}
+
+/** The pet's drawing in the apps: the frame its mood stands still on. No tick moves it there, so no blink, gesture, heart or sparkle. */
+function still(/** @type {ReturnType<typeof view>} */ v, /** @type {Pose} */ a, /** @type {{wear: string, species: string}} */ p) {
+  const { rows, pal, edge } = frame(v, { ...a, n: 0, rare: -1, love: 0, idle: '', idleN: 0, spark: 0 }, p, false)
+  return svgOf(rows, pal, edge)
+}
+
+/** The pixel rows of a view with their colours: what the terminal's cells and the apps' Svg are both made from. `lit` is a light theme. */
+function frame(/** @type {ReturnType<typeof view>} */ v, /** @type {Pose} */ a, /** @type {{wear: string, species: string}} */ p, /** @type {boolean} */ lit) {
   const { sp, name, worn, st } = drawn(v, a, p)
   const wear = worn.filter(id => id !== 'crown' && partOf(id) !== GOLDEN.slot && !(a.demo === 'bloom' && partOf(id) === 'head'))
   if (a.egg > 0) { // not an animal yet: whole, then rocking, then cracked
     const rows = /** @type {string[]} */ (zoo.egg.frames[a.egg > EGG_ROCKS ? 0 : a.egg > EGG_CRACKS ? 1 + a.n % 2 : 3])
-    return { key: `pet-${rows.length}`, columns: /** @type {string} */ (rows[0]).length, rows: rows.length / 2, cells: cells(rows, { ...zoo.egg.palette, ...(light ? zoo.light : null) }) }
+    return { rows, pal: /** @type {Record<string, string>} */ ({ ...zoo.egg.palette, ...(lit ? zoo.light : null) }), edge: null }
   }
   const i = v.animate || name === 'sleep' ? a.n % st.frames.length : 0, rare = a.rare >= 0 && st.rare.length > 0
   // a calm pet's small gesture (a look aside, a flick of the ears, a hop): a few frames of its own, each with where the body sits
@@ -645,9 +706,10 @@ function sprite(/** @type {ReturnType<typeof view>} */ v, /** @type {{n: number,
   const gold = coatId === GOLDEN.id && at ? /** @type {{ shine: [number, number][], spark: [number, number][] } | undefined} */ (sp.gold[body]) : null
   const glint = gold ? [...gold.shine.map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'x'])), ...gold.spark.filter((_, n) => a.spark >> n & 1).map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'y']))] : []
   rows = dressed(rows, at, wear, glint, animalOf(p.species), body)
-  const pal = { ...sp.palette, ...coat?.palette, ...(st.tint ? sp.tints[st.tint] : null), ...(light ? zoo.light : null) }
-  const edge = coat && light ? { of: new Set(Object.values(coat.palette).map(hex)), to: hex(coat.edge) } : null
-  return { key: `pet-${rows[0].length}x${rows.length}`, columns: rows[0].length, rows: rows.length / 2, cells: cells(rows, pal, a.love, edge) }
+  const pal = /** @type {Record<string, string>} */ ({ ...sp.palette, ...coat?.palette, ...(st.tint ? sp.tints[st.tint] : null), ...(lit ? zoo.light : null) })
+  // the coat's own outline: on a light theme, and in the apps, where the theme is not told
+  const edge = coat ? { of: new Set(Object.values(coat.palette).map(hex)), to: hex(coat.edge) } : null
+  return { rows: /** @type {string[]} */ (rows), pal, edge }
 }
 
 /** A text cut to the columns there are; one that fits is left as it is. */
@@ -1108,6 +1170,11 @@ export function register(/** @type {import('claude-code').On} */ on) {
     return next(e)
   })
 
+  on('session.attach', async ($, e, next) => {
+    attached.push({ surface: e.surface, clientId: e.clientId, at: await $.clock.now(), cells: e.viewport ? `${e.viewport.columns}x${e.viewport.rows} cells` : '' })
+    return next(e)
+  })
+
   on('command.run', { command: 'pet' }, async ($, e) => {
     if (!cur) await load($)
     await pullPrefs($).catch(() => {})
@@ -1118,6 +1185,16 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (!(await heldPrefs($)) && (await storedPrefs($)).lost) return { text: text(undefined, 'store.lost') }
     const L0 = (await getPrefs($)).lang, modelNow = (await getPrefs($)).model || MODEL
     const onOff = (/** @type {string} */ v) => arg && arg !== 'on' && arg !== 'off' ? { text: text(L0, 'onoff', { verb: v, arg: tidy(arg, 24) }) } : null
+    if (verb === 'where') { // for troubleshooting the apps: what the session draws on, and what the band answered there. English, as a thing to paste in a report
+      const now = /** @type {readonly string[]} */ (await $.session.surfaces().catch(() => []))
+      const all = [...new Set([...now, ...attached.map(c => c.surface), ...Object.keys(bandAsks)])]
+      const line = (/** @type {string} */ surface) => {
+        const mine = attached.filter(c => c.surface === surface), a = bandAsks[surface]
+        const roster = `${now.includes(surface) ? 'in the roster' : 'not in the roster now'}${mine.length ? mine.map(c => `; ${c.clientId} attached ${new Date(c.at).toISOString().slice(11, 19)} UTC${c.cells ? `, ${c.cells}` : ''}`).join('') : surface === 'terminal' ? '; the terminal raises no attach' : '; no attach heard since the mod loaded'}`
+        return `  ${surface.padEnd(9)} ${roster}; band asked ${a?.n ?? 0} time${a?.n === 1 ? '' : 's'}${a ? `, last answer: ${ANSWER[a.last]}` : ''}`
+      }
+      return { text: ['Where Cachito draws (counts since the mod loaded, in memory only; the roster does not tell a mod which elements an app draws)', ...(all.length ? all.map(line) : ['  no surface: nothing draws in this session'])].join('\n') }
+    }
     if (verb === 'help') return { text: listOf(L0, 'help').map(line => put(line, { model: modelNow })).join('\n') }
     if (verb === 'hide' || verb === 'show') {
       await setPrefs($, { hidden: verb === 'hide' })
@@ -1372,6 +1449,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const tally = bandAsks[e.surface] = { n: (bandAsks[e.surface]?.n ?? 0) + 1, last: /** @type {'svg' | 'row' | 'raster' | 'nothing'} */ ('nothing') }
     const state = (await heldPet($)) ?? cur // after /clear the session's copy is empty until the next event
     const a = await heldAnim($)
     const p = (await heldPrefs($)) ?? await storedPrefs($)
@@ -1408,11 +1486,56 @@ export function register(/** @type {import('claude-code').On} */ on) {
     // the head of the band: who it is and its points, a star before the count (prize points, not money). Hearts and humour are on the /pet card only
     // beside them, only when other chats of the person are open: how many are working, waiting, or may be waiting for an OK
     const bare = `${p.name}  ★ ${v.coins}`, head = `${bare}${board && p.chats ? `  ·  ${board}` : ''}`
-    // one row of text: the other surfaces, which have no cell grid, and a terminal too narrow or too low for the drawing.
+    // one row of text: a surface with neither a cell grid nor a drawing of ours, and a terminal too narrow or too low for the drawing.
     // Where there are no buttons the question about the comments says how to answer it
     const told = asking && !(a.noteLeft > 0 && a.note) ? `${b.say} ${text(L, 'comments.ask.how')}` : b.say
-    const row = (/** @type {number} */ max) => Box({ children: [Text({ dimColor: true, children: [cut(open ? `${head}  ${told}` : head, max)] })] })
+    const row = (/** @type {number} */ max) => { tally.last = 'row'; return Box({ children: [Text({ dimColor: true, children: [cut(open ? `${head}  ${told}` : head, max)] })] }) }
 
+    const more = b.more
+    // The buttons, in two rows. The pet's own (skin and pet) are in the row of the name, after it: `Tobo  ★ 29  ·  skin  pet`.
+    // No button of ours hides the band: the engine draws its own `[-]` at the right end of the band, which folds it, and a second
+    // one beside it was one too many (/pet hide still puts the pet away until /pet show). The buttons of a phrase, of a question or of the parts are in a row under the bubble, which
+    // is there only when there are some: `ask` goes with its phrase. Each has how soon it goes when its row is too wide.
+    /** @typedef {{ key: string, label: string, drop: number, el: () => any }} Key */
+    const buttons = (/** @type {boolean} */ bubbled) => {
+      /** @type {Key[]} */ const keys = [], /** @type {Key[]} */ own = []
+      const adder = (/** @type {Key[]} */ list) => (/** @type {string} */ id, /** @type {string} */ label, /** @type {number} */ drop, /** @type {() => void} */ onPress, dim = false) => { list.push({ key: id, label, drop, el: () => Button({ key: id, label, plain: true, ...(dim ? { dimColor: true } : null), onPress }) }) }
+      const key = adder(keys), ownKey = adder(own)
+      const ask = bubbled ? b.ask : ''
+      // a line that holds the bubble by itself (a cuddle's, an answer) covers the question for its seconds: the question's buttons wait with it
+      const answering = asking && !(a.noteLeft > 0 && a.note)
+      if (dressing) {
+        for (const slot of partsOf(v.closet)) key(`slot-${slot}`, text(L, `part.${slot}`), 0, () => { turn($, slot).catch(() => {}) })
+        if (mine.length > 1) key('slot-animal', text(L, 'part.animal'), 0, () => { turnAnimal($).catch(() => {}) })
+        key('skin-done', text(L, 'btn.done'), 0, () => { skin($, false).catch(() => {}) }, true)
+      } else {
+        if (answering) { key('voice-on', text(L, 'btn.comments.on'), 0, () => { answerVoice($, true).catch(() => {}) }); key('voice-off', text(L, 'btn.comments.off'), 0, () => { answerVoice($, false).catch(() => {}) }) }
+        else if ((v.closet.length || mine.length > 1) && !hatching) ownKey('skin', text(L, 'btn.skin'), 2, () => { skin($).catch(() => {}) }, true)
+        if (ask) key('fix', b.label, 0, () => { fix($, ask).catch(() => {}) })
+        if (more?.ask && bubbled) key('more', more.label, 0, () => { fix($, more.ask).catch(() => {}) })
+        if (b.link && bubbled) { const href = b.link; keys.push({ key: 'guide', label: text(L, 'btn.guide'), drop: 1, el: () => Link({ href, label: text(L, 'btn.guide') }) }) }
+        if (!hatching) ownKey('pet', text(L, 'btn.pet'), 3, () => { cuddle($).catch(() => {}) }, true)
+      }
+      return { keys, own }
+    }
+
+    // The Claude apps (desktop, mobile): the pet as an Svg, the frame its mood stands still on, drawn again when something changes
+    // and by no timer of its own; beside it the name and the stars with the pet's buttons, the phrase while it is open, and its
+    // buttons under it. A drawing past the Svg's limit, or an app without the element, keeps the row of text
+    const pic = (e.surface === 'desktop' || e.surface === 'mobile') && 'Svg' in ui ? still(v, a, p) : null
+    if (pic && pic.source.length <= SVG_MAX && 'Svg' in ui) {
+      const { keys, own } = buttons(open)
+      tally.last = 'svg'
+      const said = open ? [b.say, b.fix, more?.say, b.aside].flatMap((t, i) => t ? [Text({ ...(i ? { dimColor: true } : null), children: [t] })] : []) : []
+      return Box({ flexDirection: 'row', gap: 2, alignItems: 'center', children: [
+        ui.Svg({ source: pic.source, alt: hatching ? p.name : `${p.name}, ${animalName(L, p.species)}`, width: pic.width, height: pic.height }),
+        Box({ key: 'beside', flexDirection: 'column', children: [
+          Box({ key: 'head', flexDirection: 'row', gap: 2, children: [Text({ dimColor: true, children: [head] }), ...own.map(k => k.el())] }),
+          ...said,
+          ...(keys.length ? [Box({ key: 'keys', flexDirection: 'row', gap: 2, children: keys.map(k => k.el()) })] : []),
+        ] }),
+      ] })
+    }
     if (e.surface !== 'terminal') return row(Infinity)
     const Raster = 'Raster' in ui ? ui.Raster : undefined
     if (!Raster) return next(e) // no cell grid on this surface: draw nothing
@@ -1423,10 +1546,10 @@ export function register(/** @type {import('claude-code').On} */ on) {
     // and under the width of the drawing, or the height of it, one row of text.
     const room = Number(e.props.bodyColumns) > 0 ? Number(e.props.bodyColumns) : Infinity, high = Number(e.props.maxRows) > 0 ? Number(e.props.maxRows) : Infinity
     if (room < s.columns || high < s.rows) return row(room)
+    tally.last = 'raster'
     const beside = room - s.columns - 2 // what is left of the pet, less the tail and a cell of margin
     const wrapAt = Math.min(BUBBLE_MAX, beside - 4) // less the border and a cell of padding each side
     // the speech bubble: each phrase is wrapped here, by its width on screen, and the border hugs the widest line
-    const more = b.more
     const phrases = [{ rows: wrap(b.say, Math.max(1, wrapAt)), dim: false }, ...(b.fix ? [{ rows: wrap(b.fix, Math.max(1, wrapAt)), dim: true }] : []), ...(more ? [{ rows: wrap(more.say, Math.max(1, wrapAt)), dim: true }] : []), ...(b.aside ? [{ rows: wrap(b.aside, Math.max(1, wrapAt)), dim: true }] : [])]
     const tall = Math.max(0, s.rows - PET_ROWS)
     const under = dressing || (asking && !(a.noteLeft > 0 && a.note)) || !!(b.ask || b.link || more?.ask) // a row of buttons under the bubble
@@ -1434,29 +1557,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const bubbled = open && wrapAt >= BUBBLE_MIN && tall + 3 + phrases.reduce((n, ph) => n + ph.rows.length, 0) + (under ? 1 : 0) <= high
     const inside = phrases.map(ph => Text({ ...(ph.dim ? { dimColor: true } : null), children: [ph.rows.join('\n')] }))
     const width = Math.max(...phrases.flatMap(ph => ph.rows.map(cols))) + 4 // border and one cell of padding each side
-    // The buttons, in two rows. The pet's own (skin and pet) are in the row of the name, after it: `Tobo  ★ 29  ·  skin  pet`.
-    // No button of ours hides the band: the engine draws its own `[-]` at the right end of the band, which folds it, and a second
-    // one beside it was one too many (/pet hide still puts the pet away until /pet show). The buttons of a phrase, of a question or of the parts are in a row under the bubble, which
-    // is there only when there are some: `ask` goes with its phrase. Each has how soon it goes when its row is too wide.
-    /** @typedef {{ key: string, label: string, drop: number, el: () => any }} Key */
-    /** @type {Key[]} */ const keys = [], /** @type {Key[]} */ own = []
-    const adder = (/** @type {Key[]} */ list) => (/** @type {string} */ id, /** @type {string} */ label, /** @type {number} */ drop, /** @type {() => void} */ onPress, dim = false) => { list.push({ key: id, label, drop, el: () => Button({ key: id, label, plain: true, ...(dim ? { dimColor: true } : null), onPress }) }) }
-    const key = adder(keys), ownKey = adder(own)
-    const ask = bubbled ? b.ask : ''
-    // a line that holds the bubble by itself (a cuddle's, an answer) covers the question for its seconds: the question's buttons wait with it
-    const answering = asking && !(a.noteLeft > 0 && a.note)
-    if (dressing) {
-      for (const slot of partsOf(v.closet)) key(`slot-${slot}`, text(L, `part.${slot}`), 0, () => { turn($, slot).catch(() => {}) })
-      if (mine.length > 1) key('slot-animal', text(L, 'part.animal'), 0, () => { turnAnimal($).catch(() => {}) })
-      key('skin-done', text(L, 'btn.done'), 0, () => { skin($, false).catch(() => {}) }, true)
-    } else {
-      if (answering) { key('voice-on', text(L, 'btn.comments.on'), 0, () => { answerVoice($, true).catch(() => {}) }); key('voice-off', text(L, 'btn.comments.off'), 0, () => { answerVoice($, false).catch(() => {}) }) }
-      else if ((v.closet.length || mine.length > 1) && !hatching) ownKey('skin', text(L, 'btn.skin'), 2, () => { skin($).catch(() => {}) }, true)
-      if (ask) key('fix', b.label, 0, () => { fix($, ask).catch(() => {}) })
-      if (more?.ask && bubbled) key('more', more.label, 0, () => { fix($, more.ask).catch(() => {}) })
-      if (b.link && bubbled) { const href = b.link; keys.push({ key: 'guide', label: text(L, 'btn.guide'), drop: 1, el: () => Link({ href, label: text(L, 'btn.guide') }) }) }
-      if (!hatching) ownKey('pet', text(L, 'btn.pet'), 3, () => { cuddle($).catch(() => {}) }, true)
-    }
+    const { keys, own } = buttons(bubbled)
     const span = (/** @type {Key[]} */ list) => list.reduce((n, k) => n + cols(k.label), 0) + 2 * Math.max(0, list.length - 1)
     const fit = (/** @type {Key[]} */ list, /** @type {number} */ max) => { while (list.length && span(list) > max) list.splice(list.reduce((at, k, i) => k.drop >= /** @type {Key} */ (list[at]).drop ? i : at, 0), 1) }
     // The row of the name in `max` columns. What gives way when it is too wide, in this order: the count of the other chats

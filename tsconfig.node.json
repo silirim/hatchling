@@ -22,6 +22,8 @@
     "engine/image.js",
     "engine/share-save.js",
     "engine/share.test.js",
+    "engine/readme.test.js",
+    "sprites/readme.mjs",
     "bench/*.mjs"
   ]
 }

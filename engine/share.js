@@ -11,7 +11,7 @@ const PET_MAX = 20 // the pet's scale, at most: screen pixels a pixel
 export const LINK = 'github.com/silirim/cachito-pet'
 
 // 5 px wide pixel font, rows 8 and 9 are descenders: the small letters, `W`, `C`, `?` and `·` are those of sprites/cover.py
-const FONT = /** @type {Record<string, string>} */ ({
+export const FONT = /** @type {Record<string, string>} */ ({
   A: '.###./#...#/#...#/#####/#...#/#...#/#...#', B: '####./#...#/#...#/####./#...#/#...#/####.', C: '.###./#...#/#..../#..../#..../#...#/.###.',
   D: '####./#...#/#...#/#...#/#...#/#...#/####.', E: '#####/#..../#..../####./#..../#..../#####', F: '#####/#..../#..../####./#..../#..../#....',
   G: '.###./#...#/#..../#.###/#...#/#...#/.###.', H: '#...#/#...#/#...#/#####/#...#/#...#/#...#', I: '.###./..#../..#../..#../..#../..#../.###.',

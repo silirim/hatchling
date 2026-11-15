@@ -6,6 +6,8 @@ How Cachito works, and every command. Comments: [comments.md](comments.md). What
 
 The pet sits above the prompt with one dim row: its name, its stars, a count of your other chats and two buttons (`Tobo  ★ 29  ·  2 working · 1 waiting  ·  skin  pet`). When it has something to say, a speech bubble shows for some seconds, with its buttons under it. A narrow terminal drops the buttons first, then the bubble.
 
+**In the Claude apps.** In the desktop and mobile apps the pet is a small picture drawn from the same pixels (animal, age, coat and what it wears), with its name, its phrase and the same buttons beside it. It stands still there: the picture changes when the pet's state does, with no blink or gesture. It has an outline that reads on a light and on a dark app. VS Code keeps one row of text. Nothing more is sent or stored for it.
+
 At the first start the pet is an egg, and hatches after 8 seconds.
 
 As installed everything the pet says is fixed text on your screen: no model is asked and nothing enters the chat's context. A button only fills the prompt box.
