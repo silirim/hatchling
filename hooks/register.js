@@ -272,7 +272,7 @@ async function workOpen(/** @type {any} */ $, /** @type {number} */ now) {
 // Reminders (engine/remind.js): the person's own lines, in the store under `reminders`. Read and written here and nowhere else:
 // no request to a model, no picture and no export file is ever made from them.
 let remindAt = 0 // when this chat shows the reminders next: a while after it opened, and when the person is back after a pause; 0 for not
-/** /pet remind and /pet reminders: what was asked is done, and the reply comes back as text. */
+/** /pet remind and /pet reminders: what was asked is done, and the reply comes back as text: the command's answer, a line of the chat. */
 async function reminders(/** @type {any} */ $, /** @type {string} */ verb, /** @type {string} */ typed) {
   const L = (await getPrefs($)).lang, now = await $.clock.now(), none = {}, raw = await storeGet($, 'reminders').catch(() => none)
   if (raw === none) return text(L, 'remind.unkept')
@@ -298,13 +298,13 @@ async function reminders(/** @type {any} */ $, /** @type {string} */ verb, /** @
 /**
  * Looked at every PEER_TICKS: a timed reminder that fell due is said once, by a chat the person used lately (it is then marked as
  * said for every chat); and when this chat's moment has come (`remindAt`) the first of the ones to show is said. The line holds
- * the bubble for RULES.remindShowMs; the reminder stays in the list until /pet remind done. Never while the egg hatches, a
- * question waits or another held line is up: it is looked at again.
+ * the bubble for RULES.remindShowMs; the reminder stays in the list until /pet remind done. Never while the egg hatches or
+ * another held line is up: it is looked at again. A question that waits does not hold it back: the line passes over it.
  */
 async function remind(/** @type {any} */ $) {
   if (!social || await bench($)) return
   const a = await heldAnim($), p = await getPrefs($), now = await $.clock.now(), none = {}
-  if (p.hidden || a.egg > 0 || a.noteLeft > 0 || a.ask || a.demo) return
+  if (p.hidden || a.egg > 0 || a.noteLeft > 0 || a.demo) return // over the question about the comments it is said all the same: a held line covers the question for its seconds, and the question is back after
   const raw = await storeGet($, 'reminders').catch(() => none)
   if (raw === none) return
   const { list, hit } = remindDue(remindersOf(raw), now), fell = hit && now - lastOwn <= RULES.peerActiveMs ? hit : null
@@ -1052,6 +1052,7 @@ async function moveIn(/** @type {any} */ $, /** @type {import('../engine/move.js
   await update($, pet, () => cur)
   const { raw, lost, ...p } = await storedPrefs($)
   if (!lost) await update($, prefs, () => p)
+  if (!lost && p.voiceAsked && (await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' })) // the question about the comments was answered where the pet comes from: the choice that moved in stands
   await founding($)
   await feedLean($)
   return wrote.every(Boolean)
@@ -1215,9 +1216,6 @@ export function register(/** @type {import('claude-code').On} */ on) {
       sayTo($, toPet[1] ?? '').catch(() => {}) // not awaited: the prompt box is free at once, the answer comes in the bubble
       return { drop: text(p.lang, 'say.heard', { name: p.name }) }
     }
-    // /pet remind and /pet reminders are the person's own lines: answered here and dropped like /pet say, so neither becomes a row of the chat
-    const note = e.command?.name === 'pet' ? /^(reminders|remind)(?:\s+|$)([^]*)/i.exec(e.command.args.trim()) : null
-    if (note) return { drop: await reminders($, String(note[1]).toLowerCase(), note[2] ?? '').catch(() => text(undefined, 'remind.unkept')) }
     { const t = await $.clock.now(); if (social && lastOwn && t - lastOwn >= RULES.recapAfterMs) remindAt = t } // back after a pause: the reminders are said again
     await pullPrefs($).catch(() => {}) // lean switched in another chat counts from this turn
     await feed($, { type: 'prompt', turn: !e.command }).catch(() => {}) // a slash command sends no request: no word on an expired cache
@@ -1363,7 +1361,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       // the work report: today and yesterday, or the days asked for. From the day counters and the chat marks, and nothing else
       return { text: report(workOf(await storeGet($, 'work').catch(() => undefined)), await chats($), { id: await myId($), now: await $.clock.now(), span: arg }, L) }
     }
-    if (verb === 'remind' || verb === 'reminders') return { text: await reminders($, verb, e.args.trim().slice(verb.length)) } // typed, it is answered at prompt.submit and never gets here
+    if (verb === 'remind' || verb === 'reminders') return { text: await reminders($, verb, e.args.trim().slice(verb.length)) } // a command's answer like any other: a line of the chat, which its assistant can read; only the bubble is drawn here and is no line
     if (verb === 'alerts') { // a desktop notification when another chat may be waiting for the person's OK: off until asked for
       const bad = onOff('alerts')
       if (bad) return bad

@@ -100,7 +100,8 @@ The first greeting of a day says yesterday in one dim line under it (`yesterday:
 - `/pet reminders` lists them with their numbers; `/pet remind done <n>` removes one, `/pet remind done all` every one.
 - At most 20, of 200 characters each, with control and escape characters taken out.
 - **When the pet says them**, in its bubble for 20 seconds: a little after a chat opens, at your first prompt after 30 minutes away, and when a timed one falls due (in a chat you used in the last 30 minutes; otherwise at your return). It shows the first, and how many more. A reminder stays until you remove it.
-- What you type after `/pet remind` is answered and dropped, like `/pet say`: it is never a row of the chat. Reminders are never sent to a model, comments on or off, and are not on the picture of `/pet share` or in the file of `/pet export`.
+- Reminders stay on this machine: never sent to the comments model, comments on or off, not on the picture of `/pet share`, not in the file of `/pet export`.
+- When you set or list them, the answer is a line of this chat, as with any command, so this chat's assistant can read it. The bubble is drawn locally and is not a chat line.
 
 ## The pet's own diary
 

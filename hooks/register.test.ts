@@ -3823,6 +3823,29 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   expect({ ...JSON.parse(m.files[file]!), exported: 0 }).toEqual({ ...out, exported: 0 })
 })
 
+test('/pet import over a newborn whose question about the comments is up: the choice that moves in stands, and the question goes at once', async ($, on) => {
+  const k = home(on, {}, MOVED), m = moving(on, k)
+  k.disk.pet = structuredClone(MOVED_PET)
+  await $.session.start(START)
+  await cardOf($, 'export')
+  const text = Object.values(m.files)[0]!
+  expect(JSON.parse(text).prefs.voiceAsked).toBe(true)
+  for (const key of Object.keys(k.disk)) delete k.disk[key] // another computer: a pet hatches there, and asks
+  k.state = {}
+  await $.session.start(START)
+  await k.clock.advance(9_000)
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
+  await ui.unmount()
+  m.files['/t/miro.json'] = text
+  expect(await cardOf($, 'import /t/miro.json yes')).toMatch(/^Miro moved in\./)
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/May I comment/)
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).not.toContain('comments on')
+  await ui.unmount()
+  expect(prefsOf(k.disk)).toMatchObject({ voice: false, voiceAsked: true })
+})
+
 test('/pet import: the founder\'s eggshell follows the birth of the pet that moves in, as it does for any pet', async ($, on) => {
   const k = home(on, {}, MOVED), m = moving(on, k)
   k.disk.pet = structuredClone(MOVED_PET)
@@ -3942,17 +3965,18 @@ test('the work diary: the first greeting of a day says yesterday in one line, on
   expect(k.v.calls.length).toBe(calls) // no model was asked for the report or the line
 })
 
-test('reminders: kept in the store, capped and cleaned; shown in the bubble at a start and when a timed one falls due; never in a request to the model nor a row of the chat', async ($, on) => {
+test('reminders: kept in the store, capped and cleaned; shown in the bubble at a start and when a timed one falls due; never in a request to the comments model; the answers are the command\'s, lines of the chat like any other', async ($, on) => {
   const k = voiceKit($, on, { voice: true })
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  const typed = async (args: string) => String(((await $.prompt.submit({ text: `/pet ${args}`, command: { name: 'pet', args }, wait: false, origin: 'user' } as any)) as any).drop)
-  expect(await typed('reminders')).toBe('No reminders. /pet remind <text> keeps one.')
+  // nothing is dropped at the prompt: /pet remind and /pet reminders are answered by the command, as /pet diary is
+  const typed = async (args: string) => { expect((await $.prompt.submit({ text: `/pet ${args}`, command: { name: 'pet', args }, wait: false, origin: 'user' } as any) as any)?.drop).toBeUndefined(); return cardOf($, args) }
+  expect(await cardOf($, 'reminders')).toBe('No reminders. /pet remind <text> keeps one.')
   expect(await typed('remind')).toMatch(/^\/pet remind <text> keeps a reminder/)
-  expect(await typed('remind call \x1b[31mAna\x1b[0m\tback\u0007')).toBe('Reminder 1 kept: call Ana back') // dropped: it never becomes a row of the chat
+  expect(await typed('remind call \x1b[31mAna\x1b[0m\tback\u0007')).toBe('Reminder 1 kept: call Ana back') // cleaned of control and escape characters
   expect(await typed('remind in 1m check the build')).toBe('Reminder 2 kept, in 1 min: check the build')
   expect(await typed(`Remind ${'x'.repeat(500)}`)).toBe(`Reminder 3 kept: ${'x'.repeat(200)}`)
   expect(k.disk.reminders.map((r: any) => [r.text.length, typeof r.made, r.at === undefined])).toEqual([[13, 'number', true], [15, 'number', false], [200, 'number', true]])
-  expect(await typed('reminders')).toBe(`Your reminders\n  1. call Ana back\n  2. check the build  (in 1 min)\n  3. ${'x'.repeat(200)}\nKept on this machine only: never sent to a model, not on /pet share, not in /pet export. /pet remind done <n|all> removes.`)
+  expect(await cardOf($, 'reminders')).toBe(`Your reminders\n  1. call Ana back\n  2. check the build  (in 1 min)\n  3. ${'x'.repeat(200)}\nKept on this machine: never sent to the comments model, not on /pet share, not in /pet export. Setting or listing them answers in this chat, as any command does, so its assistant can read that; the bubble is not a chat line. /pet remind done <n|all> removes.`)
   expect(await typed('remind done 3')).toBe(`Removed: ${'x'.repeat(200)}`)
   expect(await typed('remind done 7')).toBe('No reminder 7. /pet reminders lists them.')
   // a while after the chat opened the pet says the first one, with how many more; the timed one is not due yet
@@ -3967,7 +3991,7 @@ test('reminders: kept in the store, capped and cleaned; shown in the bubble at a
   expect(k.disk.reminders.map((r: any) => r.told)).toEqual([undefined, true])
   await k.clock.advance(RULES.remindShowMs + 21_000)
   expect((await bubbleOf($)).join(' ')).not.toMatch(/remember/)
-  expect(await typed('reminders')).toMatch(/\n  2\. check the build  \(due\)\n/)
+  expect(await cardOf($, 'reminders')).toMatch(/\n  2\. check the build  \(due\)\n/)
   // with the comments on, nothing of a reminder is in any request to the model; and the cap holds
   expect(k.v.calls.length).toBeGreaterThan(0)
   expect(JSON.stringify(k.v.calls)).not.toMatch(/Ana|check the build|remind/i)
@@ -3980,6 +4004,23 @@ test('reminders: kept in the store, capped and cleaned; shown in the bubble at a
   // a store that cannot be written: said, not thrown, and nothing is shown as kept
   ;(k as any).ro = true
   expect(await typed('remind x')).toBe('The reminders could not be read or kept: the store cannot be used now.')
+})
+
+test('reminders: a timed one that falls due while the question about the comments is up is said over it, and the question is back after', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  forget(k.disk) // a newborn: it hatches, then asks
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.clock.advance(9_000)
+  const buttons = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const b = (await ui.findAll({ type: 'Button' })).map((x: any) => x.text); await ui.unmount(); return b }
+  expect(await buttons()).toEqual(['pet', 'comments on', 'stay quiet'])
+  expect(await cardOf($, 'remind in 1m check the build')).toBe('Reminder 1 kept, in 1 min: check the build')
+  expect(await buttons()).toEqual(['pet', 'comments on', 'stay quiet']) // a command is no answer: the question waits
+  await k.clock.advance(70_000)
+  expect(await bubbleOf($)).toEqual(['remember: check the build', '/pet remind done 1 when it is done'])
+  expect(k.disk.reminders[0].told).toBe(true)
+  await k.clock.advance(RULES.remindShowMs + 1_000)
+  expect((await bubbleOf($)).join(' ')).toMatch(/May I comment on your work\?/)
+  expect(await buttons()).toEqual(['pet', 'comments on', 'stay quiet'])
 })
 
 test('reminders: back after a pause the pet says them again at the next prompt; none under the bench band, and none while the band is hidden', async ($, on) => {

@@ -1,7 +1,8 @@
 // @ts-check
 // Reminders: a few lines the person writes for themselves with /pet remind, kept in the store on their machine and shown by the
-// pet in its bubble. Zero tokens. The text is the person's own: it is never sent to a model, never on the picture of /pet share
-// and never in the file of /pet export. Pure: the adapter gives the time and keeps the result.
+// pet in its bubble. Zero tokens. The text is the person's own: it is never sent to the comments model, never on the picture of
+// /pet share and never in the file of /pet export. The answer of /pet remind and of /pet reminders is a line of the chat, as any
+// command's, so that chat's assistant can read it; the bubble is drawn locally and is no line. Pure: the adapter gives the time and keeps the result.
 
 import { tidy } from './width.js'
 
