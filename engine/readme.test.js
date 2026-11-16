@@ -73,7 +73,7 @@ test('the pictures made for the README: on disk as the script draws them now, un
 test('the README says what must stay in sight, and its prose is 750 words or fewer', () => {
   const open = shown.replace(/<details>[\s\S]*?<\/details>/g, '')
   assert.match(open, /It does not beat ponytail on gin/)
-  assert.match(open, /It is not shown to beat a single "Be brief\." on gin/)
+  assert.match(open, /It is not shown to beat a single "Be brief\."\*\*, on either project/)
   assert.match(open, /Bluetooth/)
   assert.doesNotMatch(README, /\/pet where/)
   const n = words(README)

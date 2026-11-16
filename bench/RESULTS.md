@@ -7,7 +7,8 @@ In short:
 - **The eight lines cost less than Claude Code alone on long sessions.** -14.8% on a read-heavy one (Series 4, p = 0.0014). -31.8% on six real defects of gin (Series 7, p = 0.0002).
 - **On six real defects of VodMax the evidence is weaker.** -12.4% on Opus 5.5 (Series 5, p = 0.0485: not shown without one pair of runs). -13.8% on Fable 5.2 at low effort (Series 6, p = 0.0238, 5 runs an arm).
 - **They do not beat ponytail.** On gin ponytail saved -38.7% and cost 10.0% less than the lines (p = 0.0141). In Series 1 no difference among Cachito, caveman and ponytail is shown.
-- **They are not shown to beat the single sentence "Be brief."** On gin the lines read 5.0% lower than a plugin that says only that (Series 8, p = 0.5009: not shown). That series has no arm without a plugin.
+- **They are not shown to beat the single sentence "Be brief."**, on either project. On gin the lines read 5.0% lower than a plugin that says only that (Series 8, p = 0.5009: not shown; no arm without a plugin). On the long session of VodMax they read 3.5% higher (Series 9, p = 0.3368: not shown).
+- **On that long session "Be brief." alone cost 12.7% less than Claude Code alone** (Series 9, p = 0.0006), the eight lines 9.7% less (p = 0.0022), "Be brief." with the three reading lines 11.1% less (p = 0.0053). No one of the three texts is shown to differ from another.
 - **No saving is shown on the two short tasks**, for any arm.
 - **The diet showed no saving** (-3.6%, p = 0.3110) and is gone. In the tables the arm `lean` is the diet and the style together; today's `/pet lean` is the arm `style`, and the cachito-lean plugin alone is `leanonly`.
 - **No arm is shown to fix more defects than another.**
@@ -16,8 +17,8 @@ In short:
 
 ## How to read the tables
 
-- The figures of Series 1 to 4 were read from the run files on 2026-11-13, by running `node bench/report.mjs <folder>` again and by reading each `manifest.json` and `*.result.json`; Series 5, 6 and 7 on 2026-11-14 and Series 8 on 2026-11-16, the same way. Where a fact is not in a file, this page says so.
-- Series 1 to 6 are on VodMax, a public Go project of this mod's own author, chosen because it is public and has tests; Series 7 and 8 are on gin-gonic/gin, which is not the author's. caveman and ponytail are compared as any user could install them.
+- The figures of Series 1 to 4 were read from the run files on 2026-11-13, by running `node bench/report.mjs <folder>` again and by reading each `manifest.json` and `*.result.json`; Series 5, 6 and 7 on 2026-11-14 and Series 8 and 9 on 2026-11-16, the same way. Where a fact is not in a file, this page says so.
+- Series 1 to 6 and Series 9 are on VodMax, a public Go project of this mod's own author, chosen because it is public and has tests; Series 7 and 8 are on gin-gonic/gin, which is not the author's. caveman and ponytail are compared as any user could install them.
 - The series with the arms `diet` and `lean` can be run again only with the copy of the mod kept in the series' own folder (`<out dir>/mod`), not with the mod of today.
 - One run of `clean` (Series 5) and one of `caveman` (Series 7) read 1 defect of 6 because the agent put each fix on a branch of its own and the bench reads only the last one; rebuilt from the recorded edits, each fixes the six.
 - Costs are US dollars as billed by the CLI (`total_cost_usd`), one figure per session.
@@ -37,8 +38,9 @@ Arms:
 | `ponytail` | ponytail 5.3.3 alone |
 | `diet` | Cachito with the diet only (`CACHITO_DIET=1`) |
 | `style` | Cachito with the style only (`CACHITO_STYLE=1`) |
-| `leanonly` | The `cachito-lean` plugin alone, as installed: the same 8 lines of the style, no pet (Series 7 and 8) |
-| `brief` | A plugin of the bench alone (`bench/arms/brief`): one section in the system prompt, `Be brief.` (Series 8) |
+| `leanonly` | The `cachito-lean` plugin alone, as installed: the same 8 lines of the style, no pet (Series 7, 8 and 9) |
+| `brief` | A plugin of the bench alone (`bench/arms/brief`): one section in the system prompt, `Be brief.` (Series 8 and 9) |
+| `mini` | A plugin of the bench alone (`bench/arms/mini`): `Be brief.` and the three lines of the style on how the agent reads (Series 9) |
 
 Common to Series 1, 2 and 3 (Series 4 differs, see there): model `claude-opus-5-5`, Claude Code 2.1.322 (the version each run's own `init` event reports), project `https://github.com/silirim/VodMax.git` at tag `v0.6.17` (commit `902e44e`), mod hash `ca23c928fd00aaba`, 8 runs per arm, every run isolated (the plugin of its arm and nothing else, no MCP server, no hooks module that failed to load).
 
@@ -704,6 +706,98 @@ node bench/run.mjs <out>/<name> --work gin --model claude-opus-5-5 --runs 8 --ar
 node bench/report.mjs <out>/<name>
 ```
 
+## Series 9: `tour`, three texts beside Claude Code alone
+
+The long session of Series 4 on VodMax, with the arm Series 8 lacked: Claude Code alone. Four arms side by side: `clean` (no plugin), `brief` (one section, `Be brief.`), `mini` (`Be brief.` and the three lines of the style on how the agent reads, word for word: `bench/arms/mini/text.js`) and `leanonly` (the `cachito-lean` plugin alone: the eight lines). The three plugin arms differ only in that text.
+
+| | |
+|---|---|
+| Data | `<out>/tour-mini`, log `<out>/tour-mini.log` |
+| Runs 1 to 3 | 2026-11-16, 02:35 to 03:09 |
+| Runs 4 to 8 | 2026-11-16, 03:57 to 05:16, after a usage limit stopped the first attempt at block 4 (see Void runs); one start, the bench waited and went on by itself |
+| Model, project | `claude-opus-5-5`, VodMax `v0.6.17` (`902e44e`) |
+| Claude Code | 2.1.325 |
+| Arms | `clean`, `brief` (`Be brief.`), `mini` (`Be brief.` and three reading lines), `leanonly` (cachito-lean alone) |
+| Prompts hash | `390448704669f8aa` (the requests of Series 4) |
+| Task folder hash | `71602ddd31debb70` (the task of Series 4) |
+| Mod hash | `5d9d90a5a8108eff`; cachito-lean `92d9d6e979c4306c`; `brief` `2ea72e610b7ec0e8`; `mini` `38891c7800abada7`. `<out>/tour-mini/lean/style.js` is the file of Series 8, byte for byte. Against `clean`, the first prompt is 6 tokens longer in `brief`, 132 in `mini`, 373 in `leanonly`, in every block |
+| Runner hash | `eaf34a6c31d92e21` |
+| Go | go1.27.3 linux/amd64, `GOFLAGS="-trimpath -p=2"`, umask 022 |
+| Start | 276 tests and packages pass at the pinned commit, none fails; `gofmt` lists no file |
+| Isolation | 32 runs of 32: the plugin of the arm and nothing else |
+| Billed | $105.86 for the 32 runs counted; $11.75 more for the block that does not count |
+
+Cost of each run:
+
+| Run | `clean` | `brief` | `mini` | `leanonly` |
+|---|---|---|---|---|
+| 1 | $3.544 | $3.299 | $3.456 | $3.234 |
+| 2 | $3.617 | $3.333 | $3.439 | $3.483 |
+| 3 | $3.591 | $3.185 | $3.169 | $3.092 |
+| 4 | $3.251 | $3.141 | $3.048 | $3.159 |
+| 5 | $3.715 | $3.251 | $2.650 | $2.989 |
+| 6 | $3.715 | $3.217 | $2.964 | $3.282 |
+| 7 | $3.810 | $2.615 | $3.442 | $3.537 |
+| 8 | $3.640 | $3.168 | $3.514 | $3.307 |
+| **Mean** | **$3.610** | **$3.151** | **$3.210** | **$3.260** |
+| sd | $0.168 | $0.226 | $0.307 | $0.186 |
+
+| Pair | Difference | % | p | Shown |
+|---|---|---|---|---|
+| `brief` against `clean` | -$0.459 | -12.7% | 0.0006 | yes |
+| `mini` against `clean` | -$0.400 | -11.1% | 0.0053 | yes |
+| `leanonly` against `clean` | -$0.350 | -9.7% | 0.0022 | yes |
+| `mini` against `brief` | +$0.059 | +1.9% | 0.6608 | no |
+| `leanonly` against `brief` | +$0.109 | +3.5% | 0.3368 | no |
+| `leanonly` against `mini` | +$0.050 | +1.6% | 0.7038 | no |
+
+Where the tokens went (mean per run, thousands):
+
+| | `clean` | `brief` | `mini` | `leanonly` |
+|---|---|---|---|---|
+| Cache write | 205 | 192 | 198 | 191 |
+| Cache read | 7055 | 6043 | 5871 | 6379 |
+| Output | 28 | 22 | 26 | 23 |
+| Model requests | 69 | 65 | 65 | 66 |
+| First prompt (tokens, runs 2 to 8; run 1 is 40 more in every arm) | 17399 | 17405 | 17531 | 17772 |
+
+Quality checks:
+
+| Check | `clean` | `brief` | `mini` | `leanonly` |
+|---|---|---|---|---|
+| Every request answered | 8/8 | 8/8 | 8/8 | 8/8 |
+| Commit made | 8/8 | 8/8 | 8/8 | 8/8 |
+| Project tests pass | 8/8 | 8/8 | 7/8 | 8/8 |
+| Code formatted | 8/8 | 8/8 | 8/8 | 8/8 |
+| Test added | 8/8 | 8/8 | 8/8 | 8/8 |
+| Last answer names a changed file | 8/8 | 8/8 | 8/8 | 8/8 |
+| Last answer names the files and the build | 8/8 | 8/8 | 8/8 | 8/8 |
+
+How to read this series:
+
+- **Each of the three texts cost less than Claude Code alone.** `brief` -12.7% (p = 0.0006), `mini` -11.1% (p = 0.0053), `leanonly` -9.7% (p = 0.0022). Each cost less than `clean` in 8 blocks of 8.
+- **No text is shown to differ from another.** `mini` against `brief` +1.9% (p = 0.6608), `leanonly` against `brief` +3.5% (p = 0.3368), `leanonly` against `mini` +1.6% (p = 0.7038): chance alone gives each often.
+- **The eight lines read 3.5% higher than the single sentence "Be brief." here.** `leanonly` cost less than `brief` in 3 blocks of 8 and more in 5. In Series 8, on gin, they read 5.0% lower. Neither is shown: on neither project are the eight lines shown to beat "Be brief.".
+- **The three reading lines added to "Be brief." are not shown to do anything.** `mini` cost less than `brief` in 4 blocks of 8.
+- **Not shown is not "the same".** A difference of a few percent between two texts, either way, is not excluded by 8 runs an arm.
+- **The eight lines saved 9.7% here, and 14.8% in Series 4 on the same task.** There the arm was `style` (the pet with the same eight lines), on another day, with Claude Code 2.1.323; here it is `leanonly`, with Claude Code 2.1.325, another mod and another runner. No series separates these, and the two must not be pooled or averaged. `clean` cost $3.649 there and $3.610 here.
+- **The checks: 7 of 7 in 31 runs of 32.** The one that is not is run 5 of `mini`, 6 of 7: the project's tests fail on its own new test. Its `TestYoutubeID` (`internal/library/nfo_test.go`, 15 cases) has one case that the code as it is does not pass (`watch?dev=1&v=<id>` gives no id): a real limit of `youtubeID`, which reads only the first `v=`. The agent ran the test, saw it fail, said so in its answer, left the test file out of its commit (which only changes the function's comment, and names the limit) and offered to fix the function. The file is in the working tree, so the check, which runs the tests there, fails on that test and on nothing else. It is also the cheapest run of the arm ($2.650).
+
+Limits of this series:
+
+- One task, one project (the author's own), one model.
+- One sentence and one mix of lines were tried. Other short instructions were not.
+- That the text of `brief` and of `mini` reaches the system prompt is proven by the arms' own test (`bench/arms.test.mjs`) and, for `brief`, by a separate local probe, not in every run. What every run records is the plugin loaded alone, no hooks module that failed, and the length of the first prompt.
+- The saving of a text is the saving on this session: long, read-heavy, about 65 to 70 requests. The short tasks were not run with these arms.
+- Six pairs are compared: see How to read the tables.
+
+To run it again ($106 when it was run, at list prices, and $12 more for a block cut by the usage limit; three hours with the wait: 32 Opus runs of `tour` do not fit in what was left of one 5-hour window):
+
+```sh
+node bench/run.mjs <out>/<name> --work tour --model claude-opus-5-5 --runs 8 --arms clean,brief,mini,leanonly --wait
+node bench/report.mjs <out>/<name>
+```
+
 ## An earlier series: `tour`, two arms, older style
 
 The first series made with the bench. It is valid, and it measured a shorter style: 6 lines, without the two that protect tests and ask to declare what was skipped.
@@ -738,11 +832,12 @@ Command, as recorded in the working notes: `node bench/run.mjs <out>/opus --mode
 
 ## What is proven
 
-The first four points on one task (`tour`, a long read-heavy session), one project, Opus 5.5; the last on one task of a second project. What Series 5 and 6 add is in the next section: it is weaker.
+The first five points on one task (`tour`, a long read-heavy session), one project, Opus 5.5; the last on one task of a second project. What Series 5 and 6 add is in the next section: it is weaker.
 
 - **The style saves.** Alone it cost 14.8% less than Claude Code alone (Series 4, p = 0.0014) and 11.6% less than the diet alone (p = 0.0039). Since 2026-11-13 this is what `/pet lean on` turns on in the mod.
 - **`lean` costs less than Claude Code alone.** Three series, three mods, the same direction each time: -15.6% (earlier series, 6-line style, p = 0.0002), -14.0% (Series 1, p = 0.0002), -8.4% (Series 4, today's mod, p = 0.0137). The size is not settled: the figure for the mod as it is today is the last and smallest one, and its p is one of six pairs.
 - **caveman and ponytail also cost less than Claude Code alone**: -12.0% and -11.5% (Series 1, p = 0.0003 each).
+- **A single "Be brief." saves too, and the eight lines alone again.** In Series 9 `brief` cost 12.7% less than Claude Code alone (p = 0.0006), `mini` 11.1% less (p = 0.0053), `leanonly` 9.7% less (p = 0.0022). The eight lines saved less there than the 14.8% of Series 4: another day, another Claude Code version (2.1.325 against 2.1.323), the plugin alone instead of the pet.
 - **The checks hold.** In Series 4 every arm passed every check in 8 runs of 8, the project's tests included. On `fix` and `short` every arm passed the project's tests and the formatting check in 8 runs of 8, and on `short` the hidden test too. Series 1 and the earlier series measured their saving without running the tests.
 
 - **On gin, the eight lines alone and ponytail each cost less than Claude Code alone, and ponytail less than the lines** (Series 7, Opus 5.5, 8 runs an arm). `leanonly` -31.8% and ponytail -38.7% against `clean` (p = 0.0002 each), with every run of both at 6 defects of 6; ponytail against `leanonly` -10.0% (p = 0.0141, one of six pairs; -6.8% and not shown on the five blocks where no agent disturbed another). caveman cost more than both (p = 0.0002 each). The two savings against `clean` hold with or without the three disturbed blocks. One task, one model, a project the model knows: the size is that task's, not a general one.
@@ -767,8 +862,9 @@ Two readings in the same direction as Series 4, on different work and on a secon
 - **A saving on short tasks.** On `fix` and `short` no arm is shown to cost less than Claude Code alone: the smallest p against `clean` is 0.0727. `lean` reads -5.4% and -11.3%, and chance alone gives that often. The style alone and the diet alone were never run on a short task.
 - **An order among the lines, caveman and ponytail that holds across tasks.** On `tour` the three are within 2.9% of each other and no pair is shown to differ (p from 0.0578 to 0.7259). On `short` neither. On `fix` ponytail cost less than caveman (-21.6%, p = 0.0014) and `lean` read lower than caveman (p = 0.0148, one of six pairs): one task, 8 runs, and neither differs from `clean` there. On `gin` (Series 7, the only series with the lines alone beside the other two) ponytail cost less than the lines and both less than caveman. Nothing here supports "Cachito saves more than the other two": where a difference from ponytail is shown, it is ponytail that costs less.
 - **That caveman saves on `gin`.** It read -9.6% against `clean` (p = 0.1021): chance alone gives that often.
-- **That the eight lines save more than the sentence "Be brief."** On `gin` they read 5.0% lower (Series 8, p = 0.5009): chance alone gives that often. Nor is it shown that they save the same: 8 runs an arm do not see a difference under about 12%, and the series has no `clean` arm, so what "Be brief." saves against Claude Code alone was not measured in a paired way.
-- **That a third is what the lines save elsewhere.** Series 7 is one task on a project the model knows; the VodMax series read 12% to 15%, on other work and with the pet loaded.
+- **That the eight lines save more than the sentence "Be brief."**, on either project. On `gin` they read 5.0% lower (Series 8, p = 0.5009), on `tour` 3.5% higher (Series 9, p = 0.3368): chance alone gives each often. Nor is it shown that they save the same: 8 runs an arm do not exclude a small difference either way. Series 8 has no `clean` arm, so what "Be brief." saves against Claude Code alone was measured in a paired way on `tour` only (-12.7%).
+- **That the three reading lines add anything to "Be brief."** `mini` read 1.9% higher than `brief` (Series 9, p = 0.6608).
+- **That a third is what the lines save elsewhere.** Series 7 is one task on a project the model knows; the VodMax series read 10% to 15%, on other work, with the pet loaded in all but Series 9.
 - **Why `lean` reads lower in Series 4 than in Series 1.** The mod, the Claude Code version, the presence of Go and request 6 all changed between them. No series separates these.
 - **The completeness and correctness of the explanations the agent gave.** The checks only cover what needs no judgement.
 
@@ -778,16 +874,16 @@ No series is running for these points.
 
 - **The series up to Series 4 wrote in the store of the person who started them.** Every run that loaded Cachito used the person's own store: it read the saved preferences (which is why the runner of those days refused to start with a lever on) and added its turns, tokens and sessions to that person's pet; the diet arms wrote their files in `~/.claude/cachito-out`. The costs in this page do not depend on the pet's counters. One thing is not checked: runs of one block shared that store and that folder while they ran. Since 2026-11-13 a run under the bench keeps all of it in memory and in the out dir (`CACHITO_BENCH`, see [METHOD.md](METHOD.md)): Series 5 and 6 ran with that protection.
 - **What the clones of these series held beyond the pinned commit: seven commits, none of them a fix, none read.** Checked on 2026-11-14 on the copies of the project the runs were cloned from, which are still in the series' folders (Series 1 to 6: `opus5`, `s1/fix`, `s1/short`, `split`, `real-opus`, `real-fable-low`). In each, the project's branch `main` ended at the pinned commit `902e44e` (v0.6.17): the public `main` had not moved when they were cloned (11 to 13 November; it is at v0.6.18 since). Each also held seven commits that are not ancestors of `902e44e`: the tips of seven dependabot branches of 7 November 2026, which change two workflow files under `.github/workflows` and no code. A run's clone had no branch for them (a clone copies the local branches of its source, and the remote was removed), so they were there only as objects that no `git log` shows. The saved tool calls of all 154 runs were searched for a command that lists such objects, other branches, a reflog, or reads the folder the clones were made from: none did. The clones themselves were deleted after each run, so this is read from how git clones a folder and from the events, not from the clones. The six defects of `real` were found on 13 November and no fix of them was in any clone. Since 2026-11-14 the bench fetches the pinned commit alone and refuses a clone that holds any other (`bench/clone.mjs`); a series resumed in one of those old folders is refused until its `task` folder is deleted.
-- **Two projects, both in Go.** Series 1 to 6 are on VodMax at one tag, Series 7 and 8 on gin at one tag. Five tasks on two Go projects say little about other languages or kinds of work.
+- **Two projects, both in Go.** Series 1 to 6 and Series 9 are on VodMax at one tag, Series 7 and 8 on gin at one tag. Five tasks on two Go projects say little about other languages or kinds of work.
 - **The model knows gin** (Series 7 and 8). gin is one of the most used Go libraries and its code is in the training data of any model, so finding the place is easier than on VodMax; the reports name public concepts of the library, and the one for `methodnotallowed` carries the routes that reproduce it, as the public issue did. For a model trained up to June 2026, three of the six fixes are near that date (`copy`, `recovery` and `upload`: proposed between 4 and 11 June 2026, merged on 22 June; the report behind `upload` is of April) and three after it (`html`, `methodnotallowed`, `slowheader`: July to September). The clone holds nothing made after the pinned commit, but a model can recall a fix it was trained on. All four arms had the same model, so this bears on the size of a saving more than on its sign.
 - **The sessions of a block share the machine's ports** (Series 7). gin's own tests bind six fixed ports. In blocks 3, 4 and 7 one agent's hung `go test` held them for minutes: the agents of the other arms saw those tests fail and spent requests on it, and the checks of seven runs failed on them (they pass alone: see the series). The checks are now run after every session of the block has ended; the sessions still run together, and nothing keeps one agent's tests from another's ports. The pairs of that series read on the other five blocks are given there. In Series 8, with the checks after the block, three runs of 16 still saw those tests fail during their sessions.
-- **Two models, unevenly.** Every series is on Opus 5.5, except Series 6: Fable 5.2 at low effort, one task, 5 runs an arm. Series 7 and 8 are on Opus 5.5 alone.
+- **Two models, unevenly.** Every series is on Opus 5.5, except Series 6: Fable 5.2 at low effort, one task, 5 runs an arm. Series 7, 8 and 9 are on Opus 5.5 alone.
 - **The bench reads only the branch a run ends on.** The checks and the saved patch are taken from `HEAD` and the working tree when the session ends. A run that puts its commits on other branches is read as not having made them: it happened twice, run 8 of `clean` in Series 5 and run 1 of `caveman` in Series 7; both were rebuilt by hand from the recorded calls and fix 6 of 6. No request of the tasks says where to commit.
 - **A resumed series records the mod and the runner of its last resume.** The mod is copied again and `manifest.json` rewritten at every start. Series 5 and 6 were resumed several times: that the mod was the same throughout is not recorded (the 364 tokens the style adds to the first prompt are the same in every run).
 - **What 8 runs can see.** On the short tasks the cost of equal runs varies a lot (sd from $0.044 to $0.083 on means near $0.50): there, differences of 11% to 13% against `clean` came out with p from 0.07 to 0.09. With 8 runs an arm the floor is about 12%. In Series 4 a 7.5% difference on `tour` came out with p = 0.0563.
-- **Series are not comparable with each other.** Each one is a comparison among its own arms, started together. Series 1 and Series 4 differ in mod, Claude Code version, Go and one request; their `clean` arms are not the same baseline.
+- **Series are not comparable with each other.** Each one is a comparison among its own arms, started together. Series 1 and Series 4 differ in mod, Claude Code version, Go and one request; their `clean` arms are not the same baseline. Series 4 and Series 9 share the task and its requests and differ in day, Claude Code version, mod and runner.
 - **The thresholds are not measured.** The pet counts a chat as long from 60k tokens of context (`RULES.heavyTokens` in `engine/engine.js`) and holds a mid-chat style switch back above 30k (`STYLE_SWITCH_UNDER` in `hooks/register.js`). Both were chosen, not measured: no series compares chats on either side of them.
-- **The style of the day.** Series 1 to 8 used the 8-line style, the same text throughout (for Series 5 and 6: the text in the copy of the mod left by the last resume equals that of Series 4; for Series 7: the text in `<out>/gin-opus/lean/style.js` is the same, byte for byte; for Series 8: the eight lines in `<out>/gin-brief/lean/style.js` are the same, and the file has one more constant, which is not sent). Only the earlier two-arm series used the 6-line style. The rest of the mod, the diet's code included, changed between Series 1 to 3 (hash `ca23c928fd00aaba`) and Series 4 (`e3ce4fbc977c8531`). The short tasks have not been run with the later mod.
+- **The style of the day.** Series 1 to 9 used the 8-line style, the same text throughout (for Series 5 and 6: the text in the copy of the mod left by the last resume equals that of Series 4; for Series 7: the text in `<out>/gin-opus/lean/style.js` is the same, byte for byte; for Series 8: the eight lines in `<out>/gin-brief/lean/style.js` are the same, and the file has one more constant, which is not sent; for Series 9: `<out>/tour-mini/lean/style.js` is the file of Series 8, byte for byte). Only the earlier two-arm series used the 6-line style. The rest of the mod, the diet's code included, changed between Series 1 to 3 (hash `ca23c928fd00aaba`) and Series 4 (`e3ce4fbc977c8531`). The short tasks have not been run with the later mod.
 - **Series 1 ran without Go.** The agent was told not to run its test, and a quarter of the runs (8 of 32) ended without a commit. Series 4 does not have this limit.
 - **Mixed conditions inside a series.** Run 8 of Series 1 ran five hours after runs 1 to 7. Runs 7 and 8 of `fix` ran after a restart; the working notes say they used a shared Go build cache and runs 1 to 6 did not. In those cases all four arms of a run started together. In Series 4 run 6 of `diet` was redone alone, about an hour after the other three arms of run 6.
 - **The budget lever was never in the bench, and is gone.** A headless session cannot compact on the mod's request. `/pet budget` and the automatic compaction were removed from the mod on 2026-11-13.
@@ -801,6 +897,8 @@ Runs that were billed and do not count, and why.
 **Series 4, `diet` run 6, three attempts.** `<out>/split.log` shows the usage limit ("You've hit your 5-hour limit") stopping `diet` run 6 three times: the first attempt was billed $3.7471 and passed 4 checks of 7, the next two, 15 minutes apart, were billed $0.0000 with no session. Each attempt overwrote the same `diet-6.failed.json`, so only the last ($0) is on file and the $3.7471 is in the log alone. The other three arms of run 6 had finished and count. The fourth attempt is the run counted. This is one run stopped three times, not three runs.
 
 **Series 5, first attempt at run 2.** A usage limit ("You've hit your 5-hour limit") stopped both sessions mid-chat. `<out>/real-opus.log` shows them billed $1.8753 (`clean`, 7 checks of 12) and $1.4618 (`style`, 8 of 12): $3.34 in all. Five more attempts, 15 minutes apart, were refused at once and billed $0.0000; each overwrote the same `clean-2.failed.json` and `style-2.failed.json`, so only the last ($0) is on file and the two amounts are in the log alone. The seventh attempt is the pair counted. Series 6, 7 and 8 have no void run.
+
+**Series 9, first attempt at run 4.** A usage limit ("You've hit your 5-hour limit") stopped all four sessions at request 8 of 10. Saved as `*-4.failed.json` in `<out>/tour-mini`: `clean` $3.049, `brief` $2.664, `mini` $2.890 (3 checks of 7 each), `leanonly` $3.148 (4 of 7), $11.75 in all. The bench waited 15 minutes and ran the whole block again: those four are the runs counted.
 
 **`opus4`, the first attempt at four arms** (`<out>/opus4`, 2026-11-11, 17:46 to 18:01). The usage limit hit during run 1; the runner of that day did not stop and saved 32 result files. Run 1 was billed $0.906, $0.240, $0.798 and $0.261; runs 2 to 8 are $0.000 with no session at all. $2.20 in all, no run answered every request.
 

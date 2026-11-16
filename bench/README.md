@@ -8,7 +8,7 @@ An A/B of what a plugin does to the bill: the same requests, on the same commit 
 
 | Task | One run on Opus 5.5 | A series we ran |
 |---|---|---|
-| `tour` | $3 to $4 | 32 runs, about $108 |
+| `tour` | $3 to $4 | 32 runs, about $108; again, $106 |
 | `real` | about $3.15 | 16 runs, $50 |
 | `gin` | about $1.92 | 32 runs, $62 |
 | `fix`, `short` | about $0.50 | |
