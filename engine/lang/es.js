@@ -87,7 +87,7 @@ export default {
   'egg.crack': 'la cáscara se está agrietando',
   sleep: 'zzz',
 
-  'comments.ask': '¿Puedo comentar tu trabajo? Usa un modelo pequeño de tu cuenta: unos {in} tokens de entrada y {out} de salida por frase ({how}), máximo {cap} al día. Recibe un resumen corto del turno. El repaso tras una pausa: sin medir. Detalles: /pet comments',
+  'comments.ask': '¿Puedo comentar tu trabajo? Usa un modelo pequeño de tu cuenta: unos {in} tokens de entrada y {out} de salida por frase ({how}), máximo {cap} al día. Recibe un resumen corto del turno. El repaso tras una pausa: unos 1.300 a 2.000 de entrada y 570 a 750 de salida. Detalles: /pet comments',
   'comments.ask.how': 'Responde con /pet comments on o /pet comments off.',
   'comments.ours': 'medido en noviembre de 2026',
   'comments.own': 'medido en tus frases',

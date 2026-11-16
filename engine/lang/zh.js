@@ -87,7 +87,7 @@ export default {
   'egg.crack': '蛋壳裂开了',
   sleep: 'zzz',
 
-  'comments.ask': '我可以点评你的工作吗？会用你账户上的小模型，每句约输入 {in}、输出 {out} token（{how}），每天最多 {cap} 句，并发给它一段本轮的简短摘要。暂停后的回顾还没有测量。详情：/pet comments',
+  'comments.ask': '我可以点评你的工作吗？会用你账户上的小模型，每句约输入 {in}、输出 {out} token（{how}），每天最多 {cap} 句，并发给它一段本轮的简短摘要。暂停后的回顾：约输入 1300 到 2000、输出 570 到 750。详情：/pet comments',
   'comments.ask.how': '用 /pet comments on 或 /pet comments off 回答。',
   'comments.ours': '2026 年 11 月测得',
   'comments.own': '按你自己的点评测得',

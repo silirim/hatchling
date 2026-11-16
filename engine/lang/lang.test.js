@@ -20,7 +20,7 @@ function limit(key, v) {
   if (Array.isArray(v) && key.startsWith('tone.')) return RULES.voiceMaxCols // the comments' own limit
   if (Array.isArray(v) || /^(egg\.|sleep|wait\.say|greet\.back$)/.test(key)) return LINE // said in one line
   if (key.startsWith('btn.')) return 16
-  if (key === 'comments.ask') return LINE * 6 // with where the figure comes from and the word on the recap
+  if (key === 'comments.ask') return LINE * 7 // with where the figure comes from and the measured figures of a recap
   if (key === 'say.off.fix') return LINE * 3
   if (/^(cold|stomach|dizzy|loop|heavy|bloated|wait|greet|peer|tidy|cheer)\.|^coffee$/.test(key)) return 72 // two lines at most
   return undefined

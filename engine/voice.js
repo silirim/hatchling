@@ -173,7 +173,7 @@ export function system({ name, animal, stats, lang, talk = false, recap = false,
       ? 'The person speaks to you. Answer them in the first person, as that companion would: a feeling, a quip, a question back. You are a pet, not an assistant: you give no technical advice and you do no work. Asked to do a task, to write, fix or explain something, you say in your own way that this is the job of the assistant in the chat, not yours: in six words too, with no reason given.'
       : 'You are told what just happened. React to the moment in the first person, as that companion would: a feeling, a question, a quip. Do not report it: no retelling, and no word, name or detail taken from what you are told.',
     recap
-      ? `One or two short sentences, all on one line, never more than ${wide(lang) ? `${RULES.recapMaxCols / 2} characters` : `${RULES.recapMaxWords} words`}. Plain ${tongue}${own ? '' : `: the line is in ${tongue}, whatever language the rest is in`}. A thing may be named in plain words (the parser tests, the README). No paths, no code, no quoted text, no quotation marks, no exclamation marks, no emoji, no advice. Never unkind to the person.`
+      ? `One or two short sentences, all on one line, never more than ${wide(lang) ? RULES.recapAskCols / 2 : RULES.recapAskCols} characters. Plain ${tongue}${own ? '' : `: the line is in ${tongue}, whatever language the rest is in`}. A thing may be named in plain words (the parser tests, the README). No paths, no code, no quoted text, no quotation marks, no exclamation marks, no emoji, no advice. Never unkind to the person.`
       : `One line of ${about(lang)}, never more than ${wide(lang) ? RULES.voiceMaxCols / 2 : RULES.voiceMaxWords}. Plain ${tongue}${own ? '' : `: the line is in ${tongue}, whatever language the rest is in`}. No file names, no paths, no quoted text, no quotation marks, no exclamation marks, no emoji, no advice. Never unkind to the person.`,
     `Your tone, for instance: ${list(lang, `tone.${first}`).join(' / ')} Say something new, not one of these, and begin each line your own way: no habitual opening word such as Oh, Ooh, Eek or Well.`,
     ...(person ? [`The person asked you to call them ${person}. You may say that name now and then, in few of your lines, never in every one.`] : []),
@@ -321,11 +321,33 @@ export function clean(text) {
 }
 
 /**
- * A recap made fit for the bubble: its first line, cleaned as any line. It may name a file, since what is left to do is its matter;
- * empty when nothing is left to say or it is wider than RULES.recapMaxCols.
+ * A line that fits in `max` columns as it is; a wider one cut at the last whole word that fits, with an ellipsis in its last column.
+ * A wide character is a word of its own (Chinese has no spaces); a single word wider than the line is cut inside.
+ * @param {string} s @param {number} max
+ */
+export function cut(s, max) {
+  if (cols(s) <= max) return s
+  let kept = '', n = 0, whole = 0, wideBefore = false
+  for (const ch of s) {
+    const w = cols(ch)
+    if (ch === ' ' || w === 2 || wideBefore) whole = kept.length // a word ends before this character
+    if (n + w > max - 1) break
+    kept += ch
+    n += w
+    wideBefore = w === 2
+  }
+  return `${kept.slice(0, whole || kept.length).replace(/[\s.,;:?，。？：；、]+$/u, '')}…`
+}
+
+/**
+ * A recap made fit for the bubble: its first line, cleaned as any line. It may name a file, since what is left to do is its matter.
+ * Wider than RULES.recapMaxCols, it is cut (`cut`), never dropped: it was paid for. Empty only when the reply says nothing.
  * @param {unknown} text
  */
 export function cleanRecap(text) {
   const s = strip(text)
-  return cols(s) <= RULES.recapMaxCols && /\p{L}{2}/u.test(s) ? s : ''
+  return /\p{L}{2}/u.test(s) ? cut(s, RULES.recapMaxCols) : ''
 }
+
+// What a recap costs, as measured: said where the comments tell their cost (the question in the bubble says it in each language).
+export const RECAP_COST = 'about 1,300 to 2,000 tokens in and 570 to 750 out a recap, measured on three recaps on 16 November 2026'

@@ -526,7 +526,7 @@ test('a pet is born with a name and a character of its own: on the card and in t
   await k.clock.advance(2_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   // hatched: before anything else it asks whether it may speak, once, and says what a yes comes to
-  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account: about 650 tokens in\nand 75 out a line (measured in November\n2026), at most 40 lines a day. It gets a\nshort summary of the turn. The recap is not\nmeasured yet. Details: /pet comments')
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account: about 650 tokens in\nand 75 out a line (measured in November\n2026), at most 40 lines a day. It gets a\nshort summary of the turn. A recap after a\npause: about 1,300 to 2,000 in and 570 to\n750 out. Details: /pet comments')
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
   await ui.press({ key: 'voice-off' })
@@ -1657,7 +1657,7 @@ test('comments off, as installed: no call to a model, whatever happens, and the 
   expect(k.v.calls).toEqual([])
   expect(k.disk.voice).toBeUndefined()
   expect(await cardOf($)).toMatch(/\ncomments off: fixed lines only, nothing sent\. \/pet comments on lets a small model write them, on your tokens/)
-  expect(await cardOf($, 'comments')).toMatch(/^Comments off: the pet says its fixed lines, and nothing is sent anywhere for it\..*spends tokens of your own account: about 650 tokens in and 75 out a line, measured in November 2026 on our own lines and replaced by your own after the first line, never more than 40 lines a day\. The recap after a pause is a larger request, not measured yet\. The model in use: haiku\. \/pet model <alias or id> changes it; a larger model costs more tokens per line\. If it does not answer, the pet stays silent, tells you once a day and never picks another by itself\.$/)
+  expect(await cardOf($, 'comments')).toMatch(/^Comments off: the pet says its fixed lines, and nothing is sent anywhere for it\..*spends tokens of your own account: about 650 tokens in and 75 out a line, measured in November 2026 on our own lines and replaced by your own after the first line, never more than 40 lines a day\. The recap after a pause is a larger request: about 1,300 to 2,000 tokens in and 570 to 750 out a recap, measured on three recaps on 16 November 2026\. The model in use: haiku\. \/pet model <alias or id> changes it; a larger model costs more tokens per line\. If it does not answer, the pet stays silent, tells you once a day and never picks another by itself\.$/)
 })
 
 test('comments on: it says what it costs and sends; a line at the end of a turn made of counts and names only, counted with its real tokens', async ($, on) => {
@@ -1666,9 +1666,9 @@ test('comments on: it says what it costs and sends; a line at the end of a turn 
   const says = await cardOf($, 'comments on')
   expect(says).toMatch(/^Comments on\. They spend tokens of your own account: each line is one request to a small model \(haiku, through Claude Code's own client\)\.\nThe model in use: haiku\. \/pet model <alias or id> changes it; a larger model costs more tokens per line\./)
   expect(says).toMatch(/Sent to the model: the pet's name, animal, five statistics and language; the name you told it with \/pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts \(the tools of your MCP servers too, by their names\); the program names of the commands that failed; how many files changed; the last 600 characters of the assistant's reply \(during a turn, of what it wrote last in it, and how many minutes the turn has lasted\); the pet's own last 2 lines, so that it does not repeat itself \(they are kept in the store and go back to the model in later chats too\); at most 3 lines of its diary/)
-  expect(says).toMatch(/\nAfter a pause the pet says once where the work got to and what is left: when 30 minutes pass after a turn with no new prompt, or when you resume a chat left for longer\. For that one line, once per pause and once more each time you resume a closed chat, it sends up to 16000 characters: the first 300 of your last prompt and the end of the text the assistant wrote in the last turn \(text only: nothing a tool was given or answered\)\. It counts in the day's lines and in the tokens like any other line, and it is a larger request than a comment: a few thousand tokens in at the most, not measured yet\. Neither what is sent nor the line is kept on disk\.\n/)
+  expect(says).toMatch(/\nAfter a pause the pet says once where the work got to and what is left: when 30 minutes pass after a turn with no new prompt, or when you resume a chat left for longer\. For that one line, once per pause and once more each time you resume a closed chat, it sends up to 16000 characters: the first 300 of your last prompt and the end of the text the assistant wrote in the last turn \(text only: nothing a tool was given or answered\)\. It counts in the day's lines and in the tokens like any other line, and it is a larger request than a comment \(its cost is below\)\. Neither what is sent nor the line is kept on disk\.\n/)
   expect(says).toMatch(/Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap\. But the assistant's text is sent as it is/)
-  expect(says).toMatch(/Cost: about 650 tokens in and 75 out a line, measured in November 2026 on our own lines and replaced by your own after the first line\. The tokens out are more than the line's own, about 12: the rest is the model's thinking, which a mod cannot switch off \(it can only ask for low effort, and does\)\. The recap is not measured yet\. The tokens are the ones each call reports; what they cost in money depends on the model haiku leads to on your account\.\n/)
+  expect(says).toMatch(/Cost: about 650 tokens in and 75 out a line, measured in November 2026 on our own lines and replaced by your own after the first line\. The tokens out are more than the line's own, about 12: the rest is the model's thinking, which a mod cannot switch off \(it can only ask for low effort, and does\)\. The recap: about 1,300 to 2,000 tokens in and 570 to 750 out a recap, measured on three recaps on 16 November 2026\. The tokens are the ones each call reports; what they cost in money depends on the model haiku leads to on your account\.\n/)
   expect(says).not.toContain('$')
   expect(says).toMatch(/at most one line every 10 minutes; without that wait after a failed command, a turn that changed 5 files or more, or a cuddle: each of those waits 30, 30 and 20 seconds since the last line for the same reason\. A line is counted in the day when it is asked for, so one whose call fails or runs out of time is counted too\. Also during a turn that lasts longer than 10 minutes, under the same wait\. Never more than 40 lines a day, over all your chats\./)
   expect(says).toMatch(/Today: 0 of 40 lines, 0 tokens \(0 in all\): 40 left\. \/pet comments off stops them\.$/)
@@ -1835,7 +1835,7 @@ test('the voice is asked for once, at the first start of a pet born before: unan
   const k = voiceKit($, on, { voiceAsked: false })
   k.disk.voice = { lines: 10, input: 5000, output: 200 } // lines paid for earlier: the figure in the question is the measured one
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  const Q = 'May I comment on your work? It uses a small\nmodel on your account: about 500 tokens in\nand 20 out a line (measured on your lines),\nat most 40 lines a day. It gets a short\nsummary of the turn. The recap is not\nmeasured yet. Details: /pet comments'
+  const Q = 'May I comment on your work? It uses a small\nmodel on your account: about 500 tokens in\nand 20 out a line (measured on your lines),\nat most 40 lines a day. It gets a short\nsummary of the turn. A recap after a pause:\nabout 1,300 to 2,000 in and 570 to 750 out.\nDetails: /pet comments'
   expect(await k.texts()).toContain(Q)
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true]) // marked when it comes up
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -2011,7 +2011,7 @@ test('the bubble in Chinese: wrapped and bordered by width on screen, two column
   k.state = {}
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const ask = await bubble()
-  expect(ask.lines[0]!.split('\n')).toEqual(['我可以点评你的工作吗？会用你账户上的小模型，', '每句约输入 650、输出 75 token（2026 年 11 月', '测得），每天最多 40 句，并发给它一段本轮的简', '短摘要。暂停后的回顾还没有测量。详情：/pet', 'comments'])
+  expect(ask.lines[0]!.split('\n')).toEqual(['我可以点评你的工作吗？会用你账户上的小模型，', '每句约输入 650、输出 75 token（2026 年 11 月', '测得），每天最多 40 句，并发给它一段本轮的简', '短摘要。暂停后的回顾：约输入 1300 到 2000、', '输出 570 到 750。详情：/pet comments'])
   expect(ask.width).toBe(48)
   expect(ask.buttons.slice(-2)).toEqual(['开启点评', '保持安静'])
 })
@@ -3289,10 +3289,10 @@ test('the recap: 30 minutes after a turn with no new prompt the pet says once wh
   await k.settle()
   expect(k.recaps().length).toBe(1)
   const ask = k.recaps()[0]
-  expect(ask).toMatchObject({ model: 'haiku', maxTokens: 80, effort: 'low', timeoutMs: 8000 })
+  expect(ask).toMatchObject({ model: 'haiku', maxTokens: 80, effort: 'low', timeoutMs: 20000 })
   expect(ask.system).toMatch(/^You are Miro, a small pixel fox /) // what a comment gets: the character and the language
   expect(ask.system).toMatch(/where the work got to and what is left to do, then ask in a few words whether to go on.*Do not say when it was/)
-  expect(ask.system).toMatch(/One or two short sentences, all on one line, never more than 24 words\. Plain English\./)
+  expect(ask.system).toMatch(/One or two short sentences, all on one line, never more than 100 characters\. Plain English\./)
   // the person's last prompt, its first 300 characters on one line; the assistant's text of the last turn, the newest kept; 16,000 in all
   expect(ask.prompt).toMatch(/\nThe person's last request began:\nfix the parser 1{285}\n/)
   expect(ask.prompt).toMatch(/\nWhat the assistant wrote in that turn ended:\n2+ The parser tests are green; the README is still to do\.\n\nThat turn ended by itself\.\n/)
@@ -3422,6 +3422,19 @@ test('a chat closed keeps in its mark when its last turn was and whether it was 
   await k.settle()
   expect(k.recaps().length).toBe(1)
   expect(k.recaps()[0].prompt).toMatch(/That turn was cut short/)
+})
+
+test('the recap one character too long is shown cut at the last whole word, with an ellipsis: paid for, never thrown away', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  const long = `${'word '.repeat(23)}words.` // 121 characters against the 120 of RULES.recapMaxCols
+  expect(long.length).toBe(RULES.recapMaxCols + 1)
+  k.v.reply = { isAnswered: true, text: `**${long}**\nmore`, usage: USAGE }
+  await k.clock.advance(PAUSE + 60_000)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
+  expect(await k.said()).toContain(`31 min ago: ${'word '.repeat(23).trim()}\u2026`)
 })
 
 test('the recap is part of the comments: off, no call and nothing read from the session; at the day\'s cap, no call; a call that fails, silence', { timeoutMs: 60_000 }, async ($, on) => {

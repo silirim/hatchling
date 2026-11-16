@@ -96,7 +96,7 @@ export default {
   sleep: 'zzz',
 
   // the comments (the line a small model writes): the question asked once, and three lines in the tone of each character
-  'comments.ask': 'May I comment on your work? It uses a small model on your account: about {in} tokens in and {out} out a line ({how}), at most {cap} lines a day. It gets a short summary of the turn. The recap is not measured yet. Details: /pet comments',
+  'comments.ask': 'May I comment on your work? It uses a small model on your account: about {in} tokens in and {out} out a line ({how}), at most {cap} lines a day. It gets a short summary of the turn. A recap after a pause: about 1,300 to 2,000 in and 570 to 750 out. Details: /pet comments',
   'comments.ask.how': 'Answer with /pet comments on or /pet comments off.',
   // /pet model: the model the comments are asked of, and the word said once a day when it does not answer
   'comments.ours': 'measured in November 2026',

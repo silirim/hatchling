@@ -11,7 +11,7 @@ The pet asks once, right after it hatches, with two buttons: `comments on` and `
 - Each line is one request to a small model, through Claude Code's own client, on your own tokens. The model is the alias `haiku` unless you choose another: `/pet model`, below.
 - Measured in November 2026: about 650 tokens in and 75 out a line, the average of the 112 lines in our own store (72,880 in, 8,563 out).
 - The line itself is about 12 tokens. The rest of the 75 out is the model's thinking: a mod cannot switch it off, it can only ask for low effort, and Cachito does.
-- The recap after a pause is a larger request and is not measured yet.
+- The recap after a pause is a larger request: about 1,300 to 2,000 tokens in and 570 to 750 out a recap, measured on three recaps on 16 November 2026. Nearly all of the tokens out are the model's thinking.
 - At most 40 lines a day over all your chats.
 - The cost is said in tokens, as each call reports them. In November 2026 that was under one cent a day at Haiku 5.5's list price. If `haiku` leads to another model on your account, or you chose another with `/pet model`, the money differs.
 - A call that fails, or whose line is not shown, is paid and counted all the same.
@@ -57,10 +57,10 @@ When you come back to a chat after a pause, the pet says once where the work got
 - A pause is 30 minutes after a turn ended with no new prompt. In a chat left open the line comes when they pass; in a chat closed and resumed, at the start.
 - One recap per pause while the chat stays open. A chat closed and resumed gets one at each resume, also for a pause already recapped: the line was in memory only and went with the chat. It stays in the bubble until your next prompt, and the time word is worked out when it is drawn, so it is still right the day after.
 - **What it sends, each time**: up to 16,000 characters of the last turn's text (what the assistant wrote, the newest kept; nothing a tool was given or answered) and the first 300 characters of your last prompt. The two together are never more than 16,000.
-- It counts in the day's 40 lines and in the tokens like any other line. It is a larger request than a comment: a few thousand tokens in at the most. Not measured yet.
+- It counts in the day's 40 lines and in the tokens like any other line. It is a larger request than a comment: about 1,300 to 2,000 tokens in and 570 to 750 out, measured on three recaps on 16 November 2026.
 - Nothing of it is kept on disk: not what is sent, not the line. The chat's mark keeps only the time of the pause it was made for, so that an open chat is not asked twice.
 - A turn that was interrupted is told as stopped midway, not as finished.
-- It may be up to 120 columns wide and may name a file. If the call fails or takes more than 8 seconds, the pet stays silent.
+- It may be up to 120 columns wide and may name a file. The model is asked for 100 characters at most; a longer line is cut at the last whole word that fits and ends with an ellipsis, never thrown away. If the call fails, takes more than 20 seconds or answers nothing with a word in it, the pet stays silent.
 - With comments off no recap is made and nothing is read.
 
 ## Talking to the pet

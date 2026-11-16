@@ -149,10 +149,10 @@ export const RULES = {
   recapAfterMs: 30 * 60_000, // the pause: this long after a turn ended with no new prompt, in a chat left open or in one closed and resumed
   recapChars: 16_000,      // how much text goes to the model in all: the start of the person's last prompt and the end of what the assistant wrote in the last turn
   recapPromptChars: 300,   // ...of which this much of the prompt, at most
-  recapMaxCols: 120,       // columns on screen: a recap wider than this is dropped, not cut
-  recapMaxWords: 24,       // what the model is asked for
+  recapMaxCols: 120,       // columns on screen: a recap wider than this is cut at the last whole word that fits, never dropped (it was paid for)
+  recapAskCols: 100,       // what the model is asked for, in characters (half of it in a language of wide characters): under the limit, so the cut is rare
   recapMaxTokens: 80,      // the reply's cap, as asked
-  recapTimeoutMs: 8_000,   // a call slower than this is dropped: the pet stays silent
+  recapTimeoutMs: 20_000,  // a call slower than this is dropped: the pet stays silent. Live on 16 November 2026 the calls took 3.6 and 6.2 seconds (the model thinks) and one of three was lost at 8
 }
 
 // Most important first: decides which rate-limited cheer is kept for later.

@@ -134,6 +134,7 @@ Our bench measured whole headless sessions with and without the lines: 8 runs an
 | gin: six real defects | Opus 5.5 | $2.404 | $1.639 | -31.8% | 0.0002 |
 
 - **It does not beat ponytail on gin**: ponytail saved 38.7% and cost 10.0% less than the lines (p 0.0141).
+- **It is not shown to beat a single "Be brief." on gin**: the lines read 5.0% lower than that one sentence (p 0.50, Series 8, no arm without a plugin).
 - **Short tasks showed no saving.**
 
 Every run and its limits: [bench/RESULTS.md](bench/RESULTS.md). Run it on your own project: [bench/README.md](bench/README.md).
