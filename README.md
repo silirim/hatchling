@@ -64,11 +64,12 @@ The eight lines alone:
   <img src="assets/animals.png" width="830" alt="Six animals as babies and as adults: penguin, chick, dog, bunny, fox, cactus. A seventh slot holds only a question mark">
 </p>
 
+- It tells you which chats wait for you, those without Cachito too.
+- It keeps your reminders.
+- It reports your day: chats, folders, turns, files changed.
 - An egg hatches into one of seven animals; the seventh is rare, and not shown.
 - It grows with use and never loses anything.
-- It tells you which of your chats waits for you and which stopped.
-- It can comment on your work, if you turn that on.
-- It costs no tokens unless comments are on.
+- It costs no tokens, unless you turn its comments on.
 
 ### Dress it
 
@@ -94,20 +95,22 @@ Use earns stars. The shop takes them for things to wear, three coats and the oth
 | `/pet` | the pet's card |
 | `/pet pet` | pet it |
 | `/pet shop [item]` | the catalogue; buy an item |
-| `/pet wear <item>` | put it on or take it off |
-| `/pet chats` | which chat works, waits or asks for your OK |
+| `/pet wear <item>` | put on or take off |
+| `/pet chats` | which chat waits for you |
 
 <details>
 <summary>More commands</summary>
 
 | Command | What it does |
 |---|---|
-| `/pet share` | a picture of the pet to attach to a post |
-| `/pet export`, `/pet import <path>` | move the pet to another computer, as a file |
+| `/pet diary` | the work report |
+| `/pet remind <text>`, `/pet reminders` | reminders in the bubble |
+| `/pet share` | a picture of the pet for a post |
+| `/pet export`, `/pet import <path>` | move the pet to another computer |
 | `/pet comments on\|off` | comments; off by default |
 | `/pet model [alias\|id]` | comments' model; default `haiku` |
 | `/pet lean on\|off` | cachito-lean's eight lines, from the pet |
-| `/pet hide`, `/pet show` | put it away, bring it back |
+| `/pet hide`, `/pet show` | hide or show it |
 | `/pet help` | every command |
 
 </details>
@@ -141,7 +144,7 @@ Every run and its limits: [bench/RESULTS.md](bench/RESULTS.md). Run it on your o
 
 ## What stays on your machine
 
-- **Kept locally**, in Claude Code's plugin store (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, and for each chat the full path of its folder and the times of its last turn (30 chats, 30 days). Never the content of a chat, a prompt, a file or a command. cachito-lean keeps only its switch.
+- **Kept locally**, in Claude Code's plugin store (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, your reminders (never sent or exported), and for each chat the full path of its folder and the times of its last turn (30 chats, 30 days), and your live sessions' folders and statuses. Never the content of a chat, a prompt, a file or a command. cachito-lean keeps only its switch.
 - **Nothing is sent anywhere**, and no model is asked.
 - **The one exception is comments, off by default.** A small model, on your tokens (about 650 in, 75 out; at most 40 a day), gets the pet's character and language, your name if told, why it speaks, tool names (MCP servers' too) and counts, failed programs' names, how many files changed, the assistant's last 600 characters, its last two lines, three diary lines with folder names, another finished chat's folder name and times and, with `/pet say`, your first 300 characters. A pause or resume sends a recap: up to 16,000 characters of the last turn's text, 300 of your last prompt.
 - `/pet adopt` reads `~/.claude.json` once, when you run it. `/pet share` saves a picture in `~/.claude/cachito-share/`. `/pet export` saves the pet there as a file you carry yourself.

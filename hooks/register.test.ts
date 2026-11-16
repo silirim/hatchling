@@ -3,6 +3,7 @@ import { dayOf, RULES, SHOP, SOLD, EGGSHELL, FOUNDER_UNTIL } from '../engine/eng
 import zoo from '../sprites/zoo.js'
 import { BUILTIN, REG, marksFor } from '../engine/skins.js'
 import { open as diaryOpened, whole as diaryOf, bandOf, dated } from '../engine/diary.js'
+import { whole as workOf, opened as workOpened, turned as workTurned } from '../engine/work.js'
 import { picture, TEXT_X } from '../engine/share.js'
 
 // One pet in a hundred is born golden, and a golden one has a `skin` button and another card: every test here runs with the roll
@@ -2060,12 +2061,17 @@ test('the diary is written by the mod itself, in the store: the first day, a cud
   const kept = JSON.stringify(k.disk.diary)
   expect(kept).not.toMatch(/npm|hunter2|secret|notes|SECRET|boom|plan|tests pass|home\/me/)
   for (const l of k.disk.diary.lines) expect(Object.keys(l).filter(x => !['at', 'kind', 'n', 'name'].includes(x))).toEqual([])
-  // /pet diary shows all of it; /pet diary clear empties it
-  const page = await cardOf($, 'diary')
+  // the work report: counts and the folder's name, from what the chats left; nothing of a command, a file or a prompt
+  expect(Object.values(k.disk.work.days)).toEqual([{ chats: 2, turns: 2, files: 0, folders: { cachito: 2 } }])
+  expect(JSON.stringify(k.disk.work)).not.toMatch(/npm|hunter2|secret|notes|SECRET|boom|plan|tests pass|home\/me/)
+  expect(await cardOf($, 'diary')).toMatch(/^WORK DIARY\ntoday: 2 chats, 1 folder, 2 turns, 0 files changed\n  folders: cachito 2\nyesterday: nothing kept\nCounts and folder names only/)
+  // /pet diary lines shows all of the pet's own diary; /pet diary clear empties both
+  const page = await cardOf($, 'diary lines')
   expect(page).toMatch(new RegExp(`^CACHITO DIARY · 3 of 40 lines\\n\\n${dated(k.clock.now())}  first day together\\n.*  10 cuddles\\n.*  first thing bought: a coffee mug\\n\\ncounted for the habits: chats opened by folder: cachito 2; .*; at work today: 10 min\\nOnly times, counts and folder names, kept on this machine`))
   expect(await cardOf($, 'diary clear')).toBe('The diary is empty now.')
   expect(k.disk.diary.lines).toEqual([])
-  expect(await cardOf($, 'diary')).toMatch(/^The diary is empty\. The pet writes it by itself/)
+  expect(await cardOf($, 'diary lines')).toMatch(/^The diary is empty\. The pet writes it by itself/)
+  expect(await cardOf($, 'diary today')).toMatch(/^WORK DIARY\ntoday: nothing kept\n/)
   expect(k.v.calls).toEqual([]) // zero tokens: no model was asked for any of it
 })
 
@@ -2135,7 +2141,7 @@ test('comments on: two or three lines of the diary go to the model as memories, 
   expect(sent).toMatch(/- works most often in w \(a habit\)\n/)
   expect(sent.match(/\n- .*\((today|yesterday|\d+ days ago|a habit)\)/g)!.length).toBeLessThanOrEqual(3)
   const says = await cardOf($, 'comments on')
-  expect(says).toMatch(/at most 3 lines of its diary, as memories it may hint at \(times, counts, a folder's name: \/pet diary shows all of it\)\. When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it\.\n\/pet say <text> speaks to the pet: what you write after it \(its first 300 characters\) is sent to the same model, which answers in the bubble with one line\. It is a request of its own, not a turn of the chat, and counts in the day's lines\.\nAfter a pause [^\n]+\nNever sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap\. But the assistant's text is sent as it is: the last 600 characters of a reply, and in a recap the end of the last turn's text, can hold a path, a name or a piece of code the assistant wrote there\./)
+  expect(says).toMatch(/at most 3 lines of its diary, as memories it may hint at \(times, counts, a folder's name: \/pet diary lines shows all of it\)\. When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it\.\n\/pet say <text> speaks to the pet: what you write after it \(its first 300 characters\) is sent to the same model, which answers in the bubble with one line\. It is a request of its own, not a turn of the chat, and counts in the day's lines\.\nAfter a pause [^\n]+\nNever sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap\. But the assistant's text is sent as it is: the last 600 characters of a reply, and in a recap the end of the last turn's text, can hold a path, a name or a piece of code the assistant wrote there\./)
 })
 
 // /pet say as the person types it: the prompt is submitted as the command, and the mod answers it there
@@ -2779,7 +2785,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'lean', 'comments', 'model', 'lang', 'share', 'export', 'import', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'remind', 'reminders', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'alerts', 'lean', 'comments', 'model', 'lang', 'share', 'export', 'import', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
@@ -2818,14 +2824,14 @@ test('which chat needs me: beside the name how many other chats work, wait or as
   }
   others()
   await k.clock.advance(10_500)
-  expect(await head()).toMatch(/^Miro  ★ \d+  ·  1 working · 1 waiting · 1 asking$/)
+  expect(await head()).toMatch(/^Miro  ★ \d+  ·  2 chats wait for you$/) // the one whose turn ended and the one stopped on a permission; the one at work needs nobody
   // with the count the row of the name is never wider than the band. What gives way: the count first, then the stars, then the pet's own button, and the name last
   const gave: string[] = []
   for (let bodyColumns = 100; bodyColumns >= 14; bodyColumns--) {
     const d = await drawnWidth($, { bodyColumns })
     expect([bodyColumns, d.total <= bodyColumns], JSON.stringify(d)).toEqual([bodyColumns, true])
     if (!d.raster) break // under the width of the drawing: one row of text
-    const what = `${d.own.join(' ')}|${d.head.includes('working') ? 'count' : d.head.includes('★') ? 'stars' : d.head === 'Miro' ? 'name' : 'cut'}`
+    const what = `${d.own.join(' ')}|${d.head.includes('wait for you') ? 'count' : d.head.includes('★') ? 'stars' : d.head === 'Miro' ? 'name' : 'cut'}`
     if (gave.at(-1) !== what) gave.push(what)
   }
   expect(gave).toEqual(['pet|count', 'pet|stars', 'pet|name', '|stars', 'pet|stars', 'pet|name']) // beside the drawing, then over it, where the row has the whole width again
@@ -3785,7 +3791,7 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   // what is this computer's own stays: the marks of its chats, the lines the pet said here and the day's count
   expect(k.disk['chat.there']).toEqual({ cwd: '/w/elsewhere', at: EARLY - 2000, done: true })
   expect(k.disk.voice).toMatchObject({ today: 1, last: ['a line of this machine'] })
-  expect(Object.keys(k.disk).filter(key => !/^(pet|diary|voice|pref\.\w+|chat\.\w+)$/.test(key))).toEqual([])
+  expect(Object.keys(k.disk).filter(key => !/^(pet|diary|work|voice|pref\.\w+|chat\.\w+)$/.test(key))).toEqual([])
   // and exported again from here it is the same file, but for the moment it was written
   await cardOf($, 'export')
   expect({ ...JSON.parse(m.files[file]!), exported: 0 }).toEqual({ ...out, exported: 0 })
@@ -3882,4 +3888,168 @@ test('/pet export with no Node: the mod writes the file and chmod closes it, or 
   await cardOf($, 'lang es')
   expect(await cardOf($, 'import')).toBe('Indica el archivo: /pet import <ruta>. Lo crea /pet export en el otro ordenador.')
   expect(await cardOf($, 'import /t/miro.json')).toMatch(/^En el archivo: Nube, Cachito: pingüino, adulto, 123 estrellas, .*\nAquí ahora: Miro, .*\nPara hacerlo: \/pet import \/t\/miro\.json yes$/)
+})
+
+
+// The three things that make the pet useful, all at zero tokens: the work diary, the reminders, the watcher of the other chats
+test('the work diary: the first greeting of a day says yesterday in one line, once; /pet diary reports the days from counts and folder names', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  // yesterday, as the mod wrote it then: one chat in vodmax, a turn that changed two files; and another chat left mid-turn there
+  const T0 = k.clock.now()
+  k.disk.work = workTurned(workOpened(workOf(undefined), { now: T0 - DAY, folder: 'vodmax' }), { now: T0 - DAY, files: 2 })
+  k.disk['chat.other'] = { cwd: '/home/me/secret-client/vodmax', at: T0 - DAY, done: false, beat: T0 - DAY }
+  await $.session.start({ cwd: '/home/me/secret-client/gin', surface: 'terminal', isInteractive: true })
+  expect((await bubbleOf($)).at(-1)).toBe('yesterday: 1 chat, 1 folder; one left mid-turn in vodmax')
+  // a turn that changes a file twice and writes another: one turn, two files
+  await k.turn(async () => { await $.tool.call({ tool: 'Edit', file_path: '/home/me/secret-client/gin/a.go' } as any); await $.tool.call({ tool: 'Write', file_path: '/home/me/secret-client/gin/b.go' } as any); await $.tool.call({ tool: 'Edit', file_path: '/home/me/secret-client/gin/a.go' } as any) })
+  expect(await cardOf($, 'diary')).toMatch(/^WORK DIARY\ntoday: 1 chat, 1 folder, 1 turn, 2 files changed\n  folders: gin 1\nyesterday: 1 chat, 1 folder, 1 turn, 2 files changed\n  folders: vodmax 1\n  left mid-turn: vodmax\nCounts and folder names only/)
+  expect(await cardOf($, 'diary week')).toMatch(/\nlast 7 days: 2 chats, 2 folders, 2 turns, 4 files changed\n/)
+  expect((await cardOf($, 'diary yesterday')).split('\n').filter(l => /^\S+: /.test(l)).map(l => l.split(':')[0])).toEqual(['yesterday'])
+  expect((await cardOf($, 'diary today')).split('\n').filter(l => /^\S+: /.test(l)).map(l => l.split(':')[0])).toEqual(['today'])
+  // a second chat the same day: the line was said, and is not said again
+  const calls = k.v.calls.length
+  k.state = {}
+  await $.session.start({ cwd: '/home/me/secret-client/gin', surface: 'terminal', isInteractive: true })
+  expect((await bubbleOf($)).join(' | ')).not.toMatch(/yesterday/)
+  expect(Object.values(k.disk.work.days).map((d: any) => d.chats)).toEqual([1, 2])
+  expect(JSON.stringify(k.disk.work)).not.toMatch(/secret-client|home\/me|a\.go|plan/)
+  expect(k.v.calls.length).toBe(calls) // no model was asked for the report or the line
+})
+
+test('reminders: kept in the store, capped and cleaned; shown in the bubble at a start and when a timed one falls due; never in a request to the model nor a row of the chat', async ($, on) => {
+  const k = voiceKit($, on, { voice: true })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const typed = async (args: string) => String(((await $.prompt.submit({ text: `/pet ${args}`, command: { name: 'pet', args }, wait: false, origin: 'user' } as any)) as any).drop)
+  expect(await typed('reminders')).toBe('No reminders. /pet remind <text> keeps one.')
+  expect(await typed('remind')).toMatch(/^\/pet remind <text> keeps a reminder/)
+  expect(await typed('remind call \x1b[31mAna\x1b[0m\tback\u0007')).toBe('Reminder 1 kept: call Ana back') // dropped: it never becomes a row of the chat
+  expect(await typed('remind in 1m check the build')).toBe('Reminder 2 kept, in 1 min: check the build')
+  expect(await typed(`Remind ${'x'.repeat(500)}`)).toBe(`Reminder 3 kept: ${'x'.repeat(200)}`)
+  expect(k.disk.reminders.map((r: any) => [r.text.length, typeof r.made, r.at === undefined])).toEqual([[13, 'number', true], [15, 'number', false], [200, 'number', true]])
+  expect(await typed('reminders')).toBe(`Your reminders\n  1. call Ana back\n  2. check the build  (in 1 min)\n  3. ${'x'.repeat(200)}\nKept on this machine only: never sent to a model, not on /pet share, not in /pet export. /pet remind done <n|all> removes.`)
+  expect(await typed('remind done 3')).toBe(`Removed: ${'x'.repeat(200)}`)
+  expect(await typed('remind done 7')).toBe('No reminder 7. /pet reminders lists them.')
+  // a while after the chat opened the pet says the first one, with how many more; the timed one is not due yet
+  await k.clock.advance(RULES.remindStartMs + 10_500)
+  expect(await bubbleOf($)).toEqual(['remember: call Ana back', '/pet remind done 1 when it is done'])
+  await k.clock.advance(RULES.remindShowMs + 1_000)
+  expect((await bubbleOf($)).join(' ')).not.toMatch(/remember/)
+  // the timed one falls due: said once, marked as said for every chat, and kept until done
+  await k.turn() // the person is at this chat
+  await k.clock.advance(k.disk.reminders[1].at - k.clock.now() + 10_500)
+  expect(await bubbleOf($)).toEqual(['remember: check the build', '1 more: /pet reminders'])
+  expect(k.disk.reminders.map((r: any) => r.told)).toEqual([undefined, true])
+  await k.clock.advance(RULES.remindShowMs + 21_000)
+  expect((await bubbleOf($)).join(' ')).not.toMatch(/remember/)
+  expect(await typed('reminders')).toMatch(/\n  2\. check the build  \(due\)\n/)
+  // with the comments on, nothing of a reminder is in any request to the model; and the cap holds
+  expect(k.v.calls.length).toBeGreaterThan(0)
+  expect(JSON.stringify(k.v.calls)).not.toMatch(/Ana|check the build|remind/i)
+  for (let i = 0; i < 25; i++) await typed(`remind n${i}`)
+  expect(k.disk.reminders.length).toBe(20)
+  expect(await typed('remind one more')).toBe('No room: 20 reminders at most. /pet remind done <n> removes one.')
+  expect(await typed('remind done all')).toBe('Removed all the reminders: 20.')
+  expect(k.disk.reminders).toEqual([])
+  expect(await cardOf($, 'reminders')).toBe('No reminders. /pet remind <text> keeps one.') // run by another mod, the command answers the same
+  // a store that cannot be written: said, not thrown, and nothing is shown as kept
+  ;(k as any).ro = true
+  expect(await typed('remind x')).toBe('The reminders could not be read or kept: the store cannot be used now.')
+})
+
+test('reminders: back after a pause the pet says them again at the next prompt; none under the bench band, and none while the band is hidden', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  k.disk.reminders = [{ text: 'call Ana back', made: 5 }, { text: 'later', made: 6, at: k.clock.now() + 9e9 }]
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.clock.advance(RULES.remindStartMs + 10_500)
+  expect(await bubbleOf($)).toEqual(['remember: call Ana back', '/pet remind done 1 when it is done']) // the one not due yet is not counted
+  await k.turn()
+  await k.clock.advance(RULES.recapAfterMs + 60_000)
+  expect((await bubbleOf($)).join(' ')).not.toMatch(/remember/)
+  await k.turn()
+  await k.clock.advance(10_500)
+  expect((await bubbleOf($))[0]).toBe('remember: call Ana back')
+  expect(k.disk.reminders.length).toBe(2) // shown, it stays until done
+  expect(k.v.calls).toEqual([])
+})
+
+test('the watcher: claude agents --json adds the chats that run without Cachito to the count, the list and the news; one toast for a permission, a notification only with /pet alerts on', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  k.env.PATH = '/usr/bin'
+  const ran: any[] = [], notes: any[] = []
+  let sessions: object[] = []
+  const row = (sessionId: string, cwd: string, status: string, more: object = {}) => ({ pid: 1, cwd, kind: 'interactive', startedAt: 5, sessionId, name: 'named-by-the-person', status, ...more })
+  let printed = () => JSON.stringify(sessions)
+  on('process.run', (_: any, e: any) => { ran.push(e); return { value: { exitCode: 0, stdout: printed(), stderr: '' } } as any })
+  on('ui.notify', (_: any, e: any) => { notes.push(e); return { value: { isSent: true, channel: 'terminal_bell' } } as any })
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
+  sessions = [row('me', '/w/here', 'busy'), row('s1', '/home/me/work/vodmax', 'busy'), row('s2', '/home/me/work/notes', 'idle'), row('s3', '/home/me/secret-client/api', 'waiting', { waitingFor: 'approve Bash: rm -rf /srv --token=hunter2' })]
+  await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await k.clock.advance(10_500); await k.settle()
+  expect(ran.map(e => [e.argv, e.init?.timeoutMs])).toEqual([[['/usr/bin/claude', 'agents', '--json'], 5000]])
+  await k.clock.advance(10_000); await k.settle()
+  expect(await head()).toMatch(/^Miro  ★ \d+  ·  1 chat waits for you$/) // the one that waits for an OK; the idle one was never seen busy
+  expect(k.toasts).toEqual(['Cachito: the chat in api may be waiting for your OK'])
+  expect(notes).toEqual([]) // alerts are off until asked for
+  expect((await cardOf($, 'chats')).split('\n').slice(1, -1).map(l => l.trim().replace(/, .*/, '')).sort()).toEqual(['api     may be waiting for your OK', 'here    working', 'vodmax  working'])
+  // what is kept of the look: ids, folders, statuses and the one label. Never the name, the command, or what it waits for
+  expect(Object.keys(k.disk.agents.rows[3]).sort()).toEqual(['cwd', 'id', 'since', 'st', 'wait'])
+  expect(JSON.stringify(k.disk)).not.toMatch(/hunter2|rm -rf|approve|named-by-the-person/)
+  // the same wait is told once; one look serves 30 seconds, whoever took it
+  await k.clock.advance(60_000); await k.settle()
+  expect(k.toasts.length).toBe(1)
+  expect(ran.length).toBeLessThanOrEqual(4)
+  expect(ran.length).toBeGreaterThanOrEqual(2)
+  // /pet alerts on: the next chat that waits for an OK also raises a notification
+  expect(await cardOf($, 'alerts')).toMatch(/^Alerts off/)
+  expect(await cardOf($, 'alerts on')).toMatch(/^Alerts on/)
+  expect(await cardOf($, 'alerts maybe')).toMatch(/alerts/)
+  sessions = [...sessions.map((s: any) => s.sessionId === 's1' ? { ...s, status: 'idle' } : s), row('s4', '/home/me/work/gin', 'waiting', { waitingFor: 'approve plan' })] // and the one at work ends its turn
+  await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any)
+  await k.clock.advance(70_000); await k.settle()
+  expect(k.toasts.at(-1)).toBe('Cachito: the chat in gin may be waiting for your OK')
+  expect(notes.map(n => [n.text ?? n.message, n.options?.title ?? n.title])).toEqual([['Cachito: the chat in gin may be waiting for your OK', 'Miro']])
+  expect(await head()).toMatch(/·  3 chats wait for you$/) // two wait for an OK, and the one seen going from busy to idle
+  // the sessions go: after a new look nothing is counted
+  sessions = [row('me', '/w/here', 'busy')]
+  await k.clock.advance(45_000); await k.settle()
+  expect(await head()).toMatch(/^Miro  ★ \d+$/)
+  // hostile output: not JSON. The watcher stops for good, quietly, and the chat marks still count
+  const before = ran.length
+  printed = () => '{"not":"a list"'
+  await k.clock.advance(120_000); await k.settle()
+  expect(ran.length).toBe(before + 1)
+  k.disk['chat.idle'] = { cwd: '/home/me/work/notes', at: k.clock.now(), done: true, beat: k.clock.now() }
+  await k.clock.advance(10_500)
+  expect(await head()).toMatch(/·  1 chat waits for you$/)
+  expect(k.v.calls).toEqual([]) // not one token
+})
+
+test('the watcher runs nothing under the bench, without a person, with the board off, or when claude is not found; a command that fails is not tried again', async ($, on) => {
+  const k = voiceKit($, on, { voice: false, chats: false })
+  k.env.PATH = '/usr/bin'
+  const ran: any[] = []
+  let fails = false
+  on('process.run', (_: any, e: any) => { ran.push(e.argv); if (fails) throw new Error('timeout'); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } as any })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.clock.advance(65_000); await k.settle()
+  expect(ran).toEqual([]) // /pet chats off: no look at the other chats at all
+  await cardOf($, 'chats on')
+  fails = true
+  await k.clock.advance(125_000); await k.settle()
+  expect(ran.length).toBe(1) // it failed: once, and never again in this chat
+  expect(k.disk.agents).toBeUndefined()
+  expect(k.toasts).toEqual([])
+})
+
+for (const [what, bench, isInteractive] of [['under the bench', '/tmp/bench', true], ['in a headless run', '', false]] as const) test(`the watcher ${what}: no command is run`, async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  k.env.PATH = '/usr/bin'
+  if (bench) k.env.CACHITO_BENCH = bench
+  const ran: any[] = []
+  on('process.run', (_: any, e: any) => { ran.push(e.argv); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } as any })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive })
+  await k.clock.advance(65_000); await k.settle()
+  expect(ran).toEqual([])
+  expect(k.disk.agents).toBeUndefined()
 })

@@ -134,6 +134,10 @@ export const RULES = {
   voiceEst: { input: 650, output: 75 }, // a line's tokens before one is measured here: measured in November 2026 over 112 lines of our own store (72,880 in, 8,563 out). The 75 out are for a line of about 12 tokens: the rest is the model's thinking, which a mod cannot switch off (only `effort`, already `low`)
 
   // The diary (engine/diary.js): a few lines the mod writes by itself in the store. Times, counts and folder names only
+  waitCountMs: 2 * 3_600_000, // a chat whose turn ended counts as waiting for the person for this long, then no more: the count is never stuck
+  workDays: 8,             // days of work counters kept for /pet diary: today and the week before
+  remindShowMs: 20_000,    // how long a reminder holds the bubble
+  remindStartMs: 15_000,   // a chat that opens shows the reminders this long after its greeting
   diaryMax: 40,            // lines kept; the oldest go
   diaryLongMs: 3 * 3_600_000, // a day with this much time at work is a long one
   diaryAwayDays: 3,        // a return after this many days without a chat is written down (and never said aloud: no word on the days away)

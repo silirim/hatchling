@@ -46,10 +46,14 @@ export const leftOf = (m) => m.closed ? { at: m.left ?? m.at, mid: !!m.mid } : {
 /** Since when a chat is in its state: its last turn's start or end, or the moment a call began to wait for leave. @param {Mark} m */
 const sinceOf = (m) => !m.done && m.asking ? m.asking : m.at
 
-/** How many of the person's OTHER chats are at work, wait for them, or may wait for their OK. @param {Marks} all @param {string} id @param {number} now */
+/**
+ * How many of the person's OTHER chats are at work, wait for them, or may wait for their OK. Never this chat. One whose turn ended
+ * waits for RULES.waitCountMs and is then counted no more (it is still listed), so a chat left open for days does not hold the count.
+ * @param {Marks} all @param {string} id @param {number} now
+ */
 export function counts(all, id, now) {
   const n = { working: 0, waiting: 0, asking: 0 }
-  for (const [k, m] of Object.entries(all)) { const st = stateOf(m, now); if (k !== id && st !== 'closed') n[st]++ }
+  for (const [k, m] of Object.entries(all)) { const st = stateOf(m, now); if (k !== id && st !== 'closed' && !(st === 'waiting' && now - m.at > RULES.waitCountMs)) n[st]++ }
   return n
 }
 
@@ -116,4 +120,65 @@ export function finished(all, seen, { id, cwd, since, now, told = {} }) {
   if (!hit) return { seen: next, told, peer: null }
   const [k, m] = hit
   return { seen: next, told: { ...told, [k]: now }, peer: { here: m.cwd === cwd, name: folder(m.cwd), ago: Math.max(0, now - m.at), took: m.took ?? 0, ask: false } }
+}
+
+// The thin watcher: `claude agents --json` (Claude Code 2.1.139 or later) lists every live session of the person, the ones that run
+// without Cachito too. What it prints is input from outside: capped in size, checked row by row, and of each row only the session's
+// id, its folder, its status and one fixed label are kept. Never its name, a prompt or the text of what it waits for.
+export const WATCH = { bytes: 262_144, rows: 64, everyMs: 30_000, timeoutMs: 5_000 }
+const STATUS = ['busy', 'idle', 'waiting']
+/** Why a session waits, as one of the labels there are: a leave to give, or '' for anything else. The text itself can name a tool and its command, and is dropped here. @param {unknown} why */
+const labelOf = (why) => typeof why === 'string' && (/^approve\b/i.test(why) || why === 'sandbox request') ? 'permission' : ''
+/** A session as the watcher keeps it: `since` is when it was first seen in this status, `done` when a look saw it go from busy to idle (a turn ended). @typedef {{ id: string, cwd: string, st: string, wait: string, since: number, done?: number }} Seen */
+/** What the watcher last saw, and when. @typedef {{ at: number, rows: Seen[] }} Sight */
+
+/** A row made whole, or null: an id that is a plain name, a path with no control character, a status there is. @param {any} r @param {number} now @returns {Seen | null} */
+function seenOf(r, now) {
+  if (!r || typeof r !== 'object' || typeof r.id !== 'string' || !/^[\w-]{1,64}$/.test(r.id) || r.id === '__proto__' || typeof r.cwd !== 'string' || !r.cwd || r.cwd.length > 1024 || /\p{Cc}/u.test(r.cwd) || !STATUS.includes(r.st)) return null
+  const since = typeof r.since === 'number' && Number.isFinite(r.since) && r.since > 0 ? Math.min(r.since, now) : now
+  const done = r.st === 'idle' && typeof r.done === 'number' && Number.isFinite(r.done) && r.done > 0 ? Math.min(r.done, now) : 0
+  return { id: r.id, cwd: r.cwd, st: r.st, wait: r.st === 'waiting' && r.wait === 'permission' ? 'permission' : '', since, ...(done && { done }) }
+}
+/** What the store holds of the last look, made whole; null when it holds none. @param {any} raw @returns {Sight | null} */
+export function sight(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.at !== 'number' || !Number.isFinite(raw.at) || raw.at <= 0 || !Array.isArray(raw.rows)) return null
+  return { at: raw.at, rows: raw.rows.slice(0, WATCH.rows).flatMap((/** @type {unknown} */ r) => seenOf(r, raw.at) ?? []) }
+}
+/**
+ * What `claude agents --json` printed, as a look taken at `now`; null when it is too long, no JSON or no list. A row that is not
+ * sound is left out. A session seen in the same status at the look before (`was`) keeps the moment it was first seen so. One that
+ * was busy then and is idle now ended a turn: `done` says when, and stays while it is idle; busy again, it is gone.
+ * @param {unknown} stdout @param {Sight | null} was @param {number} now @returns {Sight | null}
+ */
+export function seen(stdout, was, now) {
+  if (typeof stdout !== 'string' || stdout.length > WATCH.bytes) return null
+  /** @type {unknown} */ let list
+  try { list = JSON.parse(stdout) } catch { return null }
+  if (!Array.isArray(list)) return null
+  const rows = list.slice(0, WATCH.rows).flatMap((/** @type {any} */ r) => {
+    const row = seenOf({ id: r?.sessionId, cwd: r?.cwd, st: r?.status, wait: labelOf(r?.waitingFor) }, now)
+    const before = row && was?.rows.find(o => o.id === row.id), old = before && before.st === row.st && before.wait === row.wait ? before : null
+    const done = row?.st !== 'idle' ? 0 : before?.st === 'busy' ? now : old?.done ?? 0
+    return row ? [{ ...row, since: old ? Math.min(old.since, now) : now, ...(done && { done: Math.min(done, now) }) }] : []
+  })
+  return { at: now, rows: rows.filter((r, i) => rows.findIndex(o => o.id === r.id) === i) }
+}
+/**
+ * The marks with what the watcher saw: a session that left no living mark of its own (it runs without Cachito) gets one made
+ * from its row. Busy is at work, and one that waits for a leave may be waiting for their OK. An idle one waits for the person
+ * only when a look saw it end a turn (from then, see `counts`); one never seen busy is left out: it may never have had a turn. A chat
+ * with a living mark stays as its mark tells it; one whose board is off (a mark with no sign of life, not closed) stays hidden;
+ * a look older than RULES.chatDeadMs is not believed.
+ * @param {Marks} all @param {Sight | null} look @param {string} id @param {number} now @returns {Marks}
+ */
+export function watched(all, look, id, now) {
+  if (!look || now - look.at > RULES.chatDeadMs || look.at - now > AHEAD_MS) return all
+  const more = look.rows.flatMap(r => {
+    const m = Object.hasOwn(all, r.id) ? all[r.id] : undefined
+    if (r.id === id || (m && (stateOf(m, now) !== 'closed' || (!m.closed && !m.beat)))) return []
+    const ask = r.st === 'waiting' && r.wait === 'permission'
+    if (r.st === 'idle' && !r.done) return []
+    return [[r.id, /** @type {Mark} */ ({ cwd: r.cwd, at: r.done ?? r.since, done: r.st !== 'busy' && !ask, beat: Math.min(look.at, now), ...(ask && { asking: r.since }) })]]
+  })
+  return { ...all, ...Object.fromEntries(more) }
 }

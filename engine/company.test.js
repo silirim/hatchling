@@ -314,3 +314,121 @@ test('a mark tells its last turn: a closed one keeps when it was and whether it 
   assert.equal(since(noon + H, noon, 'en'), 'just now') // a clock that was ahead
   assert.deepEqual(['es', 'pt', 'zh'].map(l => since(noon - 24 * H, noon, l)), ['ayer', 'ontem', '昨天'])
 })
+
+// The thin watcher: what `claude agents --json` prints is input from outside
+{
+  const { WATCH, seen, sight, watched } = await import('./company.js')
+  const NOW = Date.UTC(2026, 10, 16, 12)
+  const row = (/** @type {Record<string, unknown>} */ more = {}) => ({ pid: 1, cwd: '/w/gin', kind: 'interactive', startedAt: NOW - 5000, sessionId: 'abc-1', name: 'gin-1a', status: 'busy', ...more })
+  const out = (/** @type {unknown} */ list) => JSON.stringify(list)
+
+  test('watch: of each session only its id, folder, status and one fixed label are kept; never its name or what it waits for', () => {
+    const look = seen(out([row(), row({ sessionId: 'abc-2', status: 'waiting', waitingFor: 'approve Bash: rm -rf /secret --token=hunter2', prompt: 'my secret prompt' }), row({ sessionId: 'abc-3', status: 'waiting', waitingFor: 'dialog open' }), row({ sessionId: 'abc-4', status: 'idle' }), row({ sessionId: 'abc-5', status: 'waiting', waitingFor: 'sandbox request' })]), null, NOW)
+    assert.deepEqual(look, { at: NOW, rows: [
+      { id: 'abc-1', cwd: '/w/gin', st: 'busy', wait: '', since: NOW },
+      { id: 'abc-2', cwd: '/w/gin', st: 'waiting', wait: 'permission', since: NOW },
+      { id: 'abc-3', cwd: '/w/gin', st: 'waiting', wait: '', since: NOW },
+      { id: 'abc-4', cwd: '/w/gin', st: 'idle', wait: '', since: NOW },
+      { id: 'abc-5', cwd: '/w/gin', st: 'waiting', wait: 'permission', since: NOW },
+    ] })
+    assert.doesNotMatch(JSON.stringify(look), /secret|hunter2|rm -rf|gin-1a|approve|dialog/)
+  })
+
+  test('watch: hostile output is refused whole or row by row, and never throws', () => {
+    for (const bad of [undefined, 7, '', 'not json', '{"a":1}', 'null', '"x"', `[${'1,'.repeat(WATCH.bytes)}1]`]) assert.equal(seen(bad, null, NOW), null)
+    const rows = [null, 3, 'x', [], {}, row({ sessionId: 7 }), row({ sessionId: '__proto__' }), row({ sessionId: 'a b' }), row({ sessionId: 'x'.repeat(65) }), row({ cwd: 5 }), row({ cwd: '' }), row({ cwd: '/a\x1b[31m' }), row({ cwd: '/'.repeat(2000) }), row({ status: 'exploding' }), row({ status: ['busy'] }), row({ sessionId: 'constructor', status: 'idle' })]
+    assert.deepEqual(seen(out(rows), null, NOW)?.rows, [{ id: 'constructor', cwd: '/w/gin', st: 'idle', wait: '', since: NOW }])
+    assert.equal(seen(out(Array.from({ length: 500 }, (_, i) => row({ sessionId: `s${i}` }))), null, NOW)?.rows.length, WATCH.rows)
+    assert.equal(seen(out([row(), row(), row()]), null, NOW)?.rows.length, 1) // an id counts once
+    // a label is one of ours or none: a text that only looks like one is none
+    for (const why of ['permission', 'approved', ' approve x', { toString: () => 'approve x' }, 'APPROVE plan']) assert.equal(seen(out([row({ status: 'waiting', waitingFor: why })]), null, NOW)?.rows[0]?.wait, why === 'APPROVE plan' ? 'permission' : '', String(why))
+    assert.equal(seen(out([row({ status: 'busy', waitingFor: 'approve x' })]), null, NOW)?.rows[0]?.wait, 'permission'.slice(0, 0)) // a label only on one that waits
+    // the store's copy is checked the same way
+    for (const bad of [null, 7, [], { at: 'x', rows: [] }, { at: NOW }, { at: -1, rows: [] }]) assert.equal(sight(bad), null)
+    assert.deepEqual(sight({ at: NOW, rows: [{ id: 'a', cwd: '/x', st: 'waiting', wait: 'rm -rf', since: NOW + 9e9 }, { id: 'b', cwd: '/x', st: 'nope' }, 4] }), { at: NOW, rows: [{ id: 'a', cwd: '/x', st: 'waiting', wait: '', since: NOW }] })
+  })
+
+  test('watch: a session keeps the moment it was first seen in its status, and a new status starts again', () => {
+    const first = seen(out([row({ status: 'waiting', waitingFor: 'approve plan' })]), null, NOW)
+    const same = seen(out([row({ status: 'waiting', waitingFor: 'approve plan' })]), first, NOW + 30_000)
+    assert.equal(same?.rows[0]?.since, NOW)
+    assert.equal(seen(out([row()]), same, NOW + 60_000)?.rows[0]?.since, NOW + 60_000)
+  })
+
+  test('watch: a session without a living mark is counted and listed; a marked chat, a hidden one, this one and an old look are not touched', () => {
+    const look = /** @type {NonNullable<ReturnType<typeof seen>>} */ (seen(out([row({ sessionId: 'me' }), row({ sessionId: 'busy', cwd: '/w/a' }), row({ sessionId: 'idle', cwd: '/w/b', status: 'idle' }), row({ sessionId: 'ask', cwd: '/w/c', status: 'waiting', waitingFor: 'approve Bash: x' }), row({ sessionId: 'dialog', cwd: '/w/d', status: 'waiting', waitingFor: 'dialog open' }),
+      row({ sessionId: 'marked', status: 'idle' }), row({ sessionId: 'hidden', status: 'idle' }), row({ sessionId: 'died', status: 'idle', cwd: '/w/e' })]), null, NOW))
+    const all = marks({ marked: { cwd: '/w/m', at: NOW - 1000, done: false, beat: NOW }, hidden: { cwd: '/w/h', at: NOW - 1000, done: true }, died: { cwd: '/w/e', at: NOW - 9e6, done: false, beat: NOW - 9e6 } })
+    const merged = watched(all, look, 'me', NOW + 1000)
+    assert.deepEqual(counts(merged, 'me', NOW + 1000), { working: 2, waiting: 1, asking: 1 }) // the idle ones were never seen busy: they may never have had a turn
+    assert.deepEqual(listing(merged, 'me', NOW + 1000).map(c => `${c.name} ${c.state}`).sort(), ['a working', 'c asking', 'd waiting', 'm working'])
+    assert.equal(merged.me, undefined)
+    assert.deepEqual(merged.marked, all.marked)
+    assert.deepEqual(merged.hidden, all.hidden) // /pet chats off: the watcher does not bring it back
+    // the chat that began to wait for an OK is news once, like a marked one
+    const news = finished(merged, {}, { id: 'me', cwd: '/w/x', since: NOW, now: NOW + 1000 })
+    assert.deepEqual([news.peer?.ask, news.peer?.name], [true, 'c'])
+    assert.equal(finished(merged, news.seen, { id: 'me', cwd: '/w/x', since: NOW, now: NOW + 2000, told: news.told }).peer, null)
+    // a look nobody renewed, or one from a clock ahead, is not believed: the marks alone
+    assert.equal(watched(all, look, 'me', NOW + RULES.chatDeadMs + 1), all)
+    assert.equal(watched(all, { ...look, at: NOW + 9e6 }, 'me', NOW), all)
+    assert.equal(watched(all, null, 'me', NOW), all)
+  })
+
+  const H = 3_600_000, LOOK = WATCH.everyMs
+  /** Looks taken one after the other, each `LOOK` after the one before, from `NOW`: what the last one holds, and when it was. */
+  const looks = (/** @type {object[][]} */ ...lists) => lists.reduce((s, list, i) => ({ look: seen(out(list), s.look, NOW + i * LOOK), at: NOW + i * LOOK }), { look: /** @type {ReturnType<typeof seen>} */ (null), at: NOW })
+  const waitingAt = (/** @type {ReturnType<typeof looks>} */ s, /** @type {number} */ now, all = {}) => counts(watched(all, s.look && { ...s.look, at: now }, 'me', now), 'me', now).waiting
+
+  test('watch: an idle session never seen busy does not count, however long it stays; this chat is never counted', () => {
+    const idle = [row({ sessionId: 'me', status: 'idle' }), row({ sessionId: 'a', status: 'idle' }), row({ sessionId: 'b', status: 'idle' }), row({ sessionId: 'c', status: 'idle' })]
+    const s = looks(idle, idle, idle)
+    for (const later of [0, H, 100 * H]) assert.deepEqual(counts(watched({}, s.look && { ...s.look, at: s.at + later }, 'me', s.at + later), 'me', s.at + later), { working: 0, waiting: 0, asking: 0 })
+    assert.deepEqual(listing(watched({}, s.look, 'me', s.at), 'me', s.at), [])
+    // the own id: busy, idle after a turn, or waiting for an OK, with or without a mark of its own, it is not one of the others
+    for (const mine of [[row({ sessionId: 'me' })], [row({ sessionId: 'me' }), row({ sessionId: 'me', status: 'idle' })], [row({ sessionId: 'me', status: 'waiting', waitingFor: 'approve plan' })]]) {
+      const own = looks(.../** @type {object[][]} */ (mine.map(r => [r])))
+      for (const all of [{}, marks({ me: { cwd: '/w/gin', at: NOW, done: true, beat: NOW } })]) {
+        const merged = watched(all, own.look, 'me', own.at)
+        assert.deepEqual(counts(merged, 'me', own.at), { working: 0, waiting: 0, asking: 0 })
+        assert.equal(finished(merged, {}, { id: 'me', cwd: '/w/x', since: NOW - H, now: own.at }).peer, null)
+      }
+    }
+  })
+
+  test('watch: a session a look saw go from busy to idle waits for the person, for two hours from then; busy again clears it', () => {
+    const s = looks([row()], [row({ status: 'idle' })], [row({ status: 'idle' })])
+    assert.equal(s.look?.rows[0]?.done, NOW + LOOK) // when the turn ended, kept while it stays idle
+    assert.equal(waitingAt(s, s.at), 1)
+    assert.equal(waitingAt(s, NOW + LOOK + RULES.waitCountMs), 1)
+    assert.equal(waitingAt(s, NOW + LOOK + RULES.waitCountMs + 1), 0) // two hours after the change: no more
+    assert.equal(RULES.waitCountMs, 2 * H)
+    assert.equal(listing(watched({}, s.look && { ...s.look, at: s.at + 3 * H }, 'me', s.at + 3 * H), 'me', s.at + 3 * H)[0]?.state, 'waiting') // still listed
+    // busy again: at work, and the turn that ended is forgotten; idle after that counts from the new end
+    const again = looks([row()], [row({ status: 'idle' })], [row()])
+    assert.equal(again.look?.rows[0]?.done, undefined)
+    assert.deepEqual(counts(watched({}, again.look, 'me', again.at), 'me', again.at), { working: 1, waiting: 0, asking: 0 })
+    const twice = looks([row()], [row({ status: 'idle' })], [row()], [row({ status: 'idle' })])
+    assert.equal(twice.look?.rows[0]?.done, NOW + 3 * LOOK)
+    // from waiting for an OK to idle is no turn seen ending; a moment kept in the store that is no moment is not believed
+    assert.equal(waitingAt(looks([row({ status: 'waiting', waitingFor: 'approve plan' })], [row({ status: 'idle' })]), NOW + LOOK), 0)
+    assert.deepEqual(sight({ at: NOW, rows: [{ id: 'a', cwd: '/x', st: 'idle', done: 'x' }, { id: 'b', cwd: '/x', st: 'busy', done: NOW }, { id: 'c', cwd: '/x', st: 'idle', done: NOW + 9e9 }] })?.rows.map(r => r.done), [undefined, undefined, NOW])
+  })
+
+  test('watch: a session whose status is waiting counts at once and for as long as it waits for an OK', () => {
+    const s = looks([row({ status: 'waiting', waitingFor: 'approve Bash: x' })])
+    for (const later of [0, 5 * H]) { const now = NOW + later; assert.deepEqual(counts(watched({}, s.look && { ...s.look, at: now }, 'me', now), 'me', now), { working: 0, waiting: 0, asking: 1 }) }
+  })
+
+  test('a chat with a mark of its own: its ended turn counts as waiting for two hours, then it is listed and not counted; a new turn starts again', () => {
+    const live = (/** @type {number} */ now, /** @type {object} */ m) => marks({ other: { cwd: '/w/a', beat: now, .../** @type {any} */ (m) } })
+    assert.equal(counts(live(NOW + RULES.waitCountMs, { at: NOW, done: true }), 'me', NOW + RULES.waitCountMs).waiting, 1)
+    const late = NOW + RULES.waitCountMs + 1, old = live(late, { at: NOW, done: true })
+    assert.deepEqual(counts(old, 'me', late), { working: 0, waiting: 0, asking: 0 })
+    assert.equal(listing(old, 'me', late)[0]?.state, 'waiting')
+    assert.equal(counts(live(late, { at: late - 1000, done: false }), 'me', late).working, 1) // busy again
+    assert.equal(counts(live(late + 5000, { at: late + 4000, done: true }), 'me', late + 5000).waiting, 1) // and its next end counts anew
+    assert.equal(counts(live(late, { at: NOW, done: false, asking: NOW }), 'me', late).asking, 1) // a wait for an OK has no such limit
+    assert.deepEqual(counts(marks({ me: { cwd: '/w/a', at: NOW, done: true, beat: NOW } }), 'me', NOW), { working: 0, waiting: 0, asking: 0 }) // never this chat
+  })
+}

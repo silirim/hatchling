@@ -9,8 +9,10 @@
 import { atom, read, update } from 'claude-code'
 import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
 import { MODEL, MODEL_MAX, asModel, unavailable, tellGone, measuredHow, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question, lastTurn, recap as recapOf, cleanRecap, RECAP_COST } from '../engine/voice.js'
-import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page, dated } from '../engine/diary.js'
-import { marks, greeting, finished, folder, counts, listing, leftOf } from '../engine/company.js'
+import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page, dated, lasting } from '../engine/diary.js'
+import { marks, greeting, finished, folder, counts, listing, leftOf, WATCH, sight, seen, watched } from '../engine/company.js'
+import { whole as workOf, opened as workOpened, turned as workTurned, said as workSaid, report, yesterday } from '../engine/work.js'
+import { whole as remindersOf, asked as remindAsked, add as remindAdd, done as remindDone, ready as remindReady, due as remindDue, LIMITS as REMIND } from '../engine/remind.js'
 import { bubble, cuddle as cuddleLine, called, ago, since, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
 import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX, cleanCall, CALL_MAX } from '../engine/persona.js'
 import { text, put, list as listOf, voicedAs, asLang, fromLocale } from '../engine/lang/index.js'
@@ -133,12 +135,36 @@ async function chats(/** @type {any} */ $) {
   const own = Object.fromEntries(await Promise.all(keys.map(async k => [k.slice(5), await storeGet($, k).catch(() => undefined)])))
   return { ...old, ...marks(own) }
 }
+// The thin watcher (engine/company.js `seen`): `claude agents --json` lists every live session, the ones without Cachito too. One
+// look serves every chat: it is kept in the store (ids, folders, statuses, one fixed label), and a chat takes a new one only when
+// the one kept is WATCH.everyMs old. Never under the bench or without a person, never two at once in a chat, with a time limit;
+// the first failure (no `claude` found, an older version, a surface that runs no command) ends it for this chat, which then
+// knows the other chats by their marks alone, as before.
+let watching = false, watchOff = false
+/** What the watcher last saw, as the store has it; null with none. */
+async function looked(/** @type {any} */ $) { return social && !(await bench($)) ? sight(await storeGet($, 'agents').catch(() => null)) : null }
+async function watch(/** @type {any} */ $) {
+  if (watchOff || watching || !social || await bench($) || !(await getPrefs($)).chats) return
+  const none = {}, raw = await storeGet($, 'agents').catch(() => none), was = raw === none ? null : sight(raw), now = await $.clock.now()
+  if (raw === none || (was && now - was.at < WATCH.everyMs && was.at - now < WATCH.everyMs)) return
+  watching = true
+  try {
+    const home = await $.env.get('HOME').catch(() => undefined), local = home ? `${home}/.local/bin/claude` : ''
+    const bin = (await nodePath($, 'claude')) || (local && await $.fs.stat(local).then(() => local, () => ''))
+    const r = bin ? await $.process.run([bin, 'agents', '--json'], { timeoutMs: WATCH.timeoutMs }) : null
+    const look = r && r.exitCode === 0 && !r.isStdoutTruncated ? seen(r.stdout, was, await $.clock.now()) : null
+    if (look) await storeSet($, 'agents', look).catch(() => {})
+    else watchOff = true
+  } catch { watchOff = true } finally { watching = false }
+}
+/** The other chats as this one knows them: their marks, and what the watcher saw of the ones that left none. */
+async function known(/** @type {any} */ $, /** @type {number} */ now) { return watched(await chats($), await looked($).catch(() => null), await myId($), now) }
 /** This chat's id; a new one after /clear. */
 async function myId(/** @type {any} */ $) { return chatId ||= String(await $.session.id().catch(() => '') || `c${Math.random().toString(36).slice(2)}`) }
 /** @type {import('../engine/company.js').Mark | null} */ let myMark = null // this chat's mark as it last wrote it
 /** @type {{ id: string, at: number } | null} */ let asked = null // a tool call the agent was told to ask leave for, and since when: not started yet
 let peerSaidAt = -Infinity // when this chat last told of another one
-let board = '' // how many of the other chats are working, waiting or asking, as the head of the band says it; '' with none
+let board = '' // how many of the other chats wait for the person (their turn ended, or a call waits for an OK), as the head of the band says it; '' with none
 const chatsOn = async (/** @type {any} */ $) => social && !!cwd && (await getPrefs($)).chats
 /**
  * Leaves this chat's mark: the folder, now, and whether the turn ended. With the board on it also says it is alive (`beat`), so
@@ -203,6 +229,7 @@ async function greet(/** @type {any} */ $) {
   // with something to press, or with the gift of a return, is said as it is, and the memory waits for another opening
   const plain = hello.kind === 'first' || hello.kind === 'seen' || hello.kind === 'new'
   const mem = await diaryOpen($, now, plain && !newborn).catch(() => '')
+  ydayLine = await workOpen($, now).catch(() => ''); ydayUntil = now + BUBBLE_MAX_MS // yesterday in one line, under the first greeting of a day
   // said now: once marked, nothing is written at a chat's opening. With a store that cannot be read nothing is said that could not be marked as said
   if (hint && !mem && !(await setPrefs($, { asked: true }))) return
   await feed($, mem ? { type: 'voice', text: mem, why: 'memory' } : { type: 'greet', ...hello, ...(hint && { buddy: true }) })
@@ -220,6 +247,71 @@ async function diaryGet(/** @type {any} */ $) {
 async function diaryDo(/** @type {any} */ $, /** @type {(d: import('../engine/diary.js').Diary, now: number) => import('../engine/diary.js').Diary} */ change) {
   const d = await diaryGet($)
   if (d) await storeSet($, 'diary', change(d, await $.clock.now())).catch(() => {})
+}
+// The work diary (engine/work.js): counts and folder names by day, for /pet diary and the line about yesterday. Kept as the diary is.
+let ydayLine = '', ydayUntil = 0 // yesterday in one line, said under this chat's greeting until then; '' when another chat said it today
+/** The work counters in the store, whole; null when they are not kept here or the store cannot be read. */
+async function workGet(/** @type {any} */ $) {
+  if (!(await diaryOn($))) return null
+  const none = {}, raw = await storeGet($, 'work').catch(() => none)
+  return raw === none ? null : workOf(raw)
+}
+async function workDo(/** @type {any} */ $, /** @type {(w: import('../engine/work.js').Work, now: number) => import('../engine/work.js').Work} */ change) {
+  const w = await workGet($)
+  if (w) await storeSet($, 'work', change(w, await $.clock.now())).catch(() => {})
+}
+/** A chat opens: counted in its day, and the line about yesterday comes back when no chat said it today ('' when there is none). */
+async function workOpen(/** @type {any} */ $, /** @type {number} */ now) {
+  const was = await workGet($)
+  if (!was) return ''
+  const line = yesterday(was, await chats($), { id: await myId($), now }, (await getPrefs($)).lang)
+  await storeSet($, 'work', workSaid(workOpened(was, { now, folder: folder(cwd) }), now))
+  return line
+}
+// Reminders (engine/remind.js): the person's own lines, in the store under `reminders`. Read and written here and nowhere else:
+// no request to a model, no picture and no export file is ever made from them.
+let remindAt = 0 // when this chat shows the reminders next: a while after it opened, and when the person is back after a pause; 0 for not
+/** /pet remind and /pet reminders: what was asked is done, and the reply comes back as text. */
+async function reminders(/** @type {any} */ $, /** @type {string} */ verb, /** @type {string} */ typed) {
+  const L = (await getPrefs($)).lang, now = await $.clock.now(), none = {}, raw = await storeGet($, 'reminders').catch(() => none)
+  if (raw === none) return text(L, 'remind.unkept')
+  const list = remindersOf(raw), keep = (/** @type {unknown} */ next) => storeSet($, 'reminders', next).then(() => true, () => false)
+  const left = (/** @type {number} */ ms) => { const min = Math.max(1, Math.round(ms / 60_000)); return min >= 2880 ? count1(L, 'days', Math.round(min / 1440)) : lasting(min, L) }
+  const when = (/** @type {{ at?: number }} */ r) => !r.at ? '' : r.at <= now ? text(L, 'remind.due') : text(L, 'remind.in', { dur: left(r.at - now) })
+  if (verb === 'reminders') return list.length ? [text(L, 'remind.title'), ...list.map((r, i) => `  ${i + 1}. ${r.text}${r.at ? `  (${when(r)})` : ''}`), text(L, 'remind.note')].join('\n') : text(L, 'remind.none')
+  const ask = remindAsked(typed, now)
+  if (ask.verb === 'add') {
+    const r = remindAdd(list, ask, now)
+    if (r.full) return text(L, 'remind.full', { max: REMIND.max })
+    if (!(await keep(r.list))) return text(L, 'remind.unkept')
+    return ask.at ? text(L, 'remind.kept.at', { n: r.n, when: when(ask), text: ask.text }) : text(L, 'remind.kept', { n: r.n, text: ask.text })
+  }
+  if (ask.verb === 'done') {
+    const r = remindDone(list, ask.n)
+    if (!r.gone.length) return ask.n === 'all' ? text(L, 'remind.none') : text(L, 'remind.done.none', { n: ask.n })
+    if (!(await keep(r.list))) return text(L, 'remind.unkept')
+    return ask.n === 'all' ? text(L, 'remind.done.all', { n: r.gone.length }) : text(L, 'remind.done.one', { text: r.gone[0]?.text ?? '' })
+  }
+  return text(L, 'remind.usage')
+}
+/**
+ * Looked at every PEER_TICKS: a timed reminder that fell due is said once, by a chat the person used lately (it is then marked as
+ * said for every chat); and when this chat's moment has come (`remindAt`) the first of the ones to show is said. The line holds
+ * the bubble for RULES.remindShowMs; the reminder stays in the list until /pet remind done. Never while the egg hatches, a
+ * question waits or another held line is up: it is looked at again.
+ */
+async function remind(/** @type {any} */ $) {
+  if (!social || await bench($)) return
+  const a = await heldAnim($), p = await getPrefs($), now = await $.clock.now(), none = {}
+  if (p.hidden || a.egg > 0 || a.noteLeft > 0 || a.ask || a.demo) return
+  const raw = await storeGet($, 'reminders').catch(() => none)
+  if (raw === none) return
+  const { list, hit } = remindDue(remindersOf(raw), now), fell = hit && now - lastOwn <= RULES.peerActiveMs ? hit : null
+  if (fell && !(await storeSet($, 'reminders', list).then(() => true, () => false))) return
+  const open = remindReady(list, now), mine = remindAt > 0 && now >= remindAt, first = fell ?? (mine ? open[0] : null)
+  if (mine) remindAt = 0
+  if (!first) return
+  await hold($, text(p.lang, 'remind.say', { text: tidy(first.text, 80) }), open.length > 1 ? text(p.lang, 'remind.more', { n: open.length - 1 }) : text(p.lang, 'remind.how', { n: first.n }), RULES.remindShowMs)
 }
 /** A chat opens: the diary counts it, and gives the memory to say now, in the pet's language and character, or '' when there is none or `tell` is false. */
 async function diaryOpen(/** @type {any} */ $, /** @type {number} */ now, /** @type {boolean} */ tell) {
@@ -367,8 +459,8 @@ async function oldBuddy(/** @type {any} */ $) {
 async function peers(/** @type {any} */ $) {
   const now = await $.clock.now()
   if (!social || !cwd) return
-  const p = await getPrefs($), all = p.chats ? await chats($) : {}, id = await myId($), n = counts(all, id, now)
-  const said = /** @type {const} */ (['working', 'waiting', 'asking']).flatMap(k => n[k] ? [text(p.lang, `chats.${k}`, { n: n[k] })] : []).join(' · ')
+  const p = await getPrefs($), all = p.chats ? await known($, now) : {}, id = await myId($), n = counts(all, id, now)
+  const need = n.waiting + n.asking, said = need ? count1(p.lang, 'chats.need', need) : '' // one short count: the chats that need the person
   if (said !== board) { board = said; await update($, anim, a => ({ ...a, hush: a.hush + 1 })) } // drawn again with the new count
   if (!p.chats || now - lastOwn > RULES.peerActiveMs) return
   const r = finished(all, peersSeen, { id, cwd, since: openedAt, now, told: peersTold })
@@ -380,6 +472,11 @@ async function peers(/** @type {any} */ $) {
   const peer = r.peer
   peerSaidAt = now
   await feed($, { type: 'peer', ...peer })
+  if (peer.ask) { // a chat began to wait for the person's OK: one toast, and a desktop notification only when /pet alerts is on
+    const line = text(p.lang, 'chats.ask.toast', { name: peer.name || '/' })
+    try { $.ui.toast(line) } catch { /* no toast on this surface */ }
+    if ((await storeGet($, 'alerts').catch(() => false)) === true) Promise.resolve($.ui.notify(line, { title: p.name, key: 'cachito-ask' })).catch(() => {})
+  }
   // said: with the comments on the small model says the same in the pet's character, and its line takes the place of the fixed one. Not awaited: the drawing goes on
   const on = view(cur, now).talk
   if (on?.kind === 'peer' && on.name === peer.name) peerLine($, peer).then(line => line ? feed($, { type: 'peer', ...peer, said: line }) : undefined).catch(() => {})
@@ -1015,7 +1112,7 @@ async function tick(/** @type {any} */ $) {
   if (hatching.love > 0) await update($, anim, a => ({ ...a, love: a.love - 1 }))
   if (hatching.skin > 0) await update($, anim, a => ({ ...a, skin: Math.max(0, a.skin - 1) }))
   if (hatching.noteLeft > 0) await update($, anim, a => ({ ...a, noteLeft: a.noteLeft - 1, ...(a.noteLeft === 1 ? { note: '', noteFix: '' } : null) }))
-  if (ticks % PEER_TICKS === 0) { await peers($).catch(() => {}); await pullPrefs($).catch(() => {}); await share($, false).catch(() => {}); midTurn($).catch(() => {}) } // the comment is not awaited: the drawing goes on
+  if (ticks % PEER_TICKS === 0) { watch($).catch(() => {}); await peers($).catch(() => {}); await remind($).catch(() => {}); await pullPrefs($).catch(() => {}); await share($, false).catch(() => {}); midTurn($).catch(() => {}) } // the comment is not awaited: the drawing goes on
   const shown = (await heldAnim($)).demo
   if (demoQueue.length || shown) {
     // each mood gets its whole 5 s, counted from when it comes up; the egg goes through its phases in that time, as at a birth
@@ -1082,6 +1179,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await keepAnimal($).catch(() => {})
     await prune($).catch(() => {})
     if (fresh) await greet($).catch(() => {}) // a reload is not an opening
+    if (fresh && social) remindAt = (await $.clock.now()) + RULES.remindStartMs // the reminders, once the greeting had its time
     else openedAt = await $.clock.now()
     if (fresh && newborn && social) await update($, anim, a => ({ ...a, egg: EGG_TICKS })) // the first start ever: it hatches before the greeting
     newborn = false
@@ -1089,7 +1187,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await recapResume($, fresh).catch(() => {})
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
-    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
+    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary [today|yesterday|week], /pet remind <text>, /pet reminders, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet alerts <on|off>, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
     $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
     return next(e)
   })
@@ -1116,6 +1214,10 @@ export function register(/** @type {import('claude-code').On} */ on) {
       sayTo($, toPet[1] ?? '').catch(() => {}) // not awaited: the prompt box is free at once, the answer comes in the bubble
       return { drop: text(p.lang, 'say.heard', { name: p.name }) }
     }
+    // /pet remind and /pet reminders are the person's own lines: answered here and dropped like /pet say, so neither becomes a row of the chat
+    const note = e.command?.name === 'pet' ? /^(reminders|remind)(?:\s+|$)([^]*)/i.exec(e.command.args.trim()) : null
+    if (note) return { drop: await reminders($, String(note[1]).toLowerCase(), note[2] ?? '').catch(() => text(undefined, 'remind.unkept')) }
+    { const t = await $.clock.now(); if (social && lastOwn && t - lastOwn >= RULES.recapAfterMs) remindAt = t } // back after a pause: the reminders are said again
     await pullPrefs($).catch(() => {}) // lean switched in another chat counts from this turn
     await feed($, { type: 'prompt', turn: !e.command }).catch(() => {}) // a slash command sends no request: no word on an expired cache
     if (!e.command) { await mark($, false); turnInfo = TURN0(); turnAt = await $.clock.now(); midAt = 0; turnSaid = ''; await recapDrop($).catch(() => {}) } // a slash command starts no turn
@@ -1188,6 +1290,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       await share($, true).catch(() => {})
       const grown = cur ? card(cur).stage : ''
       await diaryDo($, (d, t) => grown !== stage && stage ? diaryGrew(diaryTouched(d, t), STATE[grown] ?? grown, t) : diaryTouched(d, t)).catch(() => {})
+      await workDo($, (w, t) => workTurned(w, { now: t, files: Object.keys(turnInfo.files).length })).catch(() => {})
       await mark($, e.reason !== 'aborted' && e.reason !== 'error') // an interrupted turn is left midway
       // the pause begins: with no new prompt for RULES.recapAfterMs the pet says where the work got to (with the comments on, asked then)
       pauseAt = myMark?.at ?? await $.clock.now(); pauseMid = e.reason === 'aborted' || e.reason === 'error'
@@ -1254,8 +1357,17 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (verb === 'diary') {
       const L = (await getPrefs($)).lang
       if (await bench($)) return { text: 'No diary: under the bench none is kept.' }
-      if (arg === 'clear') return { text: text(L, await storeSet($, 'diary', diaryOf(undefined)).then(() => 'diary.cleared', () => 'diary.unkept')) } // a store that cannot be written is said, not thrown
-      return { text: page(diaryOf(await storeGet($, 'diary').catch(() => undefined)), await $.clock.now(), L) }
+      if (arg === 'clear') return { text: text(L, await storeSet($, 'diary', diaryOf(undefined)).then(() => storeSet($, 'work', workOf(undefined))).then(() => 'diary.cleared', () => 'diary.unkept')) } // a store that cannot be written is said, not thrown
+      if (arg === 'lines') return { text: page(diaryOf(await storeGet($, 'diary').catch(() => undefined)), await $.clock.now(), L) } // the pet's own diary: milestones, habits, recent days
+      // the work report: today and yesterday, or the days asked for. From the day counters and the chat marks, and nothing else
+      return { text: report(workOf(await storeGet($, 'work').catch(() => undefined)), await chats($), { id: await myId($), now: await $.clock.now(), span: arg }, L) }
+    }
+    if (verb === 'remind' || verb === 'reminders') return { text: await reminders($, verb, e.args.trim().slice(verb.length)) } // typed, it is answered at prompt.submit and never gets here
+    if (verb === 'alerts') { // a desktop notification when another chat may be waiting for the person's OK: off until asked for
+      const bad = onOff('alerts')
+      if (bad) return bad
+      if (arg && !(await storeSet($, 'alerts', arg === 'on').then(() => true, () => false))) return { text: text(L0, 'alerts.unkept') }
+      return { text: text(L0, (await storeGet($, 'alerts').catch(() => false)) === true ? 'alerts.on' : 'alerts.off') }
     }
     if (verb === 'chats') { // the board of the chats: which of the person's open chats is working, waiting for them, or may be waiting for an OK
       if (await bench($)) return { text: 'No board of the chats: under the bench no chat leaves a mark.' }
@@ -1263,7 +1375,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       if (bad) return bad
       if (arg === 'on' || arg === 'off') { await setPrefs($, { chats: arg === 'on' }); await showing($).catch(() => {}); await peers($).catch(() => {}); return { text: text(L0, arg === 'on' ? 'chats.on' : 'chats.off') } }
       if (!(await getPrefs($)).chats) return { text: text(L0, 'chats.off') }
-      const now = await $.clock.now(), rows = listing(await chats($), await myId($), now), wide = Math.max(0, ...rows.map(c => cols(c.name))) + 2
+      const now = await $.clock.now(), rows = listing(await known($, now), await myId($), now), wide = Math.max(0, ...rows.map(c => cols(c.name))) + 2
       const others = rows.filter(c => !c.me)
       return { text: [text(L0, 'chats.title'), ...rows.map(c => `  ${pad(c.name, wide)}${text(L0, `chats.state.${c.state}`)}, ${ago(c.ago, L0)}${c.me ? `  (${text(L0, 'chats.me')})` : ''}`), ...(others.length ? [] : [text(L0, 'chats.none')]), text(L0, 'chats.help')].join('\n') }
     }
@@ -1325,7 +1437,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       return { text: [
         `Comments on. They spend tokens of your own account: each line is one request to a small model (${modelNow}, through Claude Code's own client).`,
         which,
-        `Sent to the model: the pet's name, animal, five statistics and language; the name you told it with /pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts (the tools of your MCP servers too, by their names); the program names of the commands that failed; how many files changed; the last ${RULES.voiceTailChars} characters of the assistant's reply (during a turn, of what it wrote last in it, and how many minutes the turn has lasted); the pet's own last ${RULES.voiceRecall} lines, so that it does not repeat itself (they are kept in the store and go back to the model in later chats too); at most ${RULES.diaryRecall} lines of its diary, as memories it may hint at (times, counts, a folder's name: /pet diary shows all of it). When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it.`,
+        `Sent to the model: the pet's name, animal, five statistics and language; the name you told it with /pet call me, when you told one; why it speaks; the names of the tools used in the turn with their counts (the tools of your MCP servers too, by their names); the program names of the commands that failed; how many files changed; the last ${RULES.voiceTailChars} characters of the assistant's reply (during a turn, of what it wrote last in it, and how many minutes the turn has lasted); the pet's own last ${RULES.voiceRecall} lines, so that it does not repeat itself (they are kept in the store and go back to the model in later chats too); at most ${RULES.diaryRecall} lines of its diary, as memories it may hint at (times, counts, a folder's name: /pet diary lines shows all of it). When another of your chats ends a long turn: that chat's folder name, how long the turn took and how long ago it ended, and nothing of what was in it.`,
         `/pet say <text> speaks to the pet: what you write after it (its first ${RULES.saySaidChars} characters) is sent to the same model, which answers in the bubble with one line. It is a request of its own, not a turn of the chat, and counts in the day's lines.`,
         `After a pause the pet says once where the work got to and what is left: when ${RULES.recapAfterMs / 60_000} minutes pass after a turn with no new prompt, or when you resume a chat left for longer. For that one line, once per pause and once more each time you resume a closed chat, it sends up to ${RULES.recapChars} characters: the first ${RULES.recapPromptChars} of your last prompt and the end of the text the assistant wrote in the last turn (text only: nothing a tool was given or answered). It counts in the day's lines and in the tokens like any other line, and it is a larger request than a comment (its cost is below). Neither what is sent nor the line is kept on disk.`,
         `Never sent by the pet itself: the content of a file, the output of a command, the arguments of a command, a file path, your prompts to the assistant but for the start of the last one in a recap. But the assistant's text is sent as it is: the last ${RULES.voiceTailChars} characters of a reply, and in a recap the end of the last turn's text, can hold a path, a name or a piece of code the assistant wrote there.`,
@@ -1534,11 +1646,13 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const mine = zooOf(v.animals, p) // the animals to pick from: with more than one the skin menu has a part for them
     const dressing = !hatching && !asking && !a.demo && a.skin > 0 && (v.closet.length > 0 || mine.length > 1) // the row of the parts is open: the bubble tells what is on, the buttons are the parts
     const recapping = !hatching && !a.demo && !!a.recap // where the work got to: it holds the bubble until the next prompt, and when it was is said as of now
-    const b = hatching ? quiet(text(L, a.egg > EGG_CRACKS ? 'egg.whole' : 'egg.crack')) : dressing ? { ...quiet([...(v.closet.length ? [wornLine(L, v.closet, p.wear, true)] : []), ...(mine.length > 1 ? [text(L, 'wears.part', { slot: text(L, 'part.animal'), item: animalName(L, p.species) })] : [])].join(text(L, 'sep'))), fix: text(L, 'skin.pick') } : a.noteLeft > 0 && a.note && !a.demo ? { ...quiet(a.note), fix: a.noteFix || null } : asking ? quiet(a.ask) : recapping ? quiet(text(L, 'recap.say', { when: since(a.recapAt, await $.clock.now(), L), line: a.recap })) : (a.demo ? a.demo === 'sleep' : a.sleep) ? quiet(text(L, 'sleep')) : bubble(v, who)
+    const now = await $.clock.now()
+    // under the greeting of the first chat of a day: yesterday in one line, dim
+    const spoken = () => { const said = bubble(v, who); return ydayLine && now < ydayUntil && v.talk && !said.aside ? { ...said, aside: ydayLine } : said }
+    const b = hatching ? quiet(text(L, a.egg > EGG_CRACKS ? 'egg.whole' : 'egg.crack')) : dressing ? { ...quiet([...(v.closet.length ? [wornLine(L, v.closet, p.wear, true)] : []), ...(mine.length > 1 ? [text(L, 'wears.part', { slot: text(L, 'part.animal'), item: animalName(L, p.species) })] : [])].join(text(L, 'sep'))), fix: text(L, 'skin.pick') } : a.noteLeft > 0 && a.note && !a.demo ? { ...quiet(a.note), fix: a.noteFix || null } : asking ? quiet(a.ask) : recapping ? quiet(text(L, 'recap.say', { when: since(a.recapAt, await $.clock.now(), L), line: a.recap })) : (a.demo ? a.demo === 'sleep' : a.sleep) ? quiet(text(L, 'sleep')) : spoken()
     // how long the phrase stays. What has its own time, or waits for an answer, is not timed here: the egg, the row of the parts, a
     // line held for its seconds, the demo, the question about the voice and a greeting that asks (both go at the next prompt).
     // The plain line of a calm chat is not news: it never opens the bubble.
-    const now = await $.clock.now()
     const question = v.calm && v.talk?.kind === 'greet' && v.talk.greet === 'resume'
     const timed = !(hatching || dressing || asking || recapping || a.demo || (a.noteLeft > 0 && a.note) || question)
     const asleep = a.demo ? a.demo === 'sleep' : a.sleep

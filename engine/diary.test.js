@@ -183,7 +183,7 @@ test('/pet diary shows every line with its day, the counters and what the diary 
   assert.equal(en[0], `CACHITO DIARY · ${d.lines.length} of 40 lines`)
   assert.deepEqual(en.slice(2, 2 + d.lines.length), [`${dated(T)}  first day together`, `${dated(T + 4 * DAY)}  works most often in cachito`, `${dated(T + 4 * DAY)}  usually here in the morning`, `${dated(T + 7 * DAY)}  a week together`, `${dated(T + 7 * DAY)}  first thing bought: a coffee mug`, `${dated(T + 7 * DAY)}  grew up: adult`])
   assert.match(en.at(-2) ?? '', /^counted for the habits: chats opened by folder: cachito 8; by time of day: at night 0, in the morning 8, in the afternoon 0, in the evening 0; sittings: \d+; at work today: 0 min$/)
-  assert.match(en.at(-1) ?? '', /^Only times, counts and folder names, kept on this machine; no command, error, prompt, file or answer\. With comments on, two or three of these lines go to the small model\. \/pet diary clear empties it\.$/)
+  assert.match(en.at(-1) ?? '', /^Only times, counts and folder names, kept on this machine; no command, error, prompt, file or answer\. With comments on, two or three of these lines go to the small model\. \/pet diary clear empties it, and the work report with it\.$/)
   assert.match(page(d, T + 7 * DAY, 'es'), /^DIARIO DE CACHITO · 6 de 40 líneas\n\n.*  primer día juntos\n.*  trabaja casi siempre en cachito\n.*  suele estar aquí por la mañana\n.*  una semana juntos\n.*  primera compra: una taza de café\n.*  creció: adulto\n/)
   assert.match(page(d, T + 7 * DAY, 'zh'), /  最常在 cachito 工作\n.*  通常上午在这里\n.*  在一起一周\n.*  第一次购物：咖啡杯\n.*  长大了：成年\n/)
   assert.equal(page(whole(undefined), T, 'pt').split('\n')[0], 'O diário está vazio. O pet escreve sozinho: marcos, hábitos e dias recentes.')
