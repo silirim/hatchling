@@ -8,6 +8,6 @@
     "hooks",
     "types",
     "lean/hooks",
-    "bench/arms/brief/hooks"
+    "bench/arms"
   ]
 }

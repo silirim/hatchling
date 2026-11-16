@@ -1,0 +1,10 @@
+{
+  "name": "mini",
+  "version": "0.1.0",
+  "description": "A bench arm, not a plugin to install: \"Be brief.\" and the three reading lines of cachito-lean in the system prompt, added the way cachito-lean adds its lines",
+  "author": {
+    "name": "silirim",
+    "url": "https://github.com/silirim"
+  },
+  "license": "MIT"
+}

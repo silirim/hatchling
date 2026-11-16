@@ -38,6 +38,8 @@ For someone checking our numbers: what a run is, what keeps the arms comparable,
 - The arms: `clean` (no plugin), `observe` (Cachito as installed), `style` (the pet with what `/pet lean on` turns on), `leanonly` (the `cachito-lean` plugin alone, as installed: the same lines, no pet), and for comparison `caveman` and `ponytail`, each alone, loaded from the folder given with `--caveman <dir>` and `--ponytail <dir>`. An arm differs from `clean` only in what `ARMS` in `run.mjs` lists. The arms `diet` and `lean` (diet and style) of the past series are gone with the diet: those series can be run again only with the copy of the mod kept in their own folder (`<out>/mod`).
 - The arm `brief` is the objection "just write 'be brief'", measured: a plugin (`bench/arms/brief`) that adds one section to the system prompt, `Be brief.`, appended last and scoped to the session as `cachito-lean` appends its lines, so the two arms differ only in the text.
   It is loaded alone from a copy kept in `<out>/brief`, and a run counts under the rule of every plugin arm: the session's `init` event lists that plugin and no other, and no hooks module failed to load.
+- The arm `mini` is `Be brief.` plus only what that sentence does not cover: the three lines of the style on how the agent reads, word for word (`bench/arms/mini/text.js`).
+  It is the same module as `brief` with another text, kept in `<out>/mini` and counted under the same rule.
 - The cost is the one the CLI reports (`total_cost_usd`), not an estimate.
 
 ## What keeps the arms comparable
