@@ -8,7 +8,7 @@ export const TEXT_X = 340 // the words start here; the pet stays to the left of 
 const NIGHT = '#1e1e2e', FLOOR = '#27273a', EDGE = '#8d4325', SAND = '#efe9dc', STAR = '#ffd54f' // sprites/cover.py
 const FLOOR_H = 76, EDGE_H = 4, MARGIN = 30
 const PET_MAX = 20 // the pet's scale, at most: screen pixels a pixel
-export const LINK = 'github.com/silirim/cachito-pet'
+export const LINK = 'github.com/silirim/hatchling'
 
 // 5 px wide pixel font, rows 8 and 9 are descenders: the small letters, `W`, `C`, `?` and `·` are those of sprites/cover.py
 export const FONT = /** @type {Record<string, string>} */ ({
@@ -49,7 +49,7 @@ export const drawable = (s) => [...String(s).normalize('NFKD')].filter(ch => ch 
  */
 export function shareLines({ name, animal, stage, peak, stars, golden, rare, founder }) {
   const n = Math.max(0, Math.floor(Number(stars) || 0)), tags = [drawable(stage), golden && 'golden', rare && 'a rare one', founder && 'founder'].filter(Boolean)
-  return [drawable(name), `Cachito the ${drawable(animal)}`, tags.join(' · '), drawable(peak), `★ ${n} ${n === 1 ? 'star' : 'stars'}`, LINK].filter(Boolean)
+  return [drawable(name), `Hatchling the ${drawable(animal)}`, tags.join(' · '), drawable(peak), `★ ${n} ${n === 1 ? 'star' : 'stars'}`, LINK].filter(Boolean)
 }
 
 /** The largest scale, from `most` down to 2, at which a line fits the room; one still too long is cut. @param {string} s @param {number} most @param {number} room */
@@ -152,5 +152,5 @@ export function svg({ width, height, colours, px }) {
  */
 export function sharePath(dir, name, kind) {
   const slug = (String(name).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).join('-').slice(0, 40)
-  return `${dir.replace(/[\\/]+$/, '')}/cachito-${slug || 'pet'}.${kind}`
+  return `${dir.replace(/[\\/]+$/, '')}/hatchling-${slug || 'pet'}.${kind}`
 }

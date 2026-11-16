@@ -59,7 +59,7 @@ test('the example of docs/skins.md is a sound pack, and is read whole', () => {
 test('a pack that is not sound is refused whole, and told why: every way tried here', () => {
   const big = Array.from({ length: 12 }, () => '.'.repeat(14))
   /** @type {[string, (p: any) => void, RegExp][]} */ const cases = [
-    ['another format', p => { p.format = 2 }, /^format: this Cachito reads format 1$/],
+    ['another format', p => { p.format = 2 }, /^format: this Hatchling reads format 1$/],
     ['a bad pack id', p => { p.id = 'My Pack' }, /^id: must be 2 to 24/],
     ['a field nobody knows', p => { p.script = 'alert(1)' }, /^pack: unknown field "script"$/],
     ['a name with an escape sequence', p => { p.name = 'x\u001b[31m' }, /^name: holds a control, an invisible or an unassigned character/],
@@ -121,7 +121,7 @@ test('names: a pack may not take a shipped name, a word the commands use, or a n
     assert.match(validate(pack(p => { p.items[id] = p.items.tophat; delete p.items.tophat }), { taken }).join('|'), new RegExp(`items\\.${id}: the name "${id}" is taken already`), id)
   }
   assert.match(validate(pack(p => { p.animals.penguin = p.animals.robot }), { taken }).join('|'), /animals\.penguin: the name "penguin" is taken already/)
-  assert.match(validate(pack(p => { p.id = 'cachito' }), { taken }).join('|'), /id: "cachito" is taken already/)
+  assert.match(validate(pack(p => { p.id = 'hatchling' }), { taken }).join('|'), /id: "hatchling" is taken already/)
 
   // two packs in the folder: the second takes a name of the first and is left out whole; a third with its own names gets in
   const found = install([file('a.json', pack()), file('b.json', pack(p => { p.id = 'other'; delete p.animals; delete p.coats })), file('c.json', pack(p => { p.id = 'third'; delete p.animals; delete p.coats; p.items = { bowler: p.items.tophat } })), file('d.json', pack())])

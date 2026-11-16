@@ -1,14 +1,14 @@
 # Skin packs
 
-A skin pack adds animals, things to wear and coats to Cachito. It is one JSON file that you put in a folder of your own:
+A skin pack adds animals, things to wear and coats to Hatchling. It is one JSON file that you put in a folder of your own:
 
 ```
-~/.claude/cachito-skins/<any-name>.json
+~/.claude/hatchling-skins/<any-name>.json
 ```
 
-(If you run Claude Code with `CLAUDE_CONFIG_DIR`, the folder is `$CLAUDE_CONFIG_DIR/cachito-skins/`.)
+(If you run Claude Code with `CLAUDE_CONFIG_DIR`, the folder is `$CLAUDE_CONFIG_DIR/hatchling-skins/`.)
 
-A pack is **data, never code**. Cachito reads the file, checks every field of it, and only then draws from it. Nothing in a pack is
+A pack is **data, never code**. Hatchling reads the file, checks every field of it, and only then draws from it. Nothing in a pack is
 run, and a pack cannot change what the pet does, what it costs or what it sends anywhere.
 
 - What a pack brings is **yours at once**: you installed it. It costs no stars and gives none.
@@ -16,15 +16,15 @@ run, and a pack cannot change what the pet does, what it costs or what it sends 
 - A pack with **one fault is left out whole**, and `/pet skins` says what is wrong and where. A broken pack never breaks the band.
 - An animal from a pack is never rolled at birth. Take the pack away and a pet shown as one of its animals goes back to the animal
   it was born as; put the pack back and it returns.
-- Under the bench (`CACHITO_BENCH`) no pack is read.
+- Under the bench (`HATCHLING_BENCH`) no pack is read.
 
-The drawings Cachito ships with (`sprites/zoo.js`, the `pack` field) are a pack in this same format, checked by the same code.
+The drawings Hatchling ships with (`sprites/zoo.js`, the `pack` field) are a pack in this same format, checked by the same code.
 It is the largest example there is.
 
 ## Try one
 
-1. Copy [`skins-example.json`](skins-example.json) (the example below) to `~/.claude/cachito-skins/example.json`.
-2. Check it outside Claude Code, from a clone of this repository: `npm run skin:check ~/.claude/cachito-skins/example.json`.
+1. Copy [`skins-example.json`](skins-example.json) (the example below) to `~/.claude/hatchling-skins/example.json`.
+2. Check it outside Claude Code, from a clone of this repository: `npm run skin:check ~/.claude/hatchling-skins/example.json`.
    It prints what the pack brings, or every fault, with the same rules the mod uses. It ends with 1 for a pack that would be left out.
 3. In Claude Code run `/pet skins`. The folder is read again each time, so there is no restart after an edit.
 4. `/pet animal robot`, `/pet wear tophat`, `/pet wear mint`. `/pet wear plain` takes a coat off.
@@ -90,9 +90,9 @@ One animal with one drawing, one hat, one coat:
 
 A pack must bring at least one thing. A field that is not listed here is a fault: a typo is told, not ignored.
 
-**Names** (of animals, items and coats) follow the rule of `id`. A name may not be one Cachito ships (`fox`, `mug`, `golden`…),
+**Names** (of animals, items and coats) follow the rule of `id`. A name may not be one Hatchling ships (`fox`, `mug`, `golden`…),
 a word the commands use (`none`, `off`, `plain`, `nohead`, `crown`, `animal`, `coat`, `head`, `face`, `body`, `feet`,
-`accessory`, `cachito`, `constructor`, `prototype`), a name used twice in the pack, or a name a pack read before took. Packs are read in the order of their
+`accessory`, `hatchling`, `constructor`, `prototype`), a name used twice in the pack, or a name a pack read before took. Packs are read in the order of their
 file names; the later one with a taken name is left out.
 
 **Texts** (`name`, and each language of a `name` object): 1 to 32 characters, no space at the ends, no control, invisible
@@ -164,7 +164,7 @@ Anchors = { "top": 0, "eyes": [[3, 3], [3, 8]], "neck": 6 }
 ```
 
 `top` is the row where the head starts at its centre, `eyes` the two eyes as `[row, column]`, `neck` the row of a scarf.
-Without them Cachito looks at the drawing: the first row filled at the centre, the first pixels of colour `k`, three rows under them.
+Without them Hatchling looks at the drawing: the first row filled at the centre, the first pixels of colour `k`, three rows under them.
 
 **Tints** recolour the animal's own colours (and `W`, `r`): `"tints": { "sick": { "B": "#a0b090" } }` for a state's `tint`,
 or under a coat's name for how this animal looks with that coat on (`"golden"` for the shipped golden coat). An animal without
@@ -259,7 +259,7 @@ Only regular `.json` files are read. A link is not followed, and other files in 
 `/pet skins` lists every file it found: what each sound pack brings, and for each one left out the faults, with where they are:
 
 ```
-Skin packs in /home/you/.claude/cachito-skins: 1 loaded, 1 left out.
+Skin packs in /home/you/.claude/hatchling-skins: 1 loaded, 1 left out.
   broken.json   left out, nothing of it is used:
       animals.robot.palette.B: a colour is written #rrggbb
       items.tophat.part: must be one of head, face, body, feet, accessory
@@ -272,14 +272,14 @@ your folder, which only shows there.
 ## Importing a Codex pet
 
 Pets made for OpenAI's Codex are shared in public galleries, and many people have one already. `npm run skin:import` turns
-one into a Cachito pack:
+one into a Hatchling pack:
 
 ```
 npm run skin:import <folder of the pet | its pet.json> [--size 20x22] [--colours 16]
                     [--author <name>] [--license <licence>] [--source <url>] [--out <folder>]
 ```
 
-It reads the pet's two files **from your own disk** and writes `codex-<id>.json` into `~/.claude/cachito-skins/` (or `--out`).
+It reads the pet's two files **from your own disk** and writes `codex-<id>.json` into `~/.claude/hatchling-skins/` (or `--out`).
 It downloads nothing and runs nothing from the pet's folder. Then `/pet skins` and `/pet animal <id>` in Claude Code.
 
 ### The Codex format, as we found it

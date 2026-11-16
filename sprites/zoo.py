@@ -546,7 +546,7 @@ def main():
     out = {"width": W, "height": H, "side": SIDE, "under": UNDER, "common": COMMON, "fixed": FIXED, "light": LIGHT,
            "egg": {"palette": {"W": COMMON["W"], "h": "#d4a056", "k": COMMON["k"]}, "frames": EGG},  # whole, leaning left, leaning right, cracked
            # a coat is a ramp of colours, dark to light, for an animal with no tint of its own for it; on a light theme its first colour is the edge
-           "pack": {"format": 1, "id": "cachito", "name": "Cachito", "animals": animals, "items": items,
+           "pack": {"format": 1, "id": "hatchling", "name": "Hatchling", "animals": animals, "items": items,
                     "coats": {coat: {"name": {"en": en}, "ramp": ramp} for coat, (en, ramp, _) in COATS.items()}}}
     base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zoo")
     with open(base + ".json", "w") as fh:

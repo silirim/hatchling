@@ -10,14 +10,14 @@ const EMPTY = whole(undefined)
 /** Yesterday: three chats in two folders, fourteen turns, nine files. */
 const worked = () => {
   let w = EMPTY
-  for (const f of ['vodmax', 'vodmax', 'cachito']) w = opened(w, { now: NOW - DAY, folder: f })
+  for (const f of ['vodmax', 'vodmax', 'hatchling']) w = opened(w, { now: NOW - DAY, folder: f })
   for (let i = 0; i < 14; i++) w = turned(w, { now: NOW - DAY + i, files: i < 9 ? 1 : 0 })
   return w
 }
 
 test('work: a day counts its chats, folders, turns and files, and keeps counts and folder names only', () => {
   const w = worked()
-  assert.deepEqual(w.days[String(dayOf(NOW - DAY))], { chats: 3, turns: 14, files: 9, folders: { vodmax: 2, cachito: 1 } })
+  assert.deepEqual(w.days[String(dayOf(NOW - DAY))], { chats: 3, turns: 14, files: 9, folders: { vodmax: 2, hatchling: 1 } })
   assert.deepEqual(Object.keys(w), ['days', 'told'])
   // a folder's name is cleaned like any text from outside, and a name that is a field of every object is only a name
   const odd = opened(opened(EMPTY, { now: NOW, folder: 'a\x1b[31mb\nc' }), { now: NOW, folder: 'constructor' })
@@ -46,26 +46,26 @@ const MARKS = {
   cut: { cwd: '/w/vodmax', at: NOW - DAY + H, done: true, closed: /** @type {const} */ (true), left: NOW - DAY, mid: /** @type {const} */ (true) },
   dead: { cwd: '/w/gin', at: NOW - DAY, done: false, beat: NOW - DAY },
   ended: { cwd: '/w/fine', at: NOW - DAY + H, done: true, closed: /** @type {const} */ (true), left: NOW - DAY },
-  waits: { cwd: '/w/cachito', at: NOW - H, done: true, beat: NOW },
+  waits: { cwd: '/w/hatchling', at: NOW - H, done: true, beat: NOW },
   busy: { cwd: '/w/busy', at: NOW - H, done: false, beat: NOW },
 }
 
 test('work: the chats left mid-turn and the ones that wait come from the marks, by folder name, never this chat', () => {
   assert.deepEqual(left(MARKS, 'me', dayOf(NOW - DAY), NOW), { mid: ['vodmax', 'gin'], wait: [] })
-  assert.deepEqual(left(MARKS, 'me', dayOf(NOW), NOW), { mid: [], wait: ['cachito'] })
+  assert.deepEqual(left(MARKS, 'me', dayOf(NOW), NOW), { mid: [], wait: ['hatchling'] })
   assert.deepEqual(left(MARKS, 'cut', dayOf(NOW - DAY), NOW).mid, ['here', 'gin'])
 })
 
 test('/pet diary: today and yesterday by default, one day or the week when asked, with counts, folder names and no path', () => {
-  const w = turned(opened(worked(), { now: NOW, folder: 'cachito' }), { now: NOW, files: 2 })
+  const w = turned(opened(worked(), { now: NOW, folder: 'hatchling' }), { now: NOW, files: 2 })
   const both = report(w, MARKS, { id: 'me', now: NOW }, 'en').split('\n')
   assert.deepEqual(both.slice(0, -1), [
     'WORK DIARY',
     'today: 1 chat, 1 folder, 1 turn, 2 files changed',
-    '  folders: cachito 1',
-    '  waiting for you: cachito',
+    '  folders: hatchling 1',
+    '  waiting for you: hatchling',
     'yesterday: 3 chats, 2 folders, 14 turns, 9 files changed',
-    '  folders: vodmax 2, cachito 1',
+    '  folders: vodmax 2, hatchling 1',
     '  left mid-turn: vodmax, gin',
   ])
   assert.match(String(both.at(-1)), /^Counts and folder names only/)

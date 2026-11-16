@@ -39,14 +39,14 @@ test('the sentence has one source: the pet sends the text and the id of briefox/
 
 test('both installed: the style enters the system prompt once, whichever plugin is above and whichever is on', async () => {
   const petHooks = hooksOf(pet), leanHooks = hooksOf(lean)
-  const petEnv = /** @type {Record<string, string>} */ ({ CACHITO_BENCH: '/out/run' }), leanDisk = /** @type {Record<string, unknown>} */ ({})
+  const petEnv = /** @type {Record<string, string>} */ ({ HATCHLING_BENCH: '/out/run' }), leanDisk = /** @type {Record<string, unknown>} */ ({})
   const $pet = engine(petEnv, {}), $lean = engine({}, leanDisk) // the pet under the bench: its lever is the variable, its store is in memory
   const bottom = async () => ({ sections: [CORE] })
   for (const order of ['pet above', 'lean above']) {
     const [top, $top, low, $low] = order === 'pet above' ? [petHooks, $pet, leanHooks, $lean] : [leanHooks, $lean, petHooks, $pet]
     const composed = async () => (await /** @type {Function} */ (top['prompt.compose'])($top, ASK, () => /** @type {Function} */ (low['prompt.compose'])($low, ASK, bottom))).sections
     for (const [petOn, leanOn] of [[true, true], [true, false], [false, true], [false, false]]) {
-      petEnv.CACHITO_STYLE = petOn ? '1' : ''
+      petEnv.HATCHLING_STYLE = petOn ? '1' : ''
       leanDisk.off = !leanOn
       const sections = await composed()
       const styles = sections.filter((/** @type {any} */ s) => s.id === STYLE_ID || s.text === STYLE)
@@ -62,7 +62,7 @@ test('both installed, the pet with /pet briefox never given: the pet asks the pr
   const $lean = engine({}, leanDisk), bottom = async () => ({ sections: [CORE] })
   // as the engine answers $.prompt.compose to the pet: through every other plugin's hook, and not through the pet's own
   const others = { prompt: { compose: async () => /** @type {Function} */ (leanHooks['prompt.compose'])($lean, ASK, bottom) } }
-  const $pet = { ...engine({ CACHITO_BENCH: '/out/run', CACHITO_PLAIN: '1' }, {}), ...others, clock: { now: async () => 1_800_000_000_000 } }
+  const $pet = { ...engine({ HATCHLING_BENCH: '/out/run', HATCHLING_PLAIN: '1' }, {}), ...others, clock: { now: async () => 1_800_000_000_000 } }
   const leanSays = async () => String((await /** @type {Function} */ (petHooks['command.run'])($pet, { command: 'pet', args: 'briefox' })).text)
   for (const order of ['pet above', 'lean above']) {
     const [top, $top, low, $low] = order === 'pet above' ? [petHooks, $pet, leanHooks, $lean] : [leanHooks, $lean, petHooks, $pet]

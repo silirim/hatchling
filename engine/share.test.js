@@ -58,11 +58,11 @@ test('the pet stays at the left of the words, whole, whatever it wears; the word
 
 test('the words come from the fields allowed and from nothing else', () => {
   const stuffed = { ...MIRO, cwd: '/w/secretproj', folder: 'secretproj', project: 'secret', tokens: 77_777_777, cost: '$12.50', personality: 'A secret adopted line.', days: 5151 }
-  assert.deepEqual(shareLines(stuffed), ['Miro', 'Cachito the fox', 'crown · golden · founder', 'Checks everything twice', '★ 123 stars', 'github.com/silirim/cachito-pet'])
-  assert.deepEqual(shareLines({ name: 'Lola', animal: 'axolotl', stage: 'baby', peak: 'Hard to rattle', stars: 1, rare: true }), ['Lola', 'Cachito the axolotl', 'baby · a rare one', 'Hard to rattle', '★ 1 star', LINK])
+  assert.deepEqual(shareLines(stuffed), ['Miro', 'Hatchling the fox', 'crown · golden · founder', 'Checks everything twice', '★ 123 stars', 'github.com/silirim/hatchling'])
+  assert.deepEqual(shareLines({ name: 'Lola', animal: 'axolotl', stage: 'baby', peak: 'Hard to rattle', stars: 1, rare: true }), ['Lola', 'Hatchling the axolotl', 'baby · a rare one', 'Hard to rattle', '★ 1 star', LINK])
   // what the font cannot draw is left out, never drawn as something else; a name with nothing to draw gives no line
-  assert.deepEqual(shareLines({ ...MIRO, name: '小狐\x1b[31m', stars: NaN, golden: false, founder: false }).slice(0, 2), ['31m', 'Cachito the fox'])
-  assert.deepEqual(shareLines({ ...MIRO, name: '小狐' })[0], 'Cachito the fox')
+  assert.deepEqual(shareLines({ ...MIRO, name: '小狐\x1b[31m', stars: NaN, golden: false, founder: false }).slice(0, 2), ['31m', 'Hatchling the fox'])
+  assert.deepEqual(shareLines({ ...MIRO, name: '小狐' })[0], 'Hatchling the fox')
   assert.equal(drawable('Zoé  d\'Ávila-3 <b>'), "Zoe d'Avila-3 b")
   // every word the mod can put there has its letters: the animals, the stages, the strong points
   const words = Object.entries(en).filter(([k]) => /^(animal\.(penguin|chick|dog|bunny|fox|cactus|axolotl)|stage\.(baby|adult|crown)|peak\.\w+)$/.test(k)).map(([, v]) => String(v))
@@ -73,15 +73,15 @@ test('the words come from the fields allowed and from nothing else', () => {
 })
 
 test('the file of a picture is in the folder whatever the name of the pet', () => {
-  const dir = '/home/me/.claude/cachito-share'
+  const dir = '/home/me/.claude/hatchling-share'
   for (const name of ['Miro', '../../etc/passwd', '..', '.', '/abs/olute', 'C:\\Windows\\x', 'a/b\\c', '\x1b[2J\n\r\t\0', '~', '%2e%2e%2f', '....//', 'con', '', ' ', '小狐', 'x'.repeat(500), 'Zoé d\'Ávila']) {
     const file = sharePath(dir, name, 'png'), base = file.slice(dir.length + 1)
     assert.ok(file.startsWith(`${dir}/`), name)
-    assert.match(base, /^cachito-[\p{L}\p{N}-]{1,40}\.png$/u, name) // no separator, no dot but the suffix's, never a bare device name
+    assert.match(base, /^hatchling-[\p{L}\p{N}-]{1,40}\.png$/u, name) // no separator, no dot but the suffix's, never a bare device name
     assert.equal(join(dir, base), file)
   }
   assert.deepEqual([sharePath(dir, 'Miro', 'png'), sharePath(`${dir}/`, '../x', 'svg'), sharePath(dir, '..', 'png'), sharePath(dir, 'Zoé d\'Ávila', 'png')],
-    [`${dir}/cachito-miro.png`, `${dir}/cachito-x.svg`, `${dir}/cachito-pet.png`, `${dir}/cachito-zoé-d-ávila.png`])
+    [`${dir}/hatchling-miro.png`, `${dir}/hatchling-x.svg`, `${dir}/hatchling-pet.png`, `${dir}/hatchling-zoé-d-ávila.png`])
 })
 
 test('with no Node the same picture is an SVG; with Node, share-save.js writes the bytes it is given and only a PNG', () => {
@@ -90,7 +90,7 @@ test('with no Node the same picture is an SVG; with Node, share-save.js writes t
   assert.match(drawn, /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="800" height="420"/)
   assert.deepEqual([...fills].sort(), [...new Set(pic.px)].map(c => pic.colours[c]).sort())
   assert.doesNotMatch(drawn, /<(?!\/?svg|rect )/) // rectangles only: no script, no text, no link
-  const dir = mkdtempSync(join(tmpdir(), 'cachito-share-test-')), file = join(dir, 'new folder', 'cachito-bru.png'), save = new URL('./share-save.js', import.meta.url).pathname
+  const dir = mkdtempSync(join(tmpdir(), 'hatchling-share-test-')), file = join(dir, 'new folder', 'hatchling-bru.png'), save = new URL('./share-save.js', import.meta.url).pathname
   try {
     const bytes = png(pic), ok = spawnSync(process.execPath, [save, file], { input: Buffer.from(bytes).toString('base64') })
     assert.deepEqual([ok.status, String(ok.stdout), String(ok.stderr)], [0, '', ''])

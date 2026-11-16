@@ -1,6 +1,6 @@
 # Re-read an unchanged file
 
-The agent read a file it had already read in this chat, and the file had not changed. Cachito shows it as a note: it costs the pet nothing.
+The agent read a file it had already read in this chat, and the file had not changed. Hatchling shows it as a note: it costs the pet nothing.
 
 ## If you want to step in
 

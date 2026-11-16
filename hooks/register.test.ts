@@ -7,12 +7,12 @@ import { whole as workOf, opened as workOpened, turned as workTurned } from '../
 import { picture, TEXT_X } from '../engine/share.js'
 
 // One pet in a hundred is born golden, and a golden one has a `skin` button and another card: every test here runs with the roll
-// left out (CACHITO_PLAIN, read by the mod when a pet is born), over whatever the test itself answers for the environment.
+// left out (HATCHLING_PLAIN, read by the mod when a pet is born), over whatever the test itself answers for the environment.
 const test: typeof kitTest = (name, ...rest: any[]) => {
   const body = rest.pop() as ($: any, on: any) => unknown
   kitTest(name, ...[...rest, ($: any, on: any) => {
     let own: ((c: any, e: any) => any) | undefined
-    on('env.get', (c: any, e: any) => e.name === 'CACHITO_PLAIN' ? { value: '1' } : own ? own(c, e) : { value: undefined })
+    on('env.get', (c: any, e: any) => e.name === 'HATCHLING_PLAIN' ? { value: '1' } : own ? own(c, e) : { value: undefined })
     return body($, (event: string, ...hook: any[]) => event === 'env.get' ? void (own = hook.at(-1)) : on(event, ...hook))
   }] as [any])
 }
@@ -24,7 +24,7 @@ const elsewhere = (disk: Record<string, any>, patch: Record<string, unknown>) =>
 /** A store that lost every preference. */
 const forget = (disk: Record<string, any>) => { for (const key of Object.keys(disk)) if (key === 'prefs' || key.startsWith('pref.')) delete disk[key] }
 const KNOWN = ['asked', 'born', 'callme', 'chats', 'cuddled', 'cuddles', 'hatched', 'hidden', 'lang', 'missing', 'model', 'name', 'personality', 'seed', 'species', 'stats', 'style', 'voice', 'voiceAsked', 'wear'] // the preferences of this version
-const BAND = { plugin: 'cachito', component: 'AbovePrompt', props: { hasSurvey: false } } as any // the other props are the engine's
+const BAND = { plugin: 'hatchling', component: 'AbovePrompt', props: { hasSurvey: false } } as any // the other props are the engine's
 
 test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
   const clock = mock.clock(on)
@@ -77,7 +77,7 @@ test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
   // the diet is gone: a long output passes whole, the command says it was taken out and why, and nothing is written
   const bash = { tool: 'Bash', command: 'cat big.log', tool_use_id: 't1' } as any
   expect((await $.tool.call(bash) as any).result.stdout).toBe(LONG)
-  expect(((await $.command.run({ command: 'pet', args: 'diet on' } as any)) as any).text).toBe('/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; the outputs it saved are still in ~/.claude/cachito-out. /pet briefox, one sentence, is the lever that showed one.')
+  expect(((await $.command.run({ command: 'pet', args: 'diet on' } as any)) as any).text).toBe('/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; docs/privacy.md says where the outputs it saved are. /pet briefox, one sentence, is the lever that showed one.')
   expect((await $.tool.call(bash) as any).result.stdout).toBe(LONG)
   expect(Object.keys(files)).toEqual([])
 
@@ -89,7 +89,7 @@ test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
 
   // the card: no saving claimed for this chat. Lean is the style, with the bench figure
   const card = JSON.stringify(await $.command.run({ command: 'pet', args: '' } as any))
-  expect(card).toMatch(/Cachito the (\w+ )?\w+, baby/)
+  expect(card).toMatch(/Hatchling the (\w+ )?\w+, baby/)
   expect(card).toMatch(/briefox on: \\"Be brief\.\\" in the system prompt\. In our bench \\"Be brief\.\\" made a long task cost 12\.7% less, on one project; short tasks were not measured\\n/)
   expect(card).toMatch(/\\ncomments off: fixed lines only, nothing sent\. \/pet comments on lets a small model write them, on your tokens"/)
   expect(card).not.toMatch(/diet|trimmed/)
@@ -201,7 +201,7 @@ test('the diet and /pet weight are gone: a long output passes whole whatever was
   on('config.list', () => ({ value: [] }))
   on('command.register', () => ({ value: { command: 'pet' } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/me' : e.name === 'CACHITO_DIET' ? '1' : undefined }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/me' : e.name === 'HATCHLING_DIET' ? '1' : undefined }))
   const written: string[] = []
   on('fs.write', (_, e) => { written.push(e.path); return { value: undefined } })
   on('fs.list', () => ({ value: [{ name: 'out-00.txt', kind: 'file', size: 9, mtimeMs: 1, isLink: false }] }) as any)
@@ -215,7 +215,7 @@ test('the diet and /pet weight are gone: a long output passes whole whatever was
   expect(written).toEqual([])
   expect(await cmd('')).not.toMatch(/diet|trimmed/)
   // each command answers with one line: taken out, and why. Neither changes anything
-  for (const args of ['diet', 'diet on', 'diet off']) expect(await cmd(args)).toMatch(/^\/pet diet was taken out: in our bench it showed no saving \(alone -3\.6%, p 0\.31\)\..*still in ~\/\.claude\/cachito-out/)
+  for (const args of ['diet', 'diet on', 'diet off']) expect(await cmd(args)).toMatch(/^\/pet diet was taken out: in our bench it showed no saving \(alone -3\.6%, p 0\.31\)\..*docs\/privacy\.md says where/)
   expect(await cmd('weight')).toBe('/pet weight was taken out: /context in Claude Code already shows what every request carries.')
   // the first write of a preference (here the pet's own, at its first start) took the diet's key out of the store; the object of the earlier version is never written
   expect('pref.diet' in disk).toBe(false)
@@ -317,7 +317,7 @@ test('the companion: a greeting from the marks, a mark of its own with nothing o
   const T0 = Date.UTC(2026, 10, 12, 12), MIN = 60_000
   const clock = mock.clock(on, { now: T0 })
   // another chat was left in this folder 20 minutes ago, in the middle of a turn
-  const disk: Record<string, any> = { prefs: { species: 'fox', born: 'fox', hidden: false, wear: '', budget: 0, diet: true, style: true, seed: 7, name: 'Miro', trait: 'dry', voiceAsked: true }, chats: { other: { cwd: '/w/cachito', at: T0 - 20 * MIN, done: false } } }
+  const disk: Record<string, any> = { prefs: { species: 'fox', born: 'fox', hidden: false, wear: '', budget: 0, diet: true, style: true, seed: 7, name: 'Miro', trait: 'dry', voiceAsked: true }, chats: { other: { cwd: '/w/hatchling', at: T0 - 20 * MIN, done: false } } }
   on('store.get', (_, e) => ({ value: structuredClone(disk[e.key]) }))
   on('store.set', (_, e) => { disk[e.key] = structuredClone(e.value); return { value: undefined } })
   on('store.keys', () => ({ value: Object.keys(disk) }))
@@ -345,20 +345,20 @@ test('the companion: a greeting from the marks, a mark of its own with nothing o
     return { ui, texts, buttons }
   }
 
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   let b = await band()
   expect(b.texts).toContain('Miro: a chat here stopped mid-turn 20 min\nago. pick it up?')
   expect(b.buttons).toEqual(['skin', 'pet', 'resume']) // (a newborn of these days has the founder's eggshell, so a skin to turn) the pet's own in the row of the name, the phrase's under the bubble
   await b.ui.press({ key: 'fix' })
   expect(filled).toBe('/resume')
   await b.ui.unmount()
-  expect(disk.chats).toEqual({ other: { cwd: '/w/cachito', at: T0 - 20 * MIN, done: false } }) // the marks of earlier versions are read, never written
+  expect(disk.chats).toEqual({ other: { cwd: '/w/hatchling', at: T0 - 20 * MIN, done: false } }) // the marks of earlier versions are read, never written
   expect(disk['chat.me']).toBeUndefined() // opening a chat leaves no mark
 
   // a prompt and a failing command: the mark says the folder, the time and that the turn runs. Nothing of the prompt or the command
   await clock.advance(9_000)
   await $.prompt.submit({ text: 'the secret plan', wait: false, origin: 'user' } as any)
-  expect(disk['chat.me']).toEqual({ cwd: '/w/cachito', at: T0 + 9_000, done: false, beat: T0 + 9_000 }) // under its own key: the folder, the time, that the turn runs, and that it is alive
+  expect(disk['chat.me']).toEqual({ cwd: '/w/hatchling', at: T0 + 9_000, done: false, beat: T0 + 9_000 }) // under its own key: the folder, the time, that the turn runs, and that it is alive
   for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'cd /srv && TOKEN=abc deploy --key hunter2', tool_use_id: `t${i}` } as any)
   b = await band()
   expect(b.texts).toContain('deploy failed 3 times in a row')
@@ -367,7 +367,7 @@ test('the companion: a greeting from the marks, a mark of its own with nothing o
   for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ;
   await clock.advance(3 * MIN)
   await $.turn.complete({ answer: '', reason: 'answer' } as any)
-  expect(disk['chat.me']).toEqual({ cwd: '/w/cachito', at: T0 + 9_000 + 3 * MIN, done: true, took: 3 * MIN, beat: T0 + 9_000 + 3 * MIN }) // and how long the turn lasted: a number
+  expect(disk['chat.me']).toEqual({ cwd: '/w/hatchling', at: T0 + 9_000 + 3 * MIN, done: true, took: 3 * MIN, beat: T0 + 9_000 + 3 * MIN }) // and how long the turn lasted: a number
   expect(JSON.stringify(disk)).not.toMatch(/secret|plan|deploy|hunter2|TOKEN|srv/)
   // the long turn ends with a recap under the note
   b = await band()
@@ -485,7 +485,7 @@ test('the phrase sits in a speech bubble: advice inside, keys outside, tail at t
 // what a person's ~/.claude.json holds next to the old /buddy: none of it may reach the store
 const CONFIG = { userID: 'u-123', oauthAccount: { emailAddress: 'me@example.com' }, projects: { '/w/private': {} }, companion: { name: 'Pixel', personality: 'A calm thing who waits.', hatchedAt: Date.UTC(2026, 3, 2), species: 'axolotl', secret: 's3cr3t' } }
 
-const SKINS = '/home/me/.claude/cachito-skins'
+const SKINS = '/home/me/.claude/hatchling-skins'
 /** The kit of a person at the prompt whose config holds `config`; `disk` is the store, `state` the session's, `reads` and `writes` the files touched. */
 const LATE = new Date(2027, 5, 1, 12).getTime() // a birth after FOUNDER_UNTIL
 function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 12, 12)) {
@@ -524,7 +524,7 @@ const cardOf = async ($: any, args = '') => String((await $.command.run({ comman
 test('a pet is born with a name and a character of its own: on the card and in the greeting, kept over /clear, a new animal and a rename', async ($, on) => {
   const { companion, ...plain } = CONFIG
   const k = home(on, plain)
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
 
   const born = prefsOf(k.disk)
   expect(born.seed).toBeGreaterThan(0)
@@ -557,7 +557,7 @@ test('a pet is born with a name and a character of its own: on the card and in t
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
   await ui.press({ key: 'voice-off' })
-  expect(k.toasts.at(-1)).toBe('Cachito stays quiet. /pet comments on changes that.')
+  expect(k.toasts.at(-1)).toBe('Hatchling stays quiet. /pet comments on changes that.')
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
   await ui.unmount()
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -569,7 +569,7 @@ test('a pet is born with a name and a character of its own: on the card and in t
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toContain('adopt') // the hint's button: it fills /pet adopt, the person sends it or not
   await ui.unmount()
   const first = await cardOf($)
-  expect(first).toMatch(new RegExp(`^${born.name}, Cachito the (\\w+ )?${born.species},`)) // a rare colour comes before the animal
+  expect(first).toMatch(new RegExp(`^${born.name}, Hatchling the (\\w+ )?${born.species},`)) // a rare colour comes before the animal
   // the card: a line of personality, then the five statistics, each with a short bar and its value; the peak and the weak point are marked
   const rows = first.split('\n')
   expect(rows[1]).toMatch(/^character: [A-Z][a-z ,]+\.$/)
@@ -588,14 +588,14 @@ test('a pet is born with a name and a character of its own: on the card and in t
   await k.clock.advance(11_000) // the next look at the store
   expect(await cardOf($, `animal ${other}`)).toContain(other)
   expect(prefsOf(k.disk)).toMatchObject({ species: other, seed: born.seed, name: born.name, stats: born.stats })
-  expect(await cardOf($)).toMatch(new RegExp(`^${born.name}, Cachito the (\\w+ )?${other},`))
+  expect(await cardOf($)).toMatch(new RegExp(`^${born.name}, Hatchling the (\\w+ )?${other},`))
 
   expect(await cardOf($, 'name')).toContain(born.name)
   expect(await cardOf($, 'name  <b>Zoë</b>   the 2nd ')).toContain('bZoëb the 2nd')
   expect(await cardOf($, 'name Zoë the 2nd')).toContain('Zoë the 2nd')
   expect(await cardOf($, 'name !!!')).toContain('Zoë the 2nd') // nothing usable: the name stays
   k.state = {}
-  expect(await cardOf($)).toMatch(new RegExp(`^Zoë the 2nd, Cachito the (\\w+ )?${other},`))
+  expect(await cardOf($)).toMatch(new RegExp(`^Zoë the 2nd, Hatchling the (\\w+ )?${other},`))
   expect(prefsOf(k.disk)).toMatchObject({ name: 'Zoë the 2nd', seed: born.seed, stats: born.stats })
   expect(k.reads.length).toBe(1) // /pet adopt alone: never by itself
   expect(k.writes).toEqual([])
@@ -603,7 +603,7 @@ test('a pet is born with a name and a character of its own: on the card and in t
 
 test('the old /buddy: the config is read only when the person runs /pet adopt; a hint says so once; adopting takes its name, personality and hatching day, keeps our animal, and nothing else of the config is stored', async ($, on) => {
   const k = home(on, CONFIG, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', trait: 'fussy', trait2: 'shy' })
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   expect(prefsOf(k.disk)).toMatchObject({ asked: true, name: 'Miro' }) // the hint was said, nothing adopted
   expect(k.reads).toEqual([]) // and nothing read to say it: the file holds the account and the secrets of the MCP servers
   // born with two traits, fussy and shy: they became its statistics, rigor the peak and calm the second, and are not kept
@@ -625,7 +625,7 @@ test('the old /buddy: the config is read only when the person runs /pet adopt; a
   expect(await cardOf($, 'adopt')).toMatch(/Adopted: Pixel is your fox now/)
   expect(prefsOf(k.disk)).toMatchObject({ name: 'Pixel', personality: 'A calm thing who waits.', hatched: Date.UTC(2026, 3, 2), species: 'fox', born: 'fox', seed: 7, asked: true })
   const card = await cardOf($)
-  expect(card).toMatch(/^Pixel, Cachito the (\w+ )?fox,/)
+  expect(card).toMatch(/^Pixel, Hatchling the (\w+ )?fox,/)
   expect(card).toContain('\nadopted from /buddy (hatched 2026-04-02): A calm thing who waits.')
   const now = prefsOf(k.disk).stats as number[]
   expect(now.indexOf(Math.max(...now))).toBe(2) // "calm" in its words: calm is the peak now
@@ -704,7 +704,7 @@ test('one pet for two chats: a turn here keeps what another chat did meanwhile, 
     await $.turn.complete({ answer: '', reason: 'answer' } as any)
   }
   const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.find({ type: 'Text', text: /★ \d+$/ }))?.text; await ui.unmount(); return t }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
 
   await turn() // the first use of the day and a turn
   expect(k.disk.pet).toMatchObject({ coins: 6, affection: 6, days: 1, owned: ['shades'] })
@@ -778,7 +778,7 @@ test('one pet for two chats: a turn here keeps what another chat did meanwhile, 
 
 test('/pet demo shows every mood in turn, also while the pet sleeps, and the egg goes through all its phases', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', trait: 'dry', trait2: 'shy', asked: true })
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const look = async () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
     const say = (await ui.findAll({ type: 'Text' })).map(x => x.text).filter(t => t && !/★ \d+$|^[─·]$/.test(t)).join(' | ')
@@ -791,7 +791,7 @@ test('/pet demo shows every mood in turn, also while the pet sleeps, and the egg
   await k.clock.advance(15_000) // said once: then it sleeps with no bubble
   expect((await look()).say).toBe('')
 
-  expect(await cardOf($, 'demo')).toMatch(/^Cachito demo: egg, seedling/)
+  expect(await cardOf($, 'demo')).toMatch(/^Hatchling demo: egg, seedling/)
   // one look per tick, 5 s a mood
   const slots: { say: string, drawn: string }[][] = []
   for (let mood = 0; mood < 10; mood++) {
@@ -883,7 +883,7 @@ test('under the bench the person\'s store is neither read nor written, and the l
   let touched = 0
   on('store.get', (_, e) => { touched++; return { value: structuredClone(disk[e.key]) } })
   on('store.set', (_, e) => { touched++; disk[e.key] = structuredClone(e.value); return { value: undefined } })
-  const env: Record<string, string> = { HOME: '/home/me', CACHITO_BENCH: '/bench/out/cachito-out/style-1' }
+  const env: Record<string, string> = { HOME: '/home/me', HATCHLING_BENCH: '/bench/out/hatchling-out/style-1' }
   on('env.get', (_, e) => ({ value: env[e.name] }))
   on('config.list', () => ({ value: [] }))
   on('command.register', () => ({ value: { command: 'pet' } }))
@@ -916,8 +916,8 @@ test('under the bench the person\'s store is neither read nor written, and the l
   // a command that writes preferences stays in memory too
   await $.command.run({ command: 'pet', args: 'hide' } as any)
   // the arm's variable turns the style on; the old variable of the diet does nothing, and no file is written
-  env.CACHITO_STYLE = '1'
-  env.CACHITO_DIET = '1'
+  env.HATCHLING_STYLE = '1'
+  env.HATCHLING_DIET = '1'
   await $.session.end({ reason: 'clear', sessionId: 's0', resume: { id: 's0' } } as any)
   expect(await styled()).toBe(true)
   expect(await bash()).toBe(LONG)
@@ -942,7 +942,7 @@ async function drawn($: any) {
 test('cuddles: /pet pet and the pet button count them with the time of the last; hearts rise for a couple of seconds with a line in its character; the first three of a day bring stars and affection', async ($, on) => {
   // rigor is the peak and warmth the second: the rigorous one speaks most lines, the warm one some
   const k = home(on, {}, { species: 'bunny', born: 'bunny', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const t0 = Date.UTC(2026, 10, 12, 12)
   let b = await drawn($)
   expect(b.buttons).toContain('pet')
@@ -1011,7 +1011,7 @@ test('on a light theme white gets a darker edge where it touches the background,
   k.disk.pet = { animals: ['chick'] }
   const inks = async (theme: string) => {
     Object.assign(k, { theme }) // the theme is read when a session starts
-    await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+    await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
     const cells = new Uint32Array(Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells as string), c => c.charCodeAt(0)).buffer)
     await ui.unmount()
@@ -1033,7 +1033,7 @@ test('on a light theme white gets a darker edge where it touches the background,
 test('the golden coat: the last row of the shop for 300 stars, a part of the skin with golden and plain, a colour that things to wear leave alone; on a light theme its yellow gets the edge', async ($, on) => {
   const k = home(on, {}, { species: 'bunny', born: 'bunny', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   k.disk.pet = { coins: 310, affection: 310, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const look = async () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
     const cells = new Uint32Array(Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells as string), c => c.charCodeAt(0)).buffer)
@@ -1049,7 +1049,7 @@ test('the golden coat: the last row of the shop for 300 stars, a part of the ski
   expect(await cardOf($, 'wear golden')).toMatch(/^Not yours yet: golden\./)
   const plain = await look()
   expect([plain.inks.has(WHITE), plain.inks.has(GOLD), plain.keys.includes('skin')]).toEqual([true, false, false])
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the bunny, /)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the bunny, /)
 
   // bought: 300 stars and no affection, on at once, on the card and in the shop
   expect(await cardOf($, 'shop golden')).toBe('Bought a golden coat for 300 stars, 10 left. Miro wears it now, coat: /pet wear golden takes it off.')
@@ -1057,7 +1057,7 @@ test('the golden coat: the last row of the shop for 300 stars, a part of the ski
   expect(prefsOf(k.disk).wear).toBe('golden')
   const golden = await look()
   expect([golden.inks.has(WHITE), golden.inks.has(GOLD), golden.inks.has(GLINT), plain.inks.has(GLINT)]).toEqual([false, true, true, false])
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the golden bunny, .*(\n.*)*\n10 stars; owns a golden coat\. \/pet shop\n  wears coat: a golden coat$/m)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the golden bunny, .*(\n.*)*\n10 stars; owns a golden coat\. \/pet shop\n  wears coat: a golden coat$/m)
   expect(await cardOf($, 'shop')).toMatch(/\n  terminal .*\n  golden +a golden coat +300  coat +yours, worn\n\n(.*\n)+\nMiro wears coat: a golden coat\.\n/)
   expect(await cardOf($, 'buy golden')).toMatch(/^You already have a golden coat/)
 
@@ -1065,7 +1065,7 @@ test('the golden coat: the last row of the shop for 300 stars, a part of the ski
   expect(await cardOf($, 'wear plain')).toBe('Miro wears nothing.')
   expect(prefsOf(k.disk).wear).toBe('none plain')
   expect((await look()).inks.has(GOLD)).toBe(false)
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the bunny, /)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the bunny, /)
   expect(await cardOf($, 'skin')).toMatch(/^Miro's skin\n  coat  plain\n\/pet wear <item> puts it on/)
   expect(await cardOf($, 'wear golden')).toBe('a golden coat goes on, coat.\nMiro wears coat: a golden coat.')
   expect(await cardOf($, 'skin')).toMatch(/^Miro's skin\n  coat  a golden coat\n/)
@@ -1089,7 +1089,7 @@ test('the golden coat: the last row of the shop for 300 stars, a part of the ski
 
   // a light theme: the bright gold would fade on white, so where it touches the background it takes the coat's own amber, never the mud a darkened yellow is
   Object.assign(k, { theme: 'light' })
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const light = await look()
   expect([light.inks.has(GOLD), light.inks.has(0xf09a00), light.inks.has(0x997a0c)]).toEqual([true, true, false])
 })
@@ -1097,40 +1097,40 @@ test('the golden coat: the last row of the shop for 300 stars, a part of the ski
 test('a pet born golden has the coat for nothing: on from the start, plain by choice, never asked to pay', async ($, on) => {
   const k = home(on, {}, { species: 'chick', born: 'chick', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   k.disk.pet = { variant: 'golden', coins: 400, affection: 400, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] } // a store of before the coat
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the golden chick, /)
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the golden chick, /)
   expect(await cardOf($, 'shop')).toMatch(/\n  golden +a golden coat +300  coat +yours, worn\n/)
   expect(await cardOf($, 'buy golden')).toMatch(/^You already have a golden coat/)
   expect(k.disk.pet.coins).toBe(400)
   expect(await cardOf($, 'wear plain')).toBe('Miro wears nothing.')
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the chick, /)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the chick, /)
   expect(await cardOf($, 'wear golden')).toBe('a golden coat goes on, coat.\nMiro wears coat: a golden coat.')
 })
 
 // a skin pack as a person's folder holds it: an animal, a hat and a coat (the example of docs/skins.md, cut short)
 const ROBOT = ['....DDDD....', '..BBBBBBBB..', '.BBBBBBBBBB.', '.BBkBBBBkBB.', '.BBBBBBBBBB.', '.BBBDDDDBBB.', '..BBBBBBBB..', '..DBBBBBBD..', '..BBBBBBBB..', '..DD....DD..']
 const PACK = { format: 1, id: 'example', name: 'Example', animals: { robot: { name: { en: 'robot', es: 'robot de lata' }, palette: { B: '#90a4ae', D: '#546e7a' }, states: { adult: { frames: [ROBOT] } } } }, items: { tophat: { part: 'head', name: { en: 'a top hat' }, fallback: [{ anchor: 'head', art: ['.uuuu.', '.RRRR.', 'uuuuuu'] }] } }, coats: { mint: { name: { en: 'a mint coat' }, ramp: ['#00796b', '#4db6ac', '#b2dfdb'] } } }
-const START = { cwd: '/w/cachito', surface: 'terminal', isInteractive: true } as const
+const START = { cwd: '/w/hatchling', surface: 'terminal', isInteractive: true } as const
 
 test('a skin pack in the person\'s folder: what it brings is theirs at once, for no stars, in /pet skins, /pet animal and the skin menu with the pack\'s name', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   k.disk.pet = { coins: 12, affection: 400, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
   k.skins = { 'example.json': PACK, 'notes.txt': 'not a pack' }
   await $.session.start(START)
-  expect(k.skinReads).toEqual(['/home/me/.claude/cachito-skins/example.json']) // only the .json files are read
+  expect(k.skinReads).toEqual(['/home/me/.claude/hatchling-skins/example.json']) // only the .json files are read
 
   expect(await cardOf($, 'skins')).toBe([
-    'Skin packs in /home/me/.claude/cachito-skins: 1 loaded.',
+    'Skin packs in /home/me/.claude/hatchling-skins: 1 loaded.',
     '  example.json  Example (example)  animals: robot; items: tophat; coats: mint',
     'What a pack brings is yours at once and costs no stars: /pet skin shows the things, /pet animal the animals.',
-    'Format, an example to copy and how to try it: https://github.com/silirim/cachito-pet/blob/main/docs/skins.md',
+    'Format, an example to copy and how to try it: https://github.com/silirim/hatchling/blob/main/docs/skins.md',
   ].join('\n'))
 
   // the animal: listed with its pack, picked for nothing, drawn; not a thing of the shop
   expect(await cardOf($, 'animal')).toBe('Pick one of: fox, robot (Example).\nOthers, 100 stars each, once: penguin, chick, dog, bunny, cactus. /pet shop <animal> unlocks one.')
-  expect(await cardOf($, 'animal robot')).toBe('Cachito is now a robot (Example).')
+  expect(await cardOf($, 'animal robot')).toBe('Hatchling is now a robot (Example).')
   expect(prefsOf(k.disk).species).toBe('robot')
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the (\w+ )?robot \(Example\),/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the (\w+ )?robot \(Example\),/)
   expect(await cardOf($, 'shop')).not.toMatch(/robot|tophat|mint/)
   expect(await cardOf($, 'shop robot')).toMatch(/^Nothing called robot in the shop\./)
   expect(k.disk.pet.coins).toBe(12) // no stars taken, none given
@@ -1170,14 +1170,14 @@ test('a skin pack in the person\'s folder: what it brings is theirs at once, for
 test('a pack that is not sound is left out whole and told by /pet skins; no folder, a link, a file too big: the band is drawn all the same', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   await $.session.start(START)
-  expect(await cardOf($, 'skins')).toBe('No skin packs. A pack is one .json file in /home/me/.claude/cachito-skins: put it there and run /pet skins.\nFormat, an example to copy and how to try it: https://github.com/silirim/cachito-pet/blob/main/docs/skins.md')
+  expect(await cardOf($, 'skins')).toBe('No skin packs. A pack is one .json file in /home/me/.claude/hatchling-skins: put it there and run /pet skins.\nFormat, an example to copy and how to try it: https://github.com/silirim/hatchling/blob/main/docs/skins.md')
 
   const bad = structuredClone(PACK) as any
   bad.animals.robot.palette.B = 'red'; bad.items.tophat.part = 'tail'
   k.skins = { 'a-broken.json': bad, 'b-half.json': '{ "format": 1,', 'c-link.json': 'link', 'd-huge.json': 600 * 1024, 'e-clash.json': { ...PACK, id: 'clash', animals: undefined, coats: undefined, items: { mug: PACK.items.tophat } }, 'f-good.json': { ...PACK, animals: undefined, coats: undefined } }
   const said = await cardOf($, 'skins') // read anew, with no restart
   expect(said.split('\n').slice(0, 12)).toEqual([
-    'Skin packs in /home/me/.claude/cachito-skins: 1 loaded, 5 left out.',
+    'Skin packs in /home/me/.claude/hatchling-skins: 1 loaded, 5 left out.',
     '  a-broken.json  left out, nothing of it is used:',
     '      animals.robot.palette.B: a colour is written #rrggbb',
     '      items.tophat.part: must be one of head, face, body, feet, accessory',
@@ -1204,7 +1204,7 @@ test('a pack that is not sound is left out whole and told by /pet skins; no fold
   k.skins = { [`evil${ESC}${C1}.json`]: { ...PACK, [`x${ESC}${C1}`]: 1 }, [`half${C1}.json`]: `{ "format": ${ESC}${C1}`, [`good${ESC}.json`]: { ...PACK, animals: undefined, coats: undefined } }
   const hostile = await cardOf($, 'skins')
   expect(hostile.split('\n').slice(0, 6)).toEqual([
-    'Skin packs in /home/me/.claude/cachito-skins: 1 loaded, 2 left out.',
+    'Skin packs in /home/me/.claude/hatchling-skins: 1 loaded, 2 left out.',
     '  evil 31m.json  left out, nothing of it is used:',
     '      pack: unknown field "x 31m"',
     '  good.json      Example (example)  items: tophat',
@@ -1216,7 +1216,7 @@ test('a pack that is not sound is left out whole and told by /pet skins; no fold
   // the folder cannot be listed at all: no pack, and the pet is there
   k.skins = null
   expect(await cardOf($, 'skins')).toMatch(/^No skin packs\./)
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the (\w+ )?fox,/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the (\w+ )?fox,/)
 })
 
 test('an animal of a pack that is gone: the pet is the animal it was born as again, says so gently once, and is back when the pack is', async ($, on) => {
@@ -1224,7 +1224,7 @@ test('an animal of a pack that is gone: the pet is the animal it was born as aga
   const k = home(on, {}, { species: 'robot', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   await $.session.start(START)
   expect(prefsOf(k.disk)).toMatchObject({ species: 'fox', born: 'fox', missing: 'robot' })
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the (\w+ )?fox,/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the (\w+ )?fox,/)
   await k.clock.advance(600)
   const texts = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map(x => x.text).join(' | '); await ui.unmount(); return t }
   expect(await texts()).toMatch(/My other look came from a skin pack that is\nnot here now, so I am a fox again\. \| Put the pack back and I change back\. \/pet\nskins shows the packs\./)
@@ -1238,7 +1238,7 @@ test('an animal of a pack that is gone: the pet is the animal it was born as aga
   k.skins = { 'example.json': PACK }
   expect(await cardOf($, 'skins')).toContain('1 loaded')
   expect(prefsOf(k.disk)).toMatchObject({ species: 'robot', born: 'fox', missing: '' })
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the (\w+ )?robot \(Example\),/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the (\w+ )?robot \(Example\),/)
 
   // born as such an animal, and no pack: a shipped animal is rolled once and kept, and the old one still comes back with its pack
   k.skins = {}
@@ -1258,7 +1258,7 @@ test('an animal of a pack that is gone: the pet is the animal it was born as aga
 
 test('under the bench no pack is read, and a pet whose animal is of a pack keeps it in the store', async ($, on) => {
   const k = home(on, {}, { species: 'robot', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
-  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  k.env.HATCHLING_BENCH = '/var/tmp/bench'
   k.skins = { 'example.json': PACK }
   await $.session.start({ ...START, isInteractive: false })
   expect(k.skinReads).toEqual([])
@@ -1272,14 +1272,14 @@ test('under the bench no pack is read, and a pet whose animal is of a pack keeps
 test('the shop: stars buy things to wear, the catalogue says what is owned, and what is worn is drawn on every stage and under a note', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   k.disk.pet = { coins: 25, affection: 25, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const raster = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = JSON.stringify((await ui.find({ type: 'Raster' }))!.props.cells); await ui.unmount(); return r }
   /** The drawing with the item on, and with it off, at the same instant. */
   const both = async (item: string) => { const worn = await raster(); await cardOf($, `wear ${item}`); const off = await raster(); await cardOf($, `wear ${item}`); return [worn, off] }
 
   expect([...SHOP, EGGSHELL].map(i => [i.id, i.slot, i.name])).toEqual(Object.entries(zoo.pack.items).map(([id, i]) => [id, i.part, i.name.en])) // every item of the catalogue has its drawing, in the same order, with the same part and name
   const shop = await cardOf($, 'shop')
-  expect(shop).toMatch(/^CACHITO SHOP · you have 25 stars$/m)
+  expect(shop).toMatch(/^HATCHLING SHOP · you have 25 stars$/m)
   for (const i of SHOP) expect(shop).toMatch(new RegExp(`^  ${i.id} +${i.name} +${i.price}  ${i.slot}${i.month ? ' +in December' : ''}$`, 'm')) // each thing with its part, named as the skin menu names it
   expect(shop).not.toMatch(/crown|beside|neck/) // the crown is not sold
   expect(shop).not.toMatch(/Miro wears/) // nothing owned: nothing to tell
@@ -1288,9 +1288,9 @@ test('the shop: stars buy things to wear, the catalogue says what is owned, and 
 
   // too dear, unknown, not owned: said plainly, nothing taken
   expect(await cardOf($, 'buy sombrero')).toMatch(/^a sombrero costs 70 stars and you have 25\. Stars come with use: /)
-  expect(await cardOf($, 'buy yacht')).toMatch(/^Nothing called yacht in the shop\.\n\nCACHITO SHOP/)
-  expect(await cardOf($, 'shop yacht')).toMatch(/^Nothing called yacht in the shop\.\n\nCACHITO SHOP/) // /pet shop <item> buys, /pet buy is its other name
-  expect(await cardOf($, 'buy')).toMatch(/^Pick one: \/pet shop <item>\.\n\nCACHITO SHOP/)
+  expect(await cardOf($, 'buy yacht')).toMatch(/^Nothing called yacht in the shop\.\n\nHATCHLING SHOP/)
+  expect(await cardOf($, 'shop yacht')).toMatch(/^Nothing called yacht in the shop\.\n\nHATCHLING SHOP/) // /pet shop <item> buys, /pet buy is its other name
+  expect(await cardOf($, 'buy')).toMatch(/^Pick one: \/pet shop <item>\.\n\nHATCHLING SHOP/)
   expect(shop).toMatch(/^\/pet shop <item> buys one\./m)
   expect(shop).not.toMatch(/\/pet buy/) // the help names one way only
   expect(await cardOf($, 'wear mug')).toMatch(/^Not yours yet: mug\. You have: nothing yet\./)
@@ -1416,7 +1416,7 @@ test('the crown is the head\'s own thing: on by itself at the last stage, one of
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   const day = dayOf(Date.UTC(2026, 10, 12, 12))
   k.disk.pet = { coins: 0, affection: RULES.grownAt.affection, days: RULES.grownAt.days, day, owned: [] }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const look = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = JSON.stringify((await ui.find({ type: 'Raster' }))!.props.cells); const keys = (await ui.findAll({ type: 'Button' })).map((b: any) => b.key); const said = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text).join('\n'); await ui.unmount(); return { r, keys, said } }
   const press = async (key: string) => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key }); await k.clock.advance(1); await ui.unmount() }
   const adult = await look()
@@ -1470,7 +1470,7 @@ test('many chats, one of them with an older copy: a chat writes only the prefere
   const first = { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, wear: 'mug', lang: 'en', hidden: false, diet: false, style: false, cuddles: 2, cuddled: 5, voice: false, personality: '', hatched: 0 }
   const k = home(on, {}, first)
   k.disk.pet = { coins: 0, affection: 0, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['shades', 'mug', 'lamp'] }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   expect(await cardOf($)).toMatch(/^  wears accessory: a coffee mug$/m) // this chat has read the preferences: the mug is on
   const prefKeys = () => [...new Set(k.sets.filter(key => key === 'prefs' || key.startsWith('pref.')))].sort()
   expect(prefKeys()).toEqual([]) // a store that has every preference: reading writes none
@@ -1535,7 +1535,7 @@ test('E20: a store that cannot be read when a chat opens: no pet is made up and 
   k.disk.prefs.voiceAsked = false
   k.disk.diary = { lines: [], first: 5 }
   k.lost = true
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   // nothing of a pet on screen, however many times it is drawn: not a different animal and name each time
   for (let i = 0; i < 3; i++) {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -1548,7 +1548,7 @@ test('E20: a store that cannot be read when a chat opens: no pet is made up and 
   expect(k.sets).toEqual([]) // not asked, not voiceAsked, not a preference, not a pet, not a mark
   // the store reads again: the real pet, with what it had
   k.lost = false
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the fox/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the fox/)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Raster' })).toBeTruthy()
   expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toContain('Miro')
@@ -1562,15 +1562,15 @@ test('E20: a store that cannot be read when a chat opens: no pet is made up and 
 
 test('E21: a phrase that had its time does not come back when the mod is reloaded in a chat that goes on', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const open = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const b = !!(await ui.find({ type: 'Box', key: 'bubble' })); await ui.unmount(); return b }
   expect(await open()).toBe(true) // the greeting
   await k.clock.advance(5_000)
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true }) // a reload while it is up: it stays, for what is left of its time
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true }) // a reload while it is up: it stays, for what is left of its time
   expect(await open()).toBe(true)
   await k.clock.advance(40_000)
   expect(await open()).toBe(false)
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true }) // a hot reload fires session.start again, over the same session state
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true }) // a hot reload fires session.start again, over the same session state
   expect(await open()).toBe(false)
   await k.clock.advance(2_000)
   expect(await open()).toBe(false)
@@ -1611,7 +1611,7 @@ for (const [version, held] of Object.entries(RELOADS)) test(`a reload over the s
   }
   const card = async () => {
     const text = await cardOf($)
-    expect(text).toMatch(/^\w+, Cachito the (\w+ )?fox, (baby|adult|crown)   [♥♡]{5} (happy|calm)$/m)
+    expect(text).toMatch(/^\w+, Hatchling the (\w+ )?fox, (baby|adult|crown)   [♥♡]{5} (happy|calm)$/m)
     expect(text).toMatch(/^affection \d+ over \d+ days? of use/m)
     expect(text).toMatch(/^\d+ stars?; owns /m)
     expect(text).not.toMatch(/undefined|NaN|null|health|\/100|efficient|out cold/)
@@ -1620,10 +1620,10 @@ for (const [version, held] of Object.entries(RELOADS)) test(`a reload over the s
   // the first thing a reload does is draw, before any event of the session: what it reads is that version's state, untouched
   await band()
   await card()
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   await band()
   await card()
-  expect(await cardOf($, 'shop')).toMatch(/^CACHITO SHOP · you have \d+ stars?$/m)
+  expect(await cardOf($, 'shop')).toMatch(/^HATCHLING SHOP · you have \d+ stars?$/m)
 
   // the chat goes on as any other: a turn, a cuddle, something bought and worn, the demo
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
@@ -1847,7 +1847,7 @@ test('comments on: the cap of the day stops it, a new day starts the count again
 
 test('under the bench the voice is off, even when the person had it on', async ($, on) => {
   const k = voiceKit($, on, { voice: true })
-  k.env.CACHITO_BENCH = '/tmp/bench'
+  k.env.HATCHLING_BENCH = '/tmp/bench'
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   k.v.fail = true
   await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't' } as any))
@@ -1898,7 +1898,7 @@ test('the question about the voice: "voice on" turns it on and keeps the answer,
   await ui.press({ key: 'voice-on' })
   await ui.unmount()
   expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: true })
-  expect(k.toasts.at(-1)).toBe('Cachito: comments on. /pet comments off stops them, /pet comments says what they send and cost.')
+  expect(k.toasts.at(-1)).toBe('Hatchling: comments on. /pet comments off stops them, /pet comments says what they send and cost.')
   expect((await k.texts()).join(' ')).not.toMatch(/May I/)
   expect(k.v.calls).toEqual([]) // the answer asks no model
   await k.turn()
@@ -1923,7 +1923,7 @@ test('the question about the voice goes when /pet comments off is typed; a pet t
 
 test('under the bench nobody is asked about the voice, and the person\'s preferences are not touched', async ($, on) => {
   const k = voiceKit($, on, { voiceAsked: false })
-  k.env.CACHITO_BENCH = '/tmp/bench'
+  k.env.HATCHLING_BENCH = '/tmp/bench'
   const before = JSON.stringify(prefsOf(k.disk))
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   expect((await k.texts()).join(' ')).not.toMatch(/May I/)
@@ -1946,19 +1946,19 @@ test('a newborn takes the language of the system when it is one of ours, LC_ALL 
   expect((await asked.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/^\S+  ★ 0 · ¿Puedo comentar tu trabajo\?/)
   expect((await asked.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['acariciar', 'comentarios sí', 'en silencio'])
   await asked.press({ key: 'voice-off' })
-  expect(k.toasts.at(-1)).toBe('Cachito se queda callado. /pet comments on lo cambia.')
+  expect(k.toasts.at(-1)).toBe('Hatchling se queda callado. /pet comments on lo cambia.')
   await asked.unmount()
   expect(await cardOf($, 'lang')).toBe('Idioma: español. /pet lang <en|es|pt|zh> lo cambia.')
   expect(await cardOf($, 'lang it')).toBe('No hay idioma it. Hay: en, es, pt, zh.') // not one of ours: said, and nothing changes
   expect(prefsOf(k.disk).lang).toBe('es')
-  expect(await cardOf($, 'lang zh')).toBe('Cachito 现在说简体中文。')
+  expect(await cardOf($, 'lang zh')).toBe('Hatchling 现在说简体中文。')
   expect(prefsOf(k.disk).lang).toBe('zh')
   // a chat that starts later, whatever the system says now, speaks the language chosen
   k.env.LANG = 'pt_BR.UTF-8'
   k.state = {}
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   expect(await cardOf($, 'lang')).toBe('语言：简体中文。/pet lang <en|es|pt|zh> 可以切换。')
-  expect(await cardOf($, 'lang en')).toBe('Cachito now speaks English.')
+  expect(await cardOf($, 'lang en')).toBe('Hatchling now speaks English.')
 })
 
 for (const [env, lang] of [[{ LC_ALL: 'pt_BR.UTF-8', LANG: 'es_ES.UTF-8' }, 'pt'], [{ LC_ALL: '', LANG: 'zh_CN.UTF-8' }, 'zh'], [{ LANG: 'it_IT.UTF-8' }, 'en'], [{}, 'en'], [{ LANG: 'zh_TW.UTF-8' }, 'en']] as const) test(`born under ${JSON.stringify(env)}: ${lang}`, async ($, on) => {
@@ -1973,9 +1973,9 @@ test('a pet born before the languages keeps English under any system, and a lang
   k.env.LANG = 'zh_CN.UTF-8'
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   expect(prefsOf(k.disk).lang).toBe('en')
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the fox, baby/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the fox, baby/)
   elsewhere(k.disk, { lang: 'pt' }) // another chat ran /pet lang pt
-  expect(await cardOf($)).toMatch(/^Miro, Cachito: raposa, filhote   ♡♡♡♡♡ (feliz|calmo)\npersonalidade: Fala seco e curto, e pula a cada linha vermelha\.\n  HUMOR       █████████░  91  ponto forte\n/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling: raposa, filhote   ♡♡♡♡♡ (feliz|calmo)\npersonalidade: Fala seco e curto, e pula a cada linha vermelha\.\n  HUMOR       █████████░  91  ponto forte\n/)
 })
 
 test('the card, the shop and the short replies are in the language; command names and item ids are not, and the columns line up by width on screen', async ($, on) => {
@@ -1983,11 +1983,11 @@ test('the card, the shop and the short replies are in the language; command name
   k.disk.pet = { coins: 60, affection: 3, days: 2, owned: ['mug'], animals: ['dog'] }
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const card = await cardOf($)
-  expect(card).toMatch(/^Miro，Cachito，狐狸，幼年   .{5} (开心|平静)\n性格：说话干脆利落，却见到红字就一惊。\n  机智 █████████░  91  最强\n  好奇 █████░░░░░  45\n  沉稳 █░░░░░░░░░  12  弱点\n/)
+  expect(card).toMatch(/^Miro，Hatchling，狐狸，幼年   .{5} (开心|平静)\n性格：说话干脆利落，却见到红字就一惊。\n  机智 █████████░  91  最强\n  好奇 █████░░░░░  45\n  沉稳 █░░░░░░░░░  12  弱点\n/)
   expect(card).toMatch(/\n\d+ 颗星；拥有咖啡杯。\/pet shop\n  装扮：配饰 咖啡杯\nbriefox 未开：\/pet briefox on 会把“Be brief\.”加入系统提示。.*\n点评未开：.*\/pet comments on/)
   expect(card).not.toMatch(/[!！]|undefined|\{\w+\}/)
   const shop = await cardOf($, 'shop')
-  expect(shop.split('\n')[0]).toMatch(/^CACHITO 商店 · 你有 \d+ 颗星$/)
+  expect(shop.split('\n')[0]).toMatch(/^HATCHLING 商店 · 你有 \d+ 颗星$/)
   // every price ends in the same column on screen, though the names differ in letters: 墨西哥草帽 is five characters and ten columns
   const rows = shop.split('\n').filter(r => /^  \w+ +\S+ +\d+/.test(r))
   expect(rows.length).toBe(SOLD.length + RULES.animals.length) // the things to wear, the coat, and the animals
@@ -2003,15 +2003,15 @@ test('the card, the shop and the short replies are in the language; command name
   expect(await cardOf($, 'wear none')).toBe('Miro 什么都没戴。')
   expect(await cardOf($, 'wear sombrero')).toMatch(/^还不是你的：sombrero。你有：shades, mug。/)
   expect(await cardOf($, 'animal')).toMatch(/^请选一个：fox, dog。\n其他动物每只 100 颗星，只需解锁一次：penguin, chick, bunny, cactus。\/pet shop <animal> 解锁。$/)
-  expect(await cardOf($, 'animal dog')).toBe('Cachito 现在是小狗了。')
+  expect(await cardOf($, 'animal dog')).toBe('Hatchling 现在是小狗了。')
   expect(await cardOf($, 'name')).toMatch(/^它叫 Miro。\/pet name <名字> 可以改/)
   expect(await cardOf($, 'pet')).toMatch(/^Miro: (收到。继续吧|行。再来一下就干活|抚摸已收到，一切正常|往左一点。对，就这儿)  \(摸了 1 次，\+\d+ 颗星\)$/)
-  expect(await cardOf($, 'hide')).toBe('Cachito 已隐藏。/pet show 让它回来。')
-  expect(await cardOf($, 'show')).toBe('Cachito 回来了。')
+  expect(await cardOf($, 'hide')).toBe('Hatchling 已隐藏。/pet show 让它回来。')
+  expect(await cardOf($, 'show')).toBe('Hatchling 回来了。')
   // Spanish, on the same pet
   await cardOf($, 'lang es')
-  expect(await cardOf($)).toMatch(/^Miro, Cachito: perro, cría .*\ncarácter: Lo dice seco y corto, y se sobresalta con cada línea roja\.\n  INGENIO    █████████░  91  punto fuerte\n(.*\n)+una caricia, la última ahora mismo\n/)
-  expect(await cardOf($, 'shop')).toMatch(/^TIENDA DE CACHITO · tienes \d+ estrellas\n\n  shades      gafas de sol +\d+  cara       tuyo\n  mug         una taza de café +\d+  accesorio  tuyo\n/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling: perro, cría .*\ncarácter: Lo dice seco y corto, y se sobresalta con cada línea roja\.\n  INGENIO    █████████░  91  punto fuerte\n(.*\n)+una caricia, la última ahora mismo\n/)
+  expect(await cardOf($, 'shop')).toMatch(/^TIENDA DE HATCHLING · tienes \d+ estrellas\n\n  shades      gafas de sol +\d+  cara       tuyo\n  mug         una taza de café +\d+  accesorio  tuyo\n/)
 })
 
 test('the bubble in Chinese: wrapped and bordered by width on screen, two columns a character, and the keys translated', async ($, on) => {
@@ -2066,9 +2066,9 @@ const bubbleOf = async ($: any) => { const ui = await $.ui.mount({ ...BAND, surf
 test('the diary is written by the mod itself, in the store: the first day, a cuddle milestone, the first thing bought, time at work; only times, numbers and names', async ($, on) => {
   const k = voiceKit($, on)
   forget(k.disk) // a newborn
-  await $.session.start({ cwd: '/home/me/secret-client/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/home/me/secret-client/hatchling', surface: 'terminal', isInteractive: true })
   expect(k.disk.diary.lines).toEqual([{ at: k.clock.now(), kind: 'first' }])
-  expect(k.disk.diary.folders).toEqual({ cachito: 1 }) // the folder's name, never its path
+  expect(k.disk.diary.folders).toEqual({ hatchling: 1 }) // the folder's name, never its path
   await k.clock.advance(9_000)
   // a turn with a command that fails and a file read: none of it reaches the diary
   k.v.fail = true
@@ -2079,7 +2079,7 @@ test('the diary is written by the mod itself, in the store: the first day, a cud
   elsewhere(k.disk, { cuddles: 9 })
   k.disk.pet = { ...k.disk.pet, coins: 99 }
   k.state = {}
-  await $.session.start({ cwd: '/home/me/secret-client/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/home/me/secret-client/hatchling', surface: 'terminal', isInteractive: true })
   await cardOf($, 'pet')
   await cardOf($, 'buy mug')
   await cardOf($, 'buy scarf')
@@ -2088,12 +2088,12 @@ test('the diary is written by the mod itself, in the store: the first day, a cud
   expect(kept).not.toMatch(/npm|hunter2|secret|notes|SECRET|boom|plan|tests pass|home\/me/)
   for (const l of k.disk.diary.lines) expect(Object.keys(l).filter(x => !['at', 'kind', 'n', 'name'].includes(x))).toEqual([])
   // the work report: counts and the folder's name, from what the chats left; nothing of a command, a file or a prompt
-  expect(Object.values(k.disk.work.days)).toEqual([{ chats: 2, turns: 2, files: 0, folders: { cachito: 2 } }])
+  expect(Object.values(k.disk.work.days)).toEqual([{ chats: 2, turns: 2, files: 0, folders: { hatchling: 2 } }])
   expect(JSON.stringify(k.disk.work)).not.toMatch(/npm|hunter2|secret|notes|SECRET|boom|plan|tests pass|home\/me/)
-  expect(await cardOf($, 'diary')).toMatch(/^WORK DIARY\ntoday: 2 chats, 1 folder, 2 turns, 0 files changed\n  folders: cachito 2\nyesterday: nothing kept\nCounts and folder names only/)
+  expect(await cardOf($, 'diary')).toMatch(/^WORK DIARY\ntoday: 2 chats, 1 folder, 2 turns, 0 files changed\n  folders: hatchling 2\nyesterday: nothing kept\nCounts and folder names only/)
   // /pet diary lines shows all of the pet's own diary; /pet diary clear empties both
   const page = await cardOf($, 'diary lines')
-  expect(page).toMatch(new RegExp(`^CACHITO DIARY · 3 of 40 lines\\n\\n${dated(k.clock.now())}  first day together\\n.*  10 cuddles\\n.*  first thing bought: a coffee mug\\n\\ncounted for the habits: chats opened by folder: cachito 2; .*; at work today: 10 min\\nOnly times, counts and folder names, kept on this machine`))
+  expect(page).toMatch(new RegExp(`^HATCHLING DIARY · 3 of 40 lines\\n\\n${dated(k.clock.now())}  first day together\\n.*  10 cuddles\\n.*  first thing bought: a coffee mug\\n\\ncounted for the habits: chats opened by folder: hatchling 2; .*; at work today: 10 min\\nOnly times, counts and folder names, kept on this machine`))
   expect(await cardOf($, 'diary clear')).toBe('The diary is empty now.')
   expect(k.disk.diary.lines).toEqual([])
   expect(await cardOf($, 'diary lines')).toMatch(/^The diary is empty\. The pet writes it by itself/)
@@ -2111,7 +2111,7 @@ test('no diary without a person at the prompt', async ($, on) => {
 
 test('no diary under the bench, even with a person at the prompt', async ($, on) => {
   const k = voiceKit($, on)
-  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  k.env.HATCHLING_BENCH = '/var/tmp/bench'
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.turn()
   await cardOf($, 'pet')
@@ -2380,8 +2380,8 @@ test('the bubble is not always there: a phrase stays about 12 seconds, longer wi
   const k = voiceKit($, on)
   const T0 = Date.UTC(2026, 10, 12, 12)
   k.disk.pet = { coins: 3, affection: 3, days: 1, day: dayOf(T0), owned: [] }
-  k.disk.chats = { other: { cwd: '/w/cachito', at: T0 - 20 * 60_000, done: false } } // a chat left here mid-turn: the greeting asks
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  k.disk.chats = { other: { cwd: '/w/hatchling', at: T0 - 20 * 60_000, done: false } } // a chat left here mid-turn: the greeting asks
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const look = async (surface = 'terminal') => {
     const ui = await $.ui.mount({ ...BAND, surface })
     const open = !!(await ui.find({ type: 'Box', key: 'bubble' })), texts = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text as string), keys = (await ui.findAll({ type: 'Button' })).map((x: any) => x.key as string)
@@ -2429,9 +2429,9 @@ test('a calm pet moves a little: a gesture now and then, never two within 8 seco
   const k = voiceKit($, on)
   const T0 = Date.UTC(2026, 10, 12, 12)
   k.disk.pet = { ...RULES.grownAt, coins: 3, day: dayOf(T0), owned: [] }
-  k.disk.chats = { other: { cwd: '/w/cachito', at: T0 - 20 * 60_000, done: false } }
+  k.disk.chats = { other: { cwd: '/w/hatchling', at: T0 - 20 * 60_000, done: false } }
   {
-    await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+    await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
     const shot = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; const open = !!(await ui.find({ type: 'Box', key: 'bubble' })); await ui.unmount(); return { cells: String(r.cells), rows: Number(r.rows), open } }
     /** One look every half second: the drawings seen, and when the drawing was not the still one. */
     const watch = async (seconds: number, still: string) => { const moved: number[] = [], seen = new Set<string>(); for (let i = 0; i < seconds * 2; i++) { await k.clock.advance(500); const s = await shot(); seen.add(s.cells); if (s.rows !== rows) moved.push(i) } return { moved, seen } } // a gesture is drawn on the taller canvas; a blink is not, and is not counted
@@ -2472,7 +2472,7 @@ test('news of another chat with the comments on: the small model is told the fol
   const k = voiceKit($, on, { voice: true })
   const T0 = Date.UTC(2026, 10, 12, 12), MIN = 60_000
   k.disk.pet = { coins: 3, affection: 3, days: 1, day: dayOf(T0), owned: [] }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   k.v.reply = { isAnswered: true, text: 'The vodmax chat is done. I heard it sigh.', usage: USAGE }
   k.disk.chats = { ...k.disk.chats, other: { cwd: '/home/me/secret-client/vodmax', at: T0 + 1_000, done: true, took: 7 * MIN } }
   await k.clock.advance(10_000)
@@ -2497,7 +2497,7 @@ test('news of another chat with the comments on: the small model is told the fol
 test('animals cost stars: the one a pet is born as is free, each other is unlocked once for 100 stars in the shop and kept, and the person goes freely among the ones they have, by /pet animal or the skin menu', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   k.disk.pet = { coins: 150, affection: 150, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const look = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const keys = (await ui.findAll({ type: 'Button' })).map((b: any) => b.key as string), texts = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text as string), r = JSON.stringify((await ui.find({ type: 'Raster' }))!.props.cells); await ui.unmount(); return { keys, texts, r } }
   const press = async (key: string) => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key }); await k.clock.advance(1); await ui.unmount() }
 
@@ -2516,7 +2516,7 @@ test('animals cost stars: the one a pet is born as is free, each other is unlock
 
   // unlocked in the shop: paid once, shown at once, kept
   const fox = (await look()).r
-  expect(await cardOf($, 'shop dog')).toBe('Unlocked the dog for 100 stars, 50 left: it is yours for good, and Cachito is one now. /pet animal <name> switches among yours.')
+  expect(await cardOf($, 'shop dog')).toBe('Unlocked the dog for 100 stars, 50 left: it is yours for good, and Hatchling is one now. /pet animal <name> switches among yours.')
   expect(k.disk.pet).toMatchObject({ coins: 50, affection: 150, animals: ['dog'] })
   expect(prefsOf(k.disk).species).toBe('dog')
   expect((await look()).r).not.toBe(fox)
@@ -2527,8 +2527,8 @@ test('animals cost stars: the one a pet is born as is free, each other is unlock
   expect(await cardOf($, 'shop')).toMatch(/\n  dog +dog +100  animal +yours, shown\n  bunny +bunny +100  animal\n  fox +fox +100  animal +yours\n/)
 
   // free among the ones owned: by command, and by the animal part of the skin menu
-  expect(await cardOf($, 'animal fox')).toBe('Cachito is now a fox.')
-  expect(await cardOf($, 'animal dog')).toBe('Cachito is now a dog.')
+  expect(await cardOf($, 'animal fox')).toBe('Hatchling is now a fox.')
+  expect(await cardOf($, 'animal dog')).toBe('Hatchling is now a dog.')
   expect(k.disk.pet.coins).toBe(50)
   expect(await cardOf($, 'animal')).toMatch(/^Pick one of: fox, dog\.\nOthers, 100 stars each, once: penguin, chick, bunny, cactus\./)
   expect(await cardOf($, 'skin')).toMatch(/^Miro's skin\n  animal  dog\n\/pet wear <item>/)
@@ -2546,11 +2546,11 @@ test('animals cost stars: the one a pet is born as is free, each other is unlock
 test('a pet of before the prices shown as another animal than its own keeps both; a pet born as the rare one keeps it and sees it in the shop with no price', async ($, on) => {
   const k = home(on, {}, { species: 'bunny', born: 'axolotl', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   k.disk.pet = { coins: 20, affection: 20, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   expect(k.disk.pet).toMatchObject({ coins: 20, animals: ['bunny'] }) // kept for nothing
   expect(await cardOf($, 'animal')).toMatch(/^Pick one of: axolotl, bunny\.\nOthers, 100 stars each, once: penguin, chick, dog, fox, cactus\./)
-  expect(await cardOf($, 'animal axolotl')).toBe('Cachito is now a axolotl.')
-  expect(await cardOf($, 'animal bunny')).toBe('Cachito is now a bunny.')
+  expect(await cardOf($, 'animal axolotl')).toBe('Hatchling is now a axolotl.')
+  expect(await cardOf($, 'animal bunny')).toBe('Hatchling is now a bunny.')
   expect(await cardOf($, 'shop')).toMatch(/\n  bunny +bunny +100  animal +yours, shown\n  fox +fox +100  animal\n  cactus +cactus +100  animal\n  axolotl +axolotl +–  animal +yours\n\n/)
 })
 
@@ -2630,7 +2630,7 @@ test('E18: the band fits the width it is given: the bubble narrows, then the but
   const ALL = ['shades', 'mug', 'scarf', 'cap', 'lamp', 'headphones', 'backpack', 'suitcase', 'sombrero', 'sneakers', 'skateboard', 'golden']
   k.disk.pet = { coins: 2000, affection: 600, days: 30, day: dayOf(T0), owned: ALL }
   on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const WIDTHS = [40, 60, 80, 100]
   const fits = async (what: string) => { for (const bodyColumns of WIDTHS) { const d = await drawnWidth($, { bodyColumns }); expect([what, bodyColumns, d.total <= bodyColumns], JSON.stringify(d)).toEqual([what, bodyColumns, true]) } }
   // a greeting in the bubble, with every thing on in turn: the accessories and the skateboard make the drawing wider and taller
@@ -2642,7 +2642,7 @@ test('E18: the band fits the width it is given: the bubble narrows, then the but
   // the bubble is still there at every one of these widths, narrower: the same words on more lines
   k.disk['pref.wear'] = 'none'; await k.clock.advance(10_500)
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any); k.state = {}
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const wide = await drawnWidth($, { bodyColumns: 100 }), narrow = await drawnWidth($, { bodyColumns: 40 })
   expect([wide.bubble, narrow.bubble]).toEqual([true, true])
   expect([wide.head, narrow.head, narrow.own]).toEqual(['Miro  ★ 2000', 'Miro', ['skin', 'pet']]) // in the row of the name the stars gave way, the pet's buttons are all there
@@ -2677,7 +2677,7 @@ test('E18: the band fits the width it is given: the bubble narrows, then the but
 test('E19: with the bubble closed the buttons skin and pet are in the row of the name, beside the pet: no row of buttons under it, and no [-] of ours beside the engine\'s', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
   k.disk.pet = { coins: 4, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['mug'] }
-  await $.session.start({ cwd: '/w/cachito', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   await (await $.ui.mount({ ...BAND, surface: 'terminal' })).unmount() // the greeting is up
   await k.clock.advance(40_000) // and had its time
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -2783,11 +2783,11 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   expect(await first('WEAR Mug')).toMatch(/^a coffee mug (goes on, accessory|comes off)\.$/)
   expect(await first('Wear PLAIN')).toMatch(/^Miro wears/)
   expect(await first('wear Golden')).toBe('a golden coat goes on, coat.')
-  expect(await first('Shop')).toBe('CACHITO SHOP · you have 120 stars')
-  expect(await first('ANIMAL Fox')).toBe('Cachito is now a fox.')
-  expect(await first('Lang ES')).toBe('Cachito ahora habla español.')
-  expect(await first('LANG en')).toBe('Cachito now speaks English.')
-  expect(await first('Hide')).toBe('Cachito is hidden. /pet show brings it back.')
+  expect(await first('Shop')).toBe('HATCHLING SHOP · you have 120 stars')
+  expect(await first('ANIMAL Fox')).toBe('Hatchling is now a fox.')
+  expect(await first('Lang ES')).toBe('Hatchling ahora habla español.')
+  expect(await first('LANG en')).toBe('Hatchling now speaks English.')
+  expect(await first('Hide')).toBe('Hatchling is hidden. /pet show brings it back.')
   expect(await first('SHOW')).not.toMatch(/^No \/pet/)
   expect(prefsOf(k.disk).hidden).toBe(false)
   // a name keeps its capitals
@@ -2796,7 +2796,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // no such command: one line, with where the commands are; never the card in silence
   for (const [typed, verb] of [['frobnicate', 'frobnicate'], ['/pet', '/pet'], ['Budgetx 5', 'budgetx'], ['weer mug', 'weer']]) expect(await cardOf($, typed)).toBe(`No /pet ${verb}. /pet help lists the commands.`)
   expect(await cardOf($, `x${'\u001b[31m'}y`)).toBe('No /pet xy. /pet help lists the commands.')
-  expect(await first('')).toMatch(/^McDuff, Cachito the/) // the card is /pet alone
+  expect(await first('')).toMatch(/^McDuff, Hatchling the/) // the card is /pet alone
   // an argument that is not understood
   expect(await cardOf($, 'lang fr')).toBe('No language fr. There are: en, es, pt, zh.')
   expect(await cardOf($, 'lean maybe')).toBe('/pet briefox takes on or off, not maybe.')
@@ -2818,7 +2818,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // the short answers are said in the pet's language: adoption, the demo, the budget that is gone
   await cardOf($, 'lang es')
   expect(await cardOf($, 'adopt')).toBe('No hay ningún /buddy en tu configuración de Claude Code: nada que adoptar.')
-  expect(await cardOf($, 'demo')).toMatch(/^Demo de Cachito: .* \(5 s cada uno\)\.$/)
+  expect(await cardOf($, 'demo')).toMatch(/^Demo de Hatchling: .* \(5 s cada uno\)\.$/)
   expect(await cardOf($, 'budget 5')).toMatch(/^El presupuesto de contexto se quitó/)
   expect(await cardOf($, 'nada')).toBe('No existe /pet nada. /pet help muestra los comandos.')
   // typed with a capital, /pet Say is still for the pet alone: dropped, never a turn of the chat
@@ -2955,7 +2955,7 @@ test('which chat needs me: with the comments on the small model may say the news
 
 test('which chat needs me: under the bench no chat leaves a mark and there is no board', async ($, on) => {
   const k = voiceKit($, on, { voice: false })
-  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  k.env.HATCHLING_BENCH = '/var/tmp/bench'
   await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
   await k.clock.advance(30_000)
@@ -3017,7 +3017,7 @@ test('the plain coats: bought, on at once, a colour with no glint that things to
   expect(await cardOf($, 'wear pastel')).toMatch(/^Not yours yet: pastel\./)
   expect(await cardOf($, 'shop pastel')).toBe('Bought a pastel coat for 150 stars, 210 left. Miro wears it now, coat: /pet wear pastel takes it off.')
   expect(await has(WHITE, SKY, PINK, GLINT, EYE)).toEqual([false, true, true, false, true]) // the bunny's white is gone, its eyes are not, and nothing shines
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the bunny, .*(\n.*)*\n210 stars; owns a pastel coat\. \/pet shop\n  wears coat: a pastel coat$/m) // golden is the golden coat's word
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the bunny, .*(\n.*)*\n210 stars; owns a pastel coat\. \/pet shop\n  wears coat: a pastel coat$/m) // golden is the golden coat's word
   expect(await cardOf($, 'shop terminal')).toBe('Bought a terminal coat for 200 stars, 10 left. Miro wears it now, coat: /pet wear terminal takes it off.')
   expect(await has(WHITE, SKY, PHOSPHOR, GLOW, GLINT, EYE)).toEqual([false, false, true, true, false, true])
   expect(await cardOf($, 'shop')).toMatch(/\n  pastel +a pastel coat +150  coat +yours\n  terminal +a terminal coat +200  coat +yours, worn\n  golden +a golden coat +300  coat\n/)
@@ -3114,14 +3114,14 @@ test("the founder's eggshell for a pet first started on this version after the d
 
 test("the founder's eggshell under the bench: the same rule on the bench's own pet, in time and after the date, and nothing of it on the disk", async ($, on) => {
   const k = home(on, {})
-  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  k.env.HATCHLING_BENCH = '/var/tmp/bench'
   await $.session.start({ ...START, isInteractive: false })
   expect(await cardOf($)).toMatch(/owns half an eggshell\. \/pet shop\n  wears head: half an eggshell\n/)
   expect(k.disk.pet).toBeUndefined()
 })
 test("the founder's eggshell under the bench after the date: none", async ($, on) => {
   const k = home(on, {}, undefined, AFTER)
-  k.env.CACHITO_BENCH = '/var/tmp/bench'
+  k.env.HATCHLING_BENCH = '/var/tmp/bench'
   await $.session.start({ ...START, isInteractive: false })
   expect(await cardOf($)).toMatch(/owns nothing yet/)
   expect(k.disk.pet).toBeUndefined()
@@ -3176,34 +3176,34 @@ test('/pet share: a colour picture of the pet written by Node in the config fold
   on('process.run', (_: any, e: any) => { ran.push({ argv: e.argv, stdin: e.init.stdin }); return { value: { exitCode, stdout: '', stderr: '' } } as any })
   await $.session.start({ ...START, cwd: '/w/secretproj' })
   const said = await cardOf($, 'share')
-  expect(said).toBe('Saved a picture of the pet: /home/me/.claude/cachito-share/cachito-miro.png\nAttach it to a post. Nothing about your work is on it.')
+  expect(said).toBe('Saved a picture of the pet: /home/me/.claude/hatchling-share/hatchling-miro.png\nAttach it to a post. Nothing about your work is on it.')
   const one = shared(ran[0]!)
-  expect(one.argv).toEqual(['/usr/bin/node', expect.stringMatching(/\/engine\/share-save\.js$/), '/home/me/.claude/cachito-share/cachito-miro.png'])
+  expect(one.argv).toEqual(['/usr/bin/node', expect.stringMatching(/\/engine\/share-save\.js$/), '/home/me/.claude/hatchling-share/hatchling-miro.png'])
   expect(stats.some(p => p.startsWith('/w/secretproj') || !p.startsWith('/'))).toBe(false) // the project's own folders were not even looked in
   // the words drawn are these and no others: the name, the animal, the stage and what is special, the strong point, the stars, the link
-  expect(one.words).toBe(wordsOf(['Miro', 'Cachito the fox', 'crown · golden · founder', 'Checks everything twice', '★ 123 stars', 'github.com/silirim/cachito-pet']))
+  expect(one.words).toBe(wordsOf(['Miro', 'Hatchling the fox', 'crown · golden · founder', 'Checks everything twice', '★ 123 stars', 'github.com/silirim/hatchling']))
   expect(one.pet).toBeGreaterThan(5000) // and the pet, in colours of its own
   expect(k.writes).toEqual([]) // nothing written by the mod itself
   // the picture is in English whatever the pet's language; what is said about it is in that language
   await cardOf($, 'lang es')
-  expect(await cardOf($, 'share')).toMatch(/^Guardé una imagen de la mascota: \/home\/me\/\.claude\/cachito-share\/cachito-miro\.png\n/)
+  expect(await cardOf($, 'share')).toMatch(/^Guardé una imagen de la mascota: \/home\/me\/\.claude\/hatchling-share\/hatchling-miro\.png\n/)
   expect(ran[1]!.stdin).toBe(ran[0]!.stdin)
   await cardOf($, 'lang en')
   // whatever the name, the file is in the folder; the config folder Claude Code was given is the one used
   k.env.CLAUDE_CONFIG_DIR = '/cfg'
-  for (const [name, file] of [['../../etc/x', 'cachito-etcx.png'], ["a'b - c", 'cachito-a-b-c.png'], ['--', 'cachito-pet.png']] as const) {
+  for (const [name, file] of [['../../etc/x', 'hatchling-etcx.png'], ["a'b - c", 'hatchling-a-b-c.png'], ['--', 'hatchling-pet.png']] as const) {
     k.disk['pref.name'] = name
     k.state = {}
-    expect(await cardOf($, 'share')).toMatch(new RegExp(`: /cfg/cachito-share/${file}\n`))
-    expect(ran.at(-1)!.argv[2]).toBe(`/cfg/cachito-share/${file}`)
+    expect(await cardOf($, 'share')).toMatch(new RegExp(`: /cfg/hatchling-share/${file}\n`))
+    expect(ran.at(-1)!.argv[2]).toBe(`/cfg/hatchling-share/${file}`)
   }
   // Node fails, or there is none: the same picture as an SVG, written by the mod, and said
   exitCode = 1
-  expect(await cardOf($, 'share')).toMatch(/^Saved a picture of the pet as an SVG, since `node` is not on the PATH to write a PNG: \/cfg\/cachito-share\/cachito-pet\.svg\n/)
+  expect(await cardOf($, 'share')).toMatch(/^Saved a picture of the pet as an SVG, since `node` is not on the PATH to write a PNG: \/cfg\/hatchling-share\/hatchling-pet\.svg\n/)
   k.env.PATH = '/opt/empty'
   const runs = ran.length
-  expect(await cardOf($, 'share')).toMatch(/cachito-pet\.svg\n/)
-  expect([ran.length, k.writes]).toEqual([runs, ['/cfg/cachito-share/cachito-pet.svg', '/cfg/cachito-share/cachito-pet.svg']])
+  expect(await cardOf($, 'share')).toMatch(/hatchling-pet\.svg\n/)
+  expect([ran.length, k.writes]).toEqual([runs, ['/cfg/hatchling-share/hatchling-pet.svg', '/cfg/hatchling-share/hatchling-pet.svg']])
 })
 
 test('/pet share for a rare baby born after the founders: it says so, with no founder and no golden; a folder that cannot be written is said', async ($, on) => {
@@ -3214,10 +3214,10 @@ test('/pet share for a rare baby born after the founders: it says so, with no fo
   const ran: { argv: string[], stdin: string }[] = []
   on('process.run', (_: any, e: any) => { ran.push({ argv: e.argv, stdin: e.init.stdin }); if (ran.length > 1) throw new Error('EACCES'); return { value: { exitCode: 0, stdout: '', stderr: '' } } as any })
   await $.session.start(START)
-  expect(await cardOf($, 'share')).toMatch(/cachito-lola\.png\n/)
-  expect(shared(ran[0]!).words).toBe(wordsOf(['Lola', 'Cachito the axolotl', 'baby · a rare one', 'Says it dry and short', '★ 1 star', 'github.com/silirim/cachito-pet']))
+  expect(await cardOf($, 'share')).toMatch(/hatchling-lola\.png\n/)
+  expect(shared(ran[0]!).words).toBe(wordsOf(['Lola', 'Hatchling the axolotl', 'baby · a rare one', 'Says it dry and short', '★ 1 star', 'github.com/silirim/hatchling']))
   ;(k as any).sealed = true // nothing can be written
-  expect(await cardOf($, 'share')).toBe('The picture could not be saved: the folder cachito-share in your Claude Code config folder could not be written.')
+  expect(await cardOf($, 'share')).toBe('The picture could not be saved: the folder hatchling-share in your Claude Code config folder could not be written.')
 })
 
 test('/pet call me: the pet learns the person\'s name only from what is typed there, cleaned and cut; says it one cuddle in three; forgets it when told; and reads a name nowhere else', async ($, on) => {
@@ -3560,7 +3560,7 @@ test('/pet model: haiku as installed; a choice is kept, checked for its shape on
 test('a model that is not there: the pet stays silent, never takes another model, and says so in a toast once a day; any other failure is silent', async ($, on) => {
   const k = voiceKit($, on, { voice: true, model: 'claude-gone-1' })
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  const GONE = 'Cachito: the model claude-gone-1 did not answer. Choose another with /pet model.'
+  const GONE = 'Hatchling: the model claude-gone-1 did not answer. Choose another with /pet model.'
   const told = () => k.toasts.filter(t => /did not answer|no respondió/.test(t))
   const say = async () => { await k.clock.advance(6_000); await sayTo($, 'hello'); await k.settle() }
   // every other failure: the network, an overload, a wrong request, the account, a call out of time, no text
@@ -3600,7 +3600,7 @@ test('a model that is not there: the pet stays silent, never takes another model
   // another model that is not there either is told of the same day; one that answers is not
   await cardOf($, 'model claude-gone-2')
   await say()
-  expect(told().at(-1)).toBe('Cachito: the model claude-gone-2 did not answer. Choose another with /pet model.')
+  expect(told().at(-1)).toBe('Hatchling: the model claude-gone-2 did not answer. Choose another with /pet model.')
   expect(told().length).toBe(3)
   k.v.reply = { isAnswered: true, text: 'Here I am.', usage: USAGE }
   await cardOf($, 'model default')
@@ -3613,7 +3613,7 @@ test('a model that is not there: the pet stays silent, never takes another model
   await cardOf($, 'model claude-gone-3')
   k.v.reply = { isAnswered: false, reason: 'api-error', status: 404, error: 'model_not_found', usage }
   await say()
-  expect(told().at(-1)).toBe('Cachito: el modelo claude-gone-3 no respondió. Elige otro con /pet model.')
+  expect(told().at(-1)).toBe('Hatchling: el modelo claude-gone-3 no respondió. Elige otro con /pet model.')
 })
 
 // The terminal's drawing, pinned: the cells of a fixed pet, bare and dressed, on a dark and on a light theme, as they were
@@ -3721,7 +3721,7 @@ test('/pet where: a line a surface, with when a client attached, how many times 
   on('session.attach', (_: any, e: any) => ({ clientId: e.clientId }) as any)
   await $.session.start(START)
   expect((await cardOf($, 'where')).split('\n')).toEqual([
-    'Where Cachito draws (counts since the mod loaded, in memory only; the roster does not tell a mod which elements an app draws)',
+    'Where Hatchling draws (counts since the mod loaded, in memory only; the roster does not tell a mod which elements an app draws)',
     '  terminal  in the roster; the terminal raises no attach; band asked 0 times',
   ])
   roster = ['terminal', 'mobile', 'vscode']
@@ -3762,23 +3762,23 @@ const MOVE_DAY = dated(EARLY)
 test('/pet export then /pet import on an empty store gives the same pet: the file is the person\'s alone, holds no chat mark and no spoken line, and the import asks first and saves the pet that was there', async ($, on) => {
   const k = home(on, {}, MOVED), m = moving(on, k)
   k.disk.pet = structuredClone(MOVED_PET)
-  k.disk.diary = diaryOpened(diaryOf(undefined), { now: EARLY - 86_400_000, folder: 'cachito', born: false })
+  k.disk.diary = diaryOpened(diaryOf(undefined), { now: EARLY - 86_400_000, folder: 'hatchling', born: false })
   k.disk['chat.other'] = { cwd: '/w/secretproj', at: EARLY - 1000, done: true }
   k.disk.voice = { day: dayOf(EARLY), today: 3, lines: 9, input: 5000, output: 400, last: ['a secret spoken line'] }
   await $.session.start({ ...START, cwd: '/w/secretproj' })
-  const file = `/home/me/.claude/cachito-share/cachito-miro-${MOVE_DAY}.json`
+  const file = `/home/me/.claude/hatchling-share/hatchling-miro-${MOVE_DAY}.json`
   expect(await cardOf($, 'export')).toBe(`Saved Miro to a file, to take to another computer: ${file}\nCopy it there and run /pet import <path>. It holds the pet, your choices and the diary, and the diary carries folder names: look at it before you send it to anyone.`)
   // Node writes it, with the mode 0600 (engine/move-save.js): the mod itself writes nothing
   expect(m.ran).toEqual([['/usr/bin/node', expect.stringMatching(/\/engine\/move-save\.js$/), file]])
   expect(k.writes).toEqual([])
   const text = m.files[file]!, out = JSON.parse(text)
-  expect(Object.keys(out)).toEqual(['cachito', 'format', 'exported', 'pet', 'prefs', 'diary'])
-  expect([out.cachito, out.format]).toEqual(['pet', 1])
+  expect(Object.keys(out)).toEqual(['hatchling', 'format', 'exported', 'pet', 'prefs', 'diary'])
+  expect([out.hatchling, out.format]).toEqual(['pet', 1])
   expect(out.pet).toMatchObject(MOVED_PET)
   expect(out.prefs).toMatchObject({ ...MOVED, voiceAsked: true })
   expect(Object.keys(out.prefs).sort()).toEqual(KNOWN.filter(key => key !== 'missing'))
   expect(out.diary).toEqual(k.disk.diary)
-  expect(Object.keys(out.diary.folders)).toEqual(['cachito', 'secretproj']) // the diary carries folder names, as the line printed says: names, never a path
+  expect(Object.keys(out.diary.folders)).toEqual(['hatchling', 'secretproj']) // the diary carries folder names, as the line printed says: names, never a path
   // not in the file: the marks of the chats (full paths, times of turns), the pet's last lines, the day's count of comments, the session
   expect(text).not.toMatch(/\/w\/|spoken|chat\.|"cwd"|"last"|"today":3|session|issues|"missing"/)
 
@@ -3796,15 +3796,15 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   // the first call only tells: the pet of the file, the pet here that it would replace, and how to say yes
   const before = JSON.stringify(k.disk), asked = await cardOf($, 'import ~/my pets/miro.json')
   expect(asked.split('\n')).toEqual([
-    `In the file: Miro, Cachito the penguin, adult, 123 stars, affection 456 over 9 days of use. Saved on ${MOVE_DAY}.`,
-    expect.stringMatching(new RegExp(`^Here now: ${local}, Cachito the \\w+, baby, \\d+ stars?, affection \\d+ over \\d+ days? of use\\. It would be replaced, after a copy of it is saved\\.$`)),
+    `In the file: Miro, Hatchling the penguin, adult, 123 stars, affection 456 over 9 days of use. Saved on ${MOVE_DAY}.`,
+    expect.stringMatching(new RegExp(`^Here now: ${local}, Hatchling the \\w+, baby, \\d+ stars?, affection \\d+ over \\d+ days? of use\\. It would be replaced, after a copy of it is saved\\.$`)),
     'To do it: /pet import ~/my pets/miro.json yes',
   ])
   expect([JSON.stringify(k.disk), m.ran, k.writes]).toEqual([before, [], []])
   // with yes: the pet here is saved first, and its path said; then the pet of the file is the pet
   const done = await cardOf($, 'import ~/my pets/miro.json yes')
   const backup = m.ran[0]![2]!
-  expect(backup).toMatch(new RegExp(`^/home/me/\\.claude/cachito-share/cachito-[\\p{L}\\p{N}-]+-${MOVE_DAY}-backup-\\d{6}\\.json$`, 'u'))
+  expect(backup).toMatch(new RegExp(`^/home/me/\\.claude/hatchling-share/hatchling-[\\p{L}\\p{N}-]+-${MOVE_DAY}-backup-\\d{6}\\.json$`, 'u'))
   expect(done).toBe(`Miro moved in. The marks of this computer's chats stay.\nThe pet that was here is saved: ${backup}`)
   expect(JSON.parse(m.files[backup]!).prefs.name).toBe(local)
   expect(m.ran.length).toBe(1)
@@ -3812,7 +3812,7 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   expect(k.disk.pet).toEqual(out.pet)
   expect(prefsOf(k.disk)).toMatchObject({ ...out.prefs, missing: '' })
   expect(k.disk.diary).toEqual(out.diary)
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the penguin, adult/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the penguin, adult/)
   expect(await cardOf($)).toMatch(/\n  wears head: a sombrero\n/)
   // what is this computer's own stays: the marks of its chats, the lines the pet said here and the day's count
   expect(k.disk['chat.there']).toEqual({ cwd: '/w/elsewhere', at: EARLY - 2000, done: true })
@@ -3862,7 +3862,7 @@ test('/pet import of a hostile file: said in one line, and nothing is read furth
   m.kinds['/t/folder'] = 'dir'
   await refused('/t/folder', /: file: not a regular file$/)
   // a huge file is not even read
-  m.files['/t/huge.json'] = `{"cachito":"pet","pad":"${'x'.repeat(300 * 1024)}"}`
+  m.files['/t/huge.json'] = `{"hatchling":"pet","pad":"${'x'.repeat(300 * 1024)}"}`
   await refused('/t/huge.json', /: file: larger than 256 KiB$/)
   expect(m.fileReads).not.toContain('/t/huge.json')
   m.files['/t/broken.json'] = good.slice(0, 200)
@@ -3874,7 +3874,7 @@ test('/pet import of a hostile file: said in one line, and nothing is read furth
   await refused(bad('item', o => { o.pet.owned = ['eggshell', 'jetpack'] }), /: pet\.owned: "jetpack" is not an item or a coat known here$/)
   await refused(bad('animal', o => { o.prefs.species = 'unicorn' }), /: prefs\.species: the animal "unicorn" is not known here: if it comes from a skin pack, install the pack first$/)
   await refused(bad('coat', o => { o.prefs.wear = 'sombrero mint' }), /: prefs\.wear: "mint" is not a thing or a coat known here/)
-  await refused(bad('newer', o => { o.format = 2 }), /: format: the file was made by a newer Cachito \(format 2, this one reads 1\): update Cachito here, then import it$/)
+  await refused(bad('newer', o => { o.format = 2 }), /: format: the file was made by a newer Hatchling \(format 2, this one reads 1\): update Hatchling here, then import it$/)
   // path tricks: a name that would be a path, a field that names a file, a key nobody knows
   await refused(bad('path', o => { o.prefs.name = '../../../etc/cron.d/x' }), /: prefs\.name: not of the right kind, or out of range$/)
   await refused(bad('path2', o => { o.prefs.callme = '/etc/passwd' }), /: prefs\.callme: /)
@@ -3882,7 +3882,7 @@ test('/pet import of a hostile file: said in one line, and nothing is read furth
   await refused(bad('path4', o => { o.prefs.dir = '/tmp' }), /: prefs: unknown field "dir"$/)
   // refused the same without yes: a file is judged before anything is asked
   await refused(bad('ask', o => { o.pet.days = -1 }), /: pet\.days: /, '')
-  expect(await cardOf($)).toMatch(/^Miro, Cachito the penguin/)
+  expect(await cardOf($)).toMatch(/^Miro, Hatchling the penguin/)
   // the only paths the mod opened are the ones the person named
   expect(m.fileReads.every(p => p.startsWith('/t/'))).toBe(true)
 })
@@ -3896,7 +3896,7 @@ test('/pet export with no Node: the mod writes the file and chmod closes it, or 
   m.files['/t/miro.json'] = good.replace('"Miro"', '"Nube"')
   k.env.PATH = '/opt/empty' // neither node nor chmod
   m.ran.length = 0
-  const file = `/home/me/.claude/cachito-share/cachito-miro-${MOVE_DAY}.json`
+  const file = `/home/me/.claude/hatchling-share/hatchling-miro-${MOVE_DAY}.json`
   expect((await cardOf($, 'export')).split('\n')).toEqual([expect.stringMatching(/^Saved Miro to a file/), 'The file could not be closed to the other users of this computer (mode 0600): they may read it.', expect.stringMatching(/^Copy it there/)])
   expect([m.ran, k.writes]).toEqual([[], [file]])
   // chmod found on the PATH: run by its absolute path on the file, and no warning
@@ -3907,13 +3907,13 @@ test('/pet export with no Node: the mod writes the file and chmod closes it, or 
   k.env.PATH = '/opt/empty';
   (k as any).sealed = true
   const before = JSON.stringify(k.disk)
-  expect(await cardOf($, 'export')).toBe('The pet could not be saved to a file: the store could not be read, or the folder cachito-share in your Claude Code config folder could not be written.')
+  expect(await cardOf($, 'export')).toBe('The pet could not be saved to a file: the store could not be read, or the folder hatchling-share in your Claude Code config folder could not be written.')
   expect(await cardOf($, 'import /t/miro.json yes')).toBe('Nothing imported: the pet that is here could not be saved to a file first.')
   expect(JSON.stringify(k.disk)).toBe(before)
   // the language of the fixed text is the pet's
   await cardOf($, 'lang es')
   expect(await cardOf($, 'import')).toBe('Indica el archivo: /pet import <ruta>. Lo crea /pet export en el otro ordenador.')
-  expect(await cardOf($, 'import /t/miro.json')).toMatch(/^En el archivo: Nube, Cachito: pingüino, adulto, 123 estrellas, .*\nAquí ahora: Miro, .*\nPara hacerlo: \/pet import \/t\/miro\.json yes$/)
+  expect(await cardOf($, 'import /t/miro.json')).toMatch(/^En el archivo: Nube, Hatchling: pingüino, adulto, 123 estrellas, .*\nAquí ahora: Miro, .*\nPara hacerlo: \/pet import \/t\/miro\.json yes$/)
 })
 
 
@@ -3998,7 +3998,7 @@ test('reminders: back after a pause the pet says them again at the next prompt; 
   expect(k.v.calls).toEqual([])
 })
 
-test('the watcher: claude agents --json adds the chats that run without Cachito to the count, the list and the news; one toast for a permission, a notification only with /pet alerts on', async ($, on) => {
+test('the watcher: claude agents --json adds the chats that run without Hatchling to the count, the list and the news; one toast for a permission, a notification only with /pet alerts on', async ($, on) => {
   const k = voiceKit($, on, { voice: false })
   k.env.PATH = '/usr/bin'
   const ran: any[] = [], notes: any[] = []
@@ -4015,7 +4015,7 @@ test('the watcher: claude agents --json adds the chats that run without Cachito 
   expect(ran.map(e => [e.argv, e.init?.timeoutMs])).toEqual([[['/usr/bin/claude', 'agents', '--json'], 5000]])
   await k.clock.advance(10_000); await k.settle()
   expect(await head()).toMatch(/^Miro  ★ \d+  ·  1 chat waits for you$/) // the one that waits for an OK; the idle one was never seen busy
-  expect(k.toasts).toEqual(['Cachito: the chat in api may be waiting for your OK'])
+  expect(k.toasts).toEqual(['Hatchling: the chat in api may be waiting for your OK'])
   expect(notes).toEqual([]) // alerts are off until asked for
   expect((await cardOf($, 'chats')).split('\n').slice(1, -1).map(l => l.trim().replace(/, .*/, '')).sort()).toEqual(['api     may be waiting for your OK', 'here    working', 'vodmax  working'])
   // what is kept of the look: ids, folders, statuses and the one label. Never the name, the command, or what it waits for
@@ -4033,8 +4033,8 @@ test('the watcher: claude agents --json adds the chats that run without Cachito 
   sessions = [...sessions.map((s: any) => s.sessionId === 's1' ? { ...s, status: 'idle' } : s), row('s4', '/home/me/work/gin', 'waiting', { waitingFor: 'approve plan' })] // and the one at work ends its turn
   await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any)
   await k.clock.advance(70_000); await k.settle()
-  expect(k.toasts.at(-1)).toBe('Cachito: the chat in gin may be waiting for your OK')
-  expect(notes.map(n => [n.text ?? n.message, n.options?.title ?? n.title])).toEqual([['Cachito: the chat in gin may be waiting for your OK', 'Miro']])
+  expect(k.toasts.at(-1)).toBe('Hatchling: the chat in gin may be waiting for your OK')
+  expect(notes.map(n => [n.text ?? n.message, n.options?.title ?? n.title])).toEqual([['Hatchling: the chat in gin may be waiting for your OK', 'Miro']])
   expect(await head()).toMatch(/·  3 chats wait for you$/) // two wait for an OK, and the one seen going from busy to idle
   // the sessions go: after a new look nothing is counted
   sessions = [row('me', '/w/here', 'busy')]
@@ -4071,7 +4071,7 @@ test('the watcher runs nothing under the bench, without a person, with the board
 for (const [what, bench, isInteractive] of [['under the bench', '/tmp/bench', true], ['in a headless run', '', false]] as const) test(`the watcher ${what}: no command is run`, async ($, on) => {
   const k = voiceKit($, on, { voice: false })
   k.env.PATH = '/usr/bin'
-  if (bench) k.env.CACHITO_BENCH = bench
+  if (bench) k.env.HATCHLING_BENCH = bench
   const ran: any[] = []
   on('process.run', (_: any, e: any) => { ran.push(e.argv); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } as any })
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive })

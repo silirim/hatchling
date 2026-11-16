@@ -123,7 +123,7 @@ export function finished(all, seen, { id, cwd, since, now, told = {} }) {
 }
 
 // The thin watcher: `claude agents --json` (Claude Code 2.1.139 or later) lists every live session of the person, the ones that run
-// without Cachito too. What it prints is input from outside: capped in size, checked row by row, and of each row only the session's
+// without Hatchling too. What it prints is input from outside: capped in size, checked row by row, and of each row only the session's
 // id, its folder, its status and one fixed label are kept. Never its name, a prompt or the text of what it waits for.
 export const WATCH = { bytes: 262_144, rows: 64, everyMs: 30_000, timeoutMs: 5_000 }
 const STATUS = ['busy', 'idle', 'waiting']
@@ -164,7 +164,7 @@ export function seen(stdout, was, now) {
   return { at: now, rows: rows.filter((r, i) => rows.findIndex(o => o.id === r.id) === i) }
 }
 /**
- * The marks with what the watcher saw: a session that left no living mark of its own (it runs without Cachito) gets one made
+ * The marks with what the watcher saw: a session that left no living mark of its own (it runs without Hatchling) gets one made
  * from its row. Busy is at work, and one that waits for a leave may be waiting for their OK. An idle one waits for the person
  * only when a look saw it end a turn (from then, see `counts`); one never seen busy is left out: it may never have had a turn. A chat
  * with a living mark stays as its mark tells it; one whose board is off (a mark with no sign of life, not closed) stays hidden;

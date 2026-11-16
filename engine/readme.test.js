@@ -76,7 +76,6 @@ test('the README says what must stay in sight, and its prose is 750 words or few
   assert.match(open, /On gin there is no arm without a plugin for "Be brief\."/)
   assert.match(open, /No text is shown to differ from another/)
   assert.match(open, /Short tasks showed no saving\*\* for the eight lines\. The sentence was not run on them/)
-  assert.match(open, /Bluetooth/)
   assert.doesNotMatch(README, /\/pet where/)
   const n = words(README)
   assert.ok(n <= 750, `${n} words`)

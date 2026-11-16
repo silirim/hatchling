@@ -48,19 +48,19 @@ test('marks: only folder, time and done are kept; old and surplus ones are dropp
   for (let i = 0; i < RULES.marksMax + 5; i++) all = remember(all, `c${i}`, { cwd: '/m', at: now + i, done: true })
   assert.equal(Object.keys(all).length, RULES.marksMax)
   assert.ok(!('recent' in all) && `c${RULES.marksMax + 4}` in all)
-  assert.equal(folder('/home/me/work/cachito/'), 'cachito')
+  assert.equal(folder('/home/me/work/hatchling/'), 'hatchling')
   assert.equal(folder('C:\\work\\app'), 'app')
 })
 
 test('the greeting: a chat left here, a long pause, the first chat of the day, a known folder, a new one', () => {
-  const now = Date.UTC(2026, 10, 12, 12), me = { id: 'me', cwd: '/w/cachito', now }
+  const now = Date.UTC(2026, 10, 12, 12), me = { id: 'me', cwd: '/w/hatchling', now }
   const g = (all) => greeting(all, me)
   assert.deepEqual(g({}), { kind: 'first' })
-  assert.deepEqual(g({ me: { cwd: '/w/cachito', at: now - MIN, done: true } }), { kind: 'first' }) // its own mark is not another chat
-  assert.deepEqual(g({ a: { cwd: '/w/cachito', at: now - 20 * MIN, done: false }, b: { cwd: '/w/other', at: now - MIN, done: true } }), { kind: 'resume', ago: 20 * MIN, done: false })
-  assert.deepEqual(g({ a: { cwd: '/w/cachito', at: now - RULES.backAfterMs - H, done: true } }), { kind: 'back', ago: RULES.backAfterMs + H })
-  assert.deepEqual(g({ a: { cwd: '/w/cachito', at: now - 30 * H, done: true } }), { kind: 'first' })
-  assert.deepEqual(g({ a: { cwd: '/w/cachito', at: now - 30 * H, done: true }, b: { cwd: '/w/other', at: now - H, done: true } }), { kind: 'seen', name: 'cachito' })
+  assert.deepEqual(g({ me: { cwd: '/w/hatchling', at: now - MIN, done: true } }), { kind: 'first' }) // its own mark is not another chat
+  assert.deepEqual(g({ a: { cwd: '/w/hatchling', at: now - 20 * MIN, done: false }, b: { cwd: '/w/other', at: now - MIN, done: true } }), { kind: 'resume', ago: 20 * MIN, done: false })
+  assert.deepEqual(g({ a: { cwd: '/w/hatchling', at: now - RULES.backAfterMs - H, done: true } }), { kind: 'back', ago: RULES.backAfterMs + H })
+  assert.deepEqual(g({ a: { cwd: '/w/hatchling', at: now - 30 * H, done: true } }), { kind: 'first' })
+  assert.deepEqual(g({ a: { cwd: '/w/hatchling', at: now - 30 * H, done: true }, b: { cwd: '/w/other', at: now - H, done: true } }), { kind: 'seen', name: 'hatchling' })
   assert.deepEqual(g({ b: { cwd: '/w/other', at: now - H, done: true } }), { kind: 'new' })
 
   const line = (e) => bubble(view(run([at({ type: 'greet', ...e })], start()), t))
@@ -68,7 +68,7 @@ test('the greeting: a chat left here, a long pause, the first chat of the day, a
   assert.equal(line({ kind: 'resume', ago: 3 * H, done: true }).say, 'a chat here finished its turn 3 h ago. pick it up?')
   assert.equal(line({ kind: 'back', ago: 4 * DAY }).say, `welcome back, good to see you. ${RULES.coinsWelcome} stars for you`)
   assert.equal(line({ kind: 'first' }).say, 'first chat of the day, here we go')
-  assert.equal(line({ kind: 'seen', name: 'cachito' }).say, 'back in cachito, I know this place')
+  assert.equal(line({ kind: 'seen', name: 'hatchling' }).say, 'back in hatchling, I know this place')
   assert.equal(line({ kind: 'new' }).say, 'a new folder, let us look around')
   assert.deepEqual([ago(30_000), ago(89 * MIN), ago(5 * H), ago(3 * DAY)], ['just now', '89 min ago', '5 h ago', '3 days ago'])
 })
@@ -89,10 +89,10 @@ test('another chat ending a long turn is told once, with its folder and since wh
   let s = run([at({ type: 'peer', here: false, name: 'vodmax', ago: 4 * MIN })], start())
   assert.equal(say(s), 'the chat in vodmax finished its job 4 min ago')
   const first = s.session.talk.at
-  s = run([at({ type: 'peer', here: true, name: 'cachito', ago: 0 }, MIN)], s)
+  s = run([at({ type: 'peer', here: true, name: 'hatchling', ago: 0 }, MIN)], s)
   assert.equal(s.session.talk.at, first)
-  s = run([at({ type: 'peer', here: true, name: 'cachito', ago: 0 }, RULES.peerGapMs)], s)
-  assert.equal(say(s), 'the other chat in this folder (cachito) finished its job just now')
+  s = run([at({ type: 'peer', here: true, name: 'hatchling', ago: 0 }, RULES.peerGapMs)], s)
+  assert.equal(say(s), 'the other chat in this folder (hatchling) finished its job just now')
   // with the comments on the small model says it, in the pet's character: its line takes the place of the fixed one
   s = run([at({ type: 'peer', here: false, name: 'vodmax', ago: 0 }, 2 * RULES.peerGapMs)], s)
   assert.equal(say(s), 'the chat in vodmax finished its job just now')

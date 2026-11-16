@@ -349,8 +349,8 @@ test('a model that is not there is told from every other failure', () => {
     { isAnswered: false, reason: 'api-error', status: 400, error: 'model_not_found', usage },
     { isAnswered: false, reason: 'api-error', status: 403, error: 'model_not_found', usage },
     { isAnswered: false, reason: 'api-error', status: 404, error: 'unknown', usage },
-    { thrown: new Error("cachito: $.model.complete: model claude-x is not in this organization's allowlist") },
-    { thrown: 'cachito: $.model.complete: model nope' },
+    { thrown: new Error("hatchling: $.model.complete: model claude-x is not in this organization's allowlist") },
+    { thrown: 'hatchling: $.model.complete: model nope' },
   ]) assert.equal(unavailable(gone), true, JSON.stringify(gone))
   // the network, an overload, the rate, the account, a wrong request, a call out of time, a reply with no text, a reply: the model may be there
   for (const other of [
@@ -364,8 +364,8 @@ test('a model that is not there is told from every other failure', () => {
     { isAnswered: false, reason: 'aborted', usage },
     { isAnswered: false, reason: 'empty-reply', usage },
     { isAnswered: true, text: 'model', usage },
-    { thrown: new Error('cachito: $.model.complete: maxTokens must be a positive integer (got 0)') },
-    { thrown: new Error('cachito: $.model.complete: timeoutMs must be a positive integer of milliseconds (got 0)') },
+    { thrown: new Error('hatchling: $.model.complete: maxTokens must be a positive integer (got 0)') },
+    { thrown: new Error('hatchling: $.model.complete: timeoutMs must be a positive integer of milliseconds (got 0)') },
     { thrown: new Error('unloaded') },
     { thrown: undefined },
     null, undefined,

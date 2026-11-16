@@ -112,7 +112,7 @@ test('a Codex pet becomes a pack that passes the same check as any other: three 
 })
 
 test('npm run skin:import reads a pet from a folder of the disk and writes the pack where the mod looks; a pet that points outside its folder is refused', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'cachito-import-')), pet = join(dir, 'my-pet'), out = join(dir, 'skins')
+  const dir = mkdtempSync(join(tmpdir(), 'hatchling-import-')), pet = join(dir, 'my-pet'), out = join(dir, 'skins')
   mkdirSync(pet)
   const s = sheet()
   writeFileSync(join(pet, 'spritesheet.png'), png(s.width, s.height, s.rgba))
@@ -149,7 +149,7 @@ const cli = (/** @type {string[]} */ args) => { try { return { code: 0, text: ex
 const RAW = /[\p{Cc}\p{Cf}\p{Co}\p{Cs}\p{Zl}\p{Zp}]/u
 
 test('security: the importer opens only regular files of the pet\'s own folder, small ones for its notes: no link, no pipe, no file too large', { skip: process.platform === 'win32' }, () => {
-  const dir = mkdtempSync(join(tmpdir(), 'cachito-hostile-')), pet = join(dir, 'pet'), out = join(dir, 'skins'), away = join(dir, 'away')
+  const dir = mkdtempSync(join(tmpdir(), 'hatchling-hostile-')), pet = join(dir, 'pet'), out = join(dir, 'skins'), away = join(dir, 'away')
   mkdirSync(pet); mkdirSync(away)
   const s = sheet(), image = png(s.width, s.height, s.rgba), META = JSON.stringify({ id: 'my-pet', displayName: 'My Pet', spritesheetPath: 'spritesheet.png' })
   const fresh = () => { for (const f of ['pet.json', 'submission.json', 'spritesheet.png', 'sub']) rmSync(join(pet, f), { force: true, recursive: true }); writeFileSync(join(pet, 'pet.json'), META); writeFileSync(join(pet, 'spritesheet.png'), image) }
@@ -187,7 +187,7 @@ test('security: the importer opens only regular files of the pet\'s own folder, 
 })
 
 test('security: what the importer says of a pet that is not sound holds no escape sequence: the name of the sheet, the text of a pet.json that is not JSON', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'cachito-loud-')), pet = join(dir, 'pet')
+  const dir = mkdtempSync(join(tmpdir(), 'hatchling-loud-')), pet = join(dir, 'pet')
   mkdirSync(pet)
   const ESC = '\u001b[2J\u001b]0;owned\u0007', C1 = '\u009b31m'
   writeFileSync(join(pet, 'pet.json'), JSON.stringify({ id: 'my-pet', spritesheetPath: `sheet${ESC}${C1}.png` }))

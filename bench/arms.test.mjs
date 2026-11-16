@@ -58,7 +58,7 @@ test('the reading lines of `mini` are those of the eight lines, word for word, a
 
 test('run.mjs knows the arms `brief`, `mini`, `leanonly` and `style`', () => {
   // an arm it does not know stops run.mjs before it does anything, with the list of those it knows
-  const r = spawnSync(process.execPath, [join(HERE, 'run.mjs'), join(tmpdir(), 'cachito-no-run'), '--arms', 'brief,no-such-arm'], { encoding: 'utf8' })
+  const r = spawnSync(process.execPath, [join(HERE, 'run.mjs'), join(tmpdir(), 'hatchling-no-run'), '--arms', 'brief,no-such-arm'], { encoding: 'utf8' })
   assert.notEqual(r.status, 0)
   const known = /no arm "no-such-arm": (.*)/.exec(r.stderr)?.[1]?.split(', ')
   for (const arm of ['brief', 'mini', 'leanonly', 'style']) assert.ok(known?.includes(arm), r.stderr)

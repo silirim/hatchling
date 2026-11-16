@@ -1,6 +1,6 @@
 # Cache rebuilt
 
-The start of the prompt changed, or the cache expired, so the conversation was sent again in full once. Cachito shows it as a note: it costs the pet nothing.
+The start of the prompt changed, or the cache expired, so the conversation was sent again in full once. Hatchling shows it as a note: it costs the pet nothing.
 
 ## What it means
 
@@ -18,7 +18,7 @@ There is no fix button on this note: there is nothing to tell the agent.
 
 ## Cache expired in a large chat
 
-When you send a prompt after a pause of more than an hour and the chat holds 100k tokens or more, the bubble says `cache expired: 120k sent again in full`. It is advice only: Cachito compacts nothing on its own.
+When you send a prompt after a pause of more than an hour and the chat holds 100k tokens or more, the bubble says `cache expired: 120k sent again in full`. It is advice only: Hatchling compacts nothing on its own.
 
 - **fix** puts `/compact` in the prompt box. You send it, or not. The requests after it then carry a summary and not the whole chat.
 - If the task is done, `/clear` costs less still.

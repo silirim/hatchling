@@ -1,6 +1,6 @@
 # Same command failed 3 times
 
-The agent ran the same command three times with no file edit in between, and it failed each time. Cachito shows it as a note: it costs the pet nothing.
+The agent ran the same command three times with no file edit in between, and it failed each time. Hatchling shows it as a note: it costs the pet nothing.
 
 The note names the program only, never its arguments, and counts on while it keeps failing: `npm failed 4 times in a row, over 2 turns`.
 

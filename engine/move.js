@@ -16,6 +16,8 @@ import { asModel } from './voice.js'
 import { sharePath } from './share.js'
 
 export const FORMAT = 1
+/** The field that says a file is a pet: today's, and the one of files exported under the project's earlier name. */
+const MARKS = ['hatchling', 'cachito']
 /** The most a file may be: `bytes` the file, `text` one text of it, `deep` how far objects nest, `errors` the faults told. */
 export const LIMITS = { bytes: 256 * 1024, text: 200, deep: 6, errors: 4 }
 const MAX_TIME = 8.64e15 // the last moment a date can hold
@@ -49,7 +51,7 @@ const same = (a, b) => a === b || (typeof a === 'object' && typeof b === 'object
 const differs = (/** @type {any} */ a, /** @type {any} */ b) => Object.keys({ ...a, ...b }).find(k => !same(a[k], b[k])) ?? ''
 
 /** The choices of a file. @typedef {{ species: string, born: string, seed: number, name: string, stats: number[], personality: string, hatched: number, cuddles: number, cuddled: number, wear: string, lang: string, style: boolean, hidden: boolean, model: string, voice: boolean, voiceAsked: boolean, asked: boolean, chats: boolean, callme: string }} Prefs */
-/** What a file holds. @typedef {{ cachito: 'pet', format: number, exported: number, pet: import('./engine.js').Shared, prefs: Prefs, diary: import('./diary.js').Diary }} Move */
+/** What a file holds. @typedef {{ hatchling: 'pet', format: number, exported: number, pet: import('./engine.js').Shared, prefs: Prefs, diary: import('./diary.js').Diary }} Move */
 
 /**
  * The file's content for a pet. Made whole on the way: a choice kept by an earlier version in a shape this one would refuse
@@ -59,7 +61,7 @@ const differs = (/** @type {any} */ a, /** @type {any} */ b) => Object.keys({ ..
 export function pack({ pet, prefs, diary, now }) {
   const d = diaryOf(diary)
   return {
-    cachito: 'pet', format: FORMAT, exported: now,
+    hatchling: 'pet', format: FORMAT, exported: now,
     pet: shared(pet),
     prefs: /** @type {Prefs} */ ({
       ...Object.fromEntries(Object.keys(PREFS).map(k => [k, prefs[k]])),
@@ -80,11 +82,13 @@ export function validate(raw) {
   /** @type {string[]} */ const errors = []
   const err = (/** @type {string} */ at, /** @type {string} */ what) => { errors.push(tidy(`${at}: ${what}`, ERR_COLS)) }
   const quote = (/** @type {unknown} */ v) => `"${tidy(String(v), 24)}"`
-  if (!isObj(raw) || /** @type {any} */ (raw).cachito !== 'pet') return ['file: not a pet saved by /pet export']
+  // a file exported before the rename of 2026-11-16 says `cachito: 'pet'`: the same file under the earlier name, read as it is. Never both names
+  const marks = isObj(raw) ? MARKS.filter(k => Object.hasOwn(/** @type {object} */ (raw), k)) : [], mark = marks[0] ?? ''
+  if (marks.length !== 1 || /** @type {any} */ (raw)[mark] !== 'pet') return ['file: not a pet saved by /pet export']
   const file = /** @type {any} */ (raw)
   if (!Number.isInteger(file.format) || file.format < 1) return ['format: must be a whole number from 1']
   // a newer format: nothing else can be judged
-  if (file.format > FORMAT) return [`format: the file was made by a newer Cachito (format ${file.format}, this one reads ${FORMAT}): update Cachito here, then import it`]
+  if (file.format > FORMAT) return [`format: the file was made by a newer Hatchling (format ${file.format}, this one reads ${FORMAT}): update Hatchling here, then import it`]
 
   // every text, of a value or of a field's name, as the cleaning leaves it and short; every number one that can be kept; nothing nested deep
   let sound = true
@@ -100,7 +104,7 @@ export function validate(raw) {
   walk(file, 'file', 0)
   if (!sound) return errors
 
-  for (const k of Object.keys(file)) if (!['cachito', 'format', 'exported', 'pet', 'prefs', 'diary'].includes(k)) err('file', `unknown field ${quote(k)}`)
+  for (const k of Object.keys(file)) if (![mark, 'format', 'exported', 'pet', 'prefs', 'diary'].includes(k)) err('file', `unknown field ${quote(k)}`)
   if (!time(file.exported) || !file.exported) err('exported', 'must be a moment')
 
   if (!isObj(file.prefs)) err('prefs', 'must be an object')

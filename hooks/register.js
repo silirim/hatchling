@@ -1,4 +1,4 @@
-// Cachito for Claude Code: feeds session events to the engine and draws the pet above the prompt.
+// Hatchling for Claude Code: feeds session events to the engine and draws the pet above the prompt.
 // As installed it observes only: nothing is added to the model's context. Two levers the person turns on change that:
 // /pet briefox adds one sentence to the system prompt, in a section of its own (briefox/text.js; the one lever the bench showed).
 // In the code the lever keeps the name it had when it was eight lines: `style` (the preference, kept so that an earlier choice still holds), `lean` (the engine's word).
@@ -23,7 +23,7 @@ import { REG, install, coatOf, dressed, portrait, LIMITS as SKIN_LIMITS } from '
 import { shareLines, picture, png, svg, sharePath } from '../engine/share.js'
 import { pack as movePack, parse as moveParse, movePath, asked as moveAsked, stageOf, LIMITS as MOVE_LIMITS } from '../engine/move.js'
 
-const pet = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'pet' }), null)
+const pet = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'pet' }), null)
 // `skin` is the ticks the row of the parts stays open, in place of the buttons, after the skin button.
 // `idle` is the small gesture a calm pet is making and `idleN` its frame; `spark` the sparkles lit next to a golden coat, a bit each spot; `hush` counts the phrases that left the bubble, only to draw again.
 // `sig` and `sigAt` are the phrase last shown and when it came up: kept here so that a reload of the mod does not show again a phrase that had its time
@@ -31,9 +31,9 @@ const pet = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'pet' }), null)
 // `recap` is where the work got to, as the small model said it after a pause, and `recapAt` when that work was left: the line holds
 // the bubble until the next prompt, with its time word made anew at each drawing. Here and nowhere else: never in the store
 const ANIM0 = { n: 0, rare: -1, demo: '', sleep: false, egg: 0, love: 0, ask: '', note: '', noteFix: '', noteLeft: 0, skin: 0, idle: '', idleN: 0, spark: 0, hush: 0, sig: '', sigAt: 0, recap: '', recapAt: 0 }
-const anim = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'anim' }), ANIM0)
+const anim = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'anim' }), ANIM0)
 const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: false, voiceAsked: false, lang: '', missing: '', chats: true, callme: '', model: '' }
-const prefs = atom(/** @type {const} */ ({ plugin: 'cachito', key: 'prefs' }), PREFS0)
+const prefs = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'prefs' }), PREFS0)
 
 const DEFAULT = 0x01000000 // the terminal's own colour
 const STATE = /** @type {Record<string, string>} */ ({ seedling: 'baby', healthy: 'adult', bloom: 'crown' }) // engine mood or stage -> drawing. The sad and ko drawings stay in the zoo, and nothing leads to them
@@ -73,7 +73,7 @@ const STYLE_BENCH = `${BENCH}. Every run: bench/RESULTS.md in the repository.`
 // the environment switches are for headless runs, where no command can be typed
 const STYLE_SWITCH_UNDER = 30_000 // context tokens under which switching the style mid-chat is cheap
 /** @type {boolean | undefined} */ let styleLive // what the system prompt carries now; follows the preference only when the switch is cheap
-const styleOn = async (/** @type {any} */ $) => (await getPrefs($)).style || (await $.env.get('CACHITO_STYLE').catch(() => undefined)) === '1'
+const styleOn = async (/** @type {any} */ $) => (await getPrefs($)).style || (await $.env.get('HATCHLING_STYLE').catch(() => undefined)) === '1'
 /** Whether the next request carries the style: the choice when a switch is cheap (no request yet, a small chat, right after a compaction), else what it carries now. */
 const styleNext = (/** @type {boolean} */ want) => styleLive === undefined || ctxTokens < STYLE_SWITCH_UNDER || afterCompact ? want : styleLive
 // The briefox plugin (briefox/ in this repository) sends the same section under the same id, on as installed. With it the sentence is
@@ -97,12 +97,12 @@ async function leanState(/** @type {any} */ $) {
 }
 /** Tells the engine where lean stands; it cheers when a waiting style gets in. */
 const feedLean = async (/** @type {any} */ $) => leanState($).then(({ lean, wait }) => feed($, { type: 'lean', on: lean, wait })).catch(() => {})
-// Under the bench (bench/run.mjs sets CACHITO_BENCH to a folder of its own, and nothing else does) the mod must leave the person's pet alone:
+// Under the bench (bench/run.mjs sets HATCHLING_BENCH to a folder of its own, and nothing else does) the mod must leave the person's pet alone:
 // the store is then a map in memory, never read from disk nor written to it. The lever comes from
 // the arm's variable only, since the preferences read are the defaults.
 /** @type {string | undefined} */ let benchDir // '' when not under the bench
 /** @type {Record<string, unknown>} */ const benchStore = {}
-const bench = async (/** @type {any} */ $) => benchDir ??= String((await $.env.get('CACHITO_BENCH').catch(() => '')) ?? '')
+const bench = async (/** @type {any} */ $) => benchDir ??= String((await $.env.get('HATCHLING_BENCH').catch(() => '')) ?? '')
 /** Reads and writes of the store: the person's, or under the bench one that lives and dies with this process. */
 async function storeGet(/** @type {any} */ $, /** @type {string} */ key) {
   if (!(await bench($))) return $.store.get(key)
@@ -136,7 +136,7 @@ async function chats(/** @type {any} */ $) {
   const own = Object.fromEntries(await Promise.all(keys.map(async k => [k.slice(5), await storeGet($, k).catch(() => undefined)])))
   return { ...old, ...marks(own) }
 }
-// The thin watcher (engine/company.js `seen`): `claude agents --json` lists every live session, the ones without Cachito too. One
+// The thin watcher (engine/company.js `seen`): `claude agents --json` lists every live session, the ones without Hatchling too. One
 // look serves every chat: it is kept in the store (ids, folders, statuses, one fixed label), and a chat takes a new one only when
 // the one kept is WATCH.everyMs old. Never under the bench or without a person, never two at once in a chat, with a time limit;
 // the first failure (no `claude` found, an older version, a surface that runs no command) ends it for this chat, which then
@@ -392,7 +392,7 @@ async function modelGone(/** @type {any} */ $, /** @type {string} */ model, /** 
   await $.ui.toast(text(lang, 'model.gone', { model }))
 }
 /**
- * The person's skin packs: the .json files of ~/.claude/cachito-skins (or of the config folder Claude Code was given), in the order
+ * The person's skin packs: the .json files of ~/.claude/hatchling-skins (or of the config folder Claude Code was given), in the order
  * of their names. Each is data, checked whole by engine/skins.js before any of it is used; one that is not sound is left out and
  * told by /pet skins. No folder, no packs, and nothing here can fail: the band is drawn all the same. Under the bench none is read.
  */
@@ -401,7 +401,7 @@ async function configDir(/** @type {any} */ $, /** @type {string} */ folder) {
   const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
   return config ? `${config}/${folder}` : home ? `${home}/.claude/${folder}` : ''
 }
-const skinsDir = (/** @type {any} */ $) => configDir($, 'cachito-skins')
+const skinsDir = (/** @type {any} */ $) => configDir($, 'hatchling-skins')
 async function readPacks(/** @type {any} */ $) {
   const dir = (await bench($)) ? '' : await skinsDir($)
   const found = /** @type {{ name: string, kind: string, size: number }[]} */ (dir ? await $.fs.list(dir).catch(() => []) : [])
@@ -476,7 +476,7 @@ async function peers(/** @type {any} */ $) {
   if (peer.ask) { // a chat began to wait for the person's OK: one toast, and a desktop notification only when /pet alerts is on
     const line = text(p.lang, 'chats.ask.toast', { name: peer.name || '/' })
     try { $.ui.toast(line) } catch { /* no toast on this surface */ }
-    if ((await storeGet($, 'alerts').catch(() => false)) === true) Promise.resolve($.ui.notify(line, { title: p.name, key: 'cachito-ask' })).catch(() => {})
+    if ((await storeGet($, 'alerts').catch(() => false)) === true) Promise.resolve($.ui.notify(line, { title: p.name, key: 'hatchling-ask' })).catch(() => {})
   }
   // said: with the comments on the small model says the same in the pet's character, and its line takes the place of the fixed one. Not awaited: the drawing goes on
   const on = view(cur, now).talk
@@ -1018,12 +1018,12 @@ async function pullPrefs(/** @type {any} */ $) {
 
 /**
  * /pet export, and the copy made before an import: the pet as the store has it now, its choices and its diary, as one JSON file
- * in cachito-share (engine/move.js says what is in it and what is not). Node writes it, for the person alone from its first byte
+ * in hatchling-share (engine/move.js says what is in it and what is not). Node writes it, for the person alone from its first byte
  * (engine/move-save.js); with no Node the mod writes it and `chmod` closes it after. Null when the store cannot be read or the
  * file cannot be written; `closed` false when it is written and may be read by the other users of the computer.
  */
 async function moveOut(/** @type {any} */ $, /** @type {boolean} */ backup) {
-  const dir = await configDir($, 'cachito-share'), none = {}
+  const dir = await configDir($, 'hatchling-share'), none = {}
   if (!dir || !cur) return null
   await share($, true).catch(() => {})
   const { raw, lost, ...p } = await storedPrefs($), diary = await storeGet($, 'diary').catch(() => none)
@@ -1068,8 +1068,8 @@ async function load(/** @type {any} */ $) {
   if (held) { cur = held; await founding($); return false } // whatever version kept it, it is whole now
   const stored = await storeGet($, 'pet').catch(() => undefined)
   const born = stored && typeof stored === 'object' ? shared(stored) : null
-  // CACHITO_PLAIN=1 leaves the golden roll out (the tests, the bench): the pet is born plain
-  const plain = (await $.env.get('CACHITO_PLAIN').catch(() => undefined)) === '1'
+  // HATCHLING_PLAIN=1 leaves the golden roll out (the tests, the bench): the pet is born plain
+  const plain = (await $.env.get('HATCHLING_PLAIN').catch(() => undefined)) === '1'
   cur = reduce(/** @type {any} */ ({ ...initialState(plain ? 1 : undefined), ...born, ...(born && { base: born }) }), { type: 'sessionStart', t: lastActive })
   await update($, pet, () => cur)
   await founding($)
@@ -1188,7 +1188,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await recapResume($, fresh).catch(() => {})
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
-    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet briefox <on|off> (one sentence in the system prompt), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary [today|yesterday|week], /pet remind <text>, /pet reminders, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet alerts <on|off>, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
+    await $.command.register({ name: 'pet', description: 'Hatchling: show the pet card. Also: /pet briefox <on|off> (one sentence in the system prompt), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary [today|yesterday|week], /pet remind <text>, /pet reminders, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet alerts <on|off>, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
     $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
     return next(e)
   })
@@ -1342,7 +1342,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
         const roster = `${now.includes(surface) ? 'in the roster' : 'not in the roster now'}${mine.length ? mine.map(c => `; ${c.clientId} attached ${new Date(c.at).toISOString().slice(11, 19)} UTC${c.cells ? `, ${c.cells}` : ''}`).join('') : surface === 'terminal' ? '; the terminal raises no attach' : '; no attach heard since the mod loaded'}`
         return `  ${surface.padEnd(9)} ${roster}; band asked ${a?.n ?? 0} time${a?.n === 1 ? '' : 's'}${a ? `, last answer: ${ANSWER[a.last]}` : ''}`
       }
-      return { text: ['Where Cachito draws (counts since the mod loaded, in memory only; the roster does not tell a mod which elements an app draws)', ...(all.length ? all.map(line) : ['  no surface: nothing draws in this session'])].join('\n') }
+      return { text: ['Where Hatchling draws (counts since the mod loaded, in memory only; the roster does not tell a mod which elements an app draws)', ...(all.length ? all.map(line) : ['  no surface: nothing draws in this session'])].join('\n') }
     }
     if (verb === 'help') return { text: listOf(L0, 'help').map(line => put(line, { model: modelNow })).join('\n') }
     if (verb === 'hide' || verb === 'show') {
@@ -1386,7 +1386,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       await settle($)
       const dir = await skinsDir($), found = REG.packs.map(f => ({ ...f, file: tidy(f.file, 80), errors: f.errors.map(err => tidy(err, 300)) })), wide = Math.max(0, ...found.map(f => cols(f.file))) + 2 // a pack's file name and what is wrong with it come from a stranger: shown made safe
       const guide = `Format, an example to copy and how to try it: ${DOCS.replace(/fix\/$/, 'skins.md')}`
-      if (!found.length) return { text: `No skin packs. A pack is one .json file in ${dir || '~/.claude/cachito-skins'}: put it there and run /pet skins.\n${guide}` }
+      if (!found.length) return { text: `No skin packs. A pack is one .json file in ${dir || '~/.claude/hatchling-skins'}: put it there and run /pet skins.\n${guide}` }
       const brings = (/** @type {typeof found[number]} */ f) => [['animals', f.animals], ['items', f.items], ['coats', f.coats]].flatMap(([kind, ids]) => ids?.length ? [`${kind}: ${/** @type {string[]} */ (ids).join(', ')}`] : []).join('; ')
       return { text: [
         `Skin packs in ${dir}: ${found.filter(f => !f.errors.length).length} loaded${found.some(f => f.errors.length) ? `, ${found.filter(f => f.errors.length).length} left out` : ''}.`,
@@ -1571,7 +1571,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const worn = wornOf(c.closet, who.wear), animal = animalOf(who.species), stage = STATE[c.stage] ?? 'adult'
       const lines = shareLines({ name: who.name, animal: animalName('en', who.species), stage: text('en', `stage.${stage}`, {}, stage), peak: text('en', `peak.${extremes(who.stats).peak}`), stars: c.coins,
         golden: worn.includes(GOLDEN.id), rare: !RULES.animals.includes(who.species) && !REG.species[animal].pack, founder: c.owned.includes(EGGSHELL.id) })
-      const pic = picture(portrait(animal, stage, worn), lines), dir = await configDir($, 'cachito-share'), node = dir ? await nodePath($) : ''
+      const pic = picture(portrait(animal, stage, worn), lines), dir = await configDir($, 'hatchling-share'), node = dir ? await nodePath($) : ''
       if (!dir) return { text: say('share.failed') }
       const file = sharePath(dir, who.name, 'png')
       const saved = node ? await $.process.run([node, `${$.plugin.root}/engine/share-save.js`, file], { stdin: /** @type {Uint8Array & { toBase64(): string }} */ (png(pic)).toBase64() }).then((/** @type {{ exitCode: number }} */ r) => r.exitCode === 0, () => false) : false

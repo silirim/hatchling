@@ -10,7 +10,7 @@ The pet asks once, right after it hatches, with two buttons: `comments on` and `
 
 - Each line is one request to a small model, through Claude Code's own client, on your own tokens. The model is the alias `haiku` unless you choose another: `/pet model`, below.
 - Measured in November 2026: about 650 tokens in and 75 out a line, the average of the 112 lines in our own store (72,880 in, 8,563 out).
-- The line itself is about 12 tokens. The rest of the 75 out is the model's thinking: a mod cannot switch it off, it can only ask for low effort, and Cachito does.
+- The line itself is about 12 tokens. The rest of the 75 out is the model's thinking: a mod cannot switch it off, it can only ask for low effort, and Hatchling does.
 - The recap after a pause is a larger request: about 1,300 to 2,000 tokens in and 570 to 750 out a recap, measured on three recaps on 16 November 2026. Nearly all of the tokens out are the model's thinking.
 - At most 40 lines a day over all your chats.
 - The cost is said in tokens, as each call reports them. In November 2026 that was under one cent a day at Haiku 5.5's list price. If `haiku` leads to another model on your account, or you chose another with `/pet model`, the money differs.

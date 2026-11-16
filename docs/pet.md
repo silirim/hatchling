@@ -1,6 +1,6 @@
 # The pet
 
-How Cachito works, and every command. Comments: [comments.md](comments.md). What is kept and sent: [privacy.md](privacy.md).
+How Hatchling works, and every command. Comments: [comments.md](comments.md). What is kept and sent: [privacy.md](privacy.md).
 
 ## The band
 
@@ -42,7 +42,7 @@ As installed everything the pet says is fixed text on your screen: no model is a
 - **The founder's eggshell** (`eggshell`, half the shell as a hat) is not sold: a pet hatched by 31 January 2027 has it, and keeps it for ever.
   It is a keepsake kept in the pet's file on your machine, not something anyone checks or enforces.
 - **Animals**: the one your pet was born as is yours. Each other common one (penguin, chick, dog, bunny, fox, cactus) is unlocked once with `/pet shop <animal>`; `/pet animal <name>` then switches freely. Name and character stay. A rare seventh is not sold.
-- **Skin packs**: more animals, things and coats from JSON files in `~/.claude/cachito-skins/`. Data, never code; free. See [skins.md](skins.md).
+- **Skin packs**: more animals, things and coats from JSON files in `~/.claude/hatchling-skins/`. Data, never code; free. See [skins.md](skins.md).
 
 ## Notes and fixes
 
@@ -80,7 +80,7 @@ With several chats open, each is in one of four states:
 
 The band counts the chats that wait for you: the waiting and the asking ones. A chat whose turn ended counts for 2 hours, then it is listed and no longer counted. When another chat ends a turn of 2 minutes or more, the pet says so once, with the folder's name. When one may be waiting for your OK it says so once too, with one toast; `/pet alerts on` adds a desktop notification, through the channel Claude Code is set to (off by default). `/pet chats` lists them: folder, state, since when.
 
-**Chats without Cachito.** About every 30 seconds one of your open chats runs `claude agents --json` (Claude Code 2.1.139 or later; 5 seconds at most), which lists every live session. A session that left no mark of its own is then counted and listed too: busy is working, one that waits for an approval is asking, and an idle one is waiting only after a look saw it go from busy to idle (an idle session never seen busy is left out: it may never have had a turn). Of each session only its id, folder and status are kept, and whether it waits for an approval: never its name, a prompt, or the text of what it waits for. If the command is missing or fails, the chat stops trying and knows the others by their marks alone. Never in a headless run.
+**Chats without Hatchling.** About every 30 seconds one of your open chats runs `claude agents --json` (Claude Code 2.1.139 or later; 5 seconds at most), which lists every live session. A session that left no mark of its own is then counted and listed too: busy is working, one that waits for an approval is asking, and an idle one is waiting only after a look saw it go from busy to idle (an idle session never seen busy is left out: it may never have had a turn). Of each session only its id, folder and status are kept, and whether it waits for an approval: never its name, a prompt, or the text of what it waits for. If the command is missing or fails, the chat stops trying and knows the others by their marks alone. Never in a headless run.
 
 `/pet chats off` works both ways: your other chats no longer see this one, and this one no longer sees them and runs no command. A chat with the board off that has not had a turn yet has left no mark, so the others still learn of it from Claude Code's own list.
 
@@ -110,11 +110,13 @@ The first greeting of a day says yesterday in one dim line under it (`yesterday:
 
 The pet lives in the plugin store of one machine, not in your Claude account. To take it along:
 
-1. `/pet export` writes `cachito-share/cachito-<name>-<date>.json` in your Claude Code config folder (`~/.claude`), for you alone (mode 0600), and prints its path.
+1. `/pet export` writes `hatchling-share/hatchling-<name>-<date>.json` in your Claude Code config folder (`~/.claude`), for you alone (mode 0600), and prints its path.
 2. Copy the file to the other computer yourself. Nothing is sent.
-3. There, `/pet import <path>` checks the file and tells what would happen: the pet in the file, and the pet there that it would replace. `/pet import <path> yes` does it. The pet that was there is saved first, as `cachito-<name>-<date>-backup-<time>.json` in the same folder, and its path is printed: importing that file brings it back.
+3. There, `/pet import <path>` checks the file and tells what would happen: the pet in the file, and the pet there that it would replace. `/pet import <path> yes` does it. The pet that was there is saved first, as `hatchling-<name>-<date>-backup-<time>.json` in the same folder, and its path is printed: importing that file brings it back.
 
-The path may start with `~`, be relative to the chat's folder, and hold spaces. What is in the file: [privacy.md](privacy.md). A file with a field Cachito does not know, a value out of range, a control character in a text, or an animal, item or coat that is not there is refused whole, with what is wrong in one line (in English); so is a file of a newer format, until Cachito is updated. A pet shown as an animal of a skin pack, or wearing a thing of one, needs that pack installed first.
+The path may start with `~`, be relative to the chat's folder, and hold spaces. What is in the file: [privacy.md](privacy.md). A file with a field Hatchling does not know, a value out of range, a control character in a text, or an animal, item or coat that is not there is refused whole, with what is wrong in one line (in English); so is a file of a newer format, until Hatchling is updated. A pet shown as an animal of a skin pack, or wearing a thing of one, needs that pack installed first.
+
+A pet kept under the project's earlier name moves the same way: [renamed.md](renamed.md).
 
 ## Languages
 
@@ -143,7 +145,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet diary lines`, `/pet diary clear` | the pet's own diary; empty it and the work counters |
 | `/pet remind <text>` | keep a reminder; `in <20m\|2h\|1d> <text>` times it, `done <n\|all>` removes |
 | `/pet reminders` | list the reminders |
-| `/pet share` | a colour picture to attach to a post, 800×420: the pet with what it wears, its name, animal, stage, character and stars; nothing about your work. Saved as `cachito-share/cachito-<name>.png` in your Claude Code config folder (`~/.claude`), written over each time. Node writes the PNG; without Node on the PATH the same picture is saved as an SVG |
+| `/pet share` | a colour picture to attach to a post, 800×420: the pet with what it wears, its name, animal, stage, character and stars; nothing about your work. Saved as `hatchling-share/hatchling-<name>.png` in your Claude Code config folder (`~/.claude`), written over each time. Node writes the PNG; without Node on the PATH the same picture is saved as an SVG |
 | `/pet export` | save the pet to a file, for another computer: [above](#moving-to-another-computer) |
 | `/pet import <path> [yes]` | bring in a pet saved with `/pet export`; asks first, and saves the pet that was there |
 | `/pet lang <en\|es\|pt\|zh>` | the pet's language |

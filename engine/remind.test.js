@@ -70,6 +70,6 @@ test('remind: nothing of a reminder is in the file of /pet export or in the word
   const prefs = { species: 'fox', born: 'fox', seed: 5, name: 'Tobo', stats: [1, 2, 3, 4, 5], lang: 'en' }
   const file = JSON.stringify(pack({ pet: initialState(1), prefs, diary: undefined, now: NOW }))
   assert.doesNotMatch(file, /remind/i)
-  assert.deepEqual(Object.keys(JSON.parse(file)), ['cachito', 'format', 'exported', 'pet', 'prefs', 'diary'])
+  assert.deepEqual(Object.keys(JSON.parse(file)), ['hatchling', 'format', 'exported', 'pet', 'prefs', 'diary'])
   assert.doesNotMatch(JSON.stringify(shareLines({ name: 'Tobo', animal: 'fox', stage: 'adult', peak: 'wit', stars: 3, golden: false, rare: false, founder: false })), /remind/i)
 })

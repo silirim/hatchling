@@ -1,7 +1,7 @@
 // @ts-check
-// Skin packs: animals, things to wear and coats that a person adds as JSON files in ~/.claude/cachito-skins/ (docs/skins.md).
+// Skin packs: animals, things to wear and coats that a person adds as JSON files in ~/.claude/hatchling-skins/ (docs/skins.md).
 // A pack is data, never code: it is checked whole here before any of it is used, and a pack with one fault is left out whole,
-// with what is wrong said plainly. The drawings Cachito ships with (sprites/zoo.js `pack`) are a pack of the same format and
+// with what is wrong said plainly. The drawings Hatchling ships with (sprites/zoo.js `pack`) are a pack of the same format and
 // pass through the same check and the same reading, so the format is proven by the real drawings.
 // Pure: no file is read here. The mod reads the folder (hooks/register.js), `npm run skin:check` reads one file (engine/skin-check.js).
 
@@ -25,7 +25,7 @@ export const PARTS = ['head', 'face', 'body', 'feet', 'accessory']
 export const ANCHORS = ['head', 'face', 'neck', 'feet', 'under', 'left', 'right']
 const LANG = ['en', 'es', 'pt', 'zh']
 /** Words a pack may not use as a name: what /pet wear and the kept choices already mean. The shipped names are added to them. */
-export const RESERVED = ['none', 'off', 'plain', 'nohead', 'crown', 'golden', 'animal', 'coat', 'cachito', 'constructor', 'prototype', ...PARTS]
+export const RESERVED = ['none', 'off', 'plain', 'nohead', 'crown', 'golden', 'animal', 'coat', 'hatchling', 'constructor', 'prototype', ...PARTS]
 /** A name a pack may give: sound, and none of what every object has of itself (`constructor`), which a lookup by name would find. */
 const named = (/** @type {unknown} */ s) => typeof s === 'string' && ID.test(s) && !(s in Object.prototype)
 const ERR_COLS = 240 // the most one fault takes when it is told
@@ -123,7 +123,7 @@ export function validate(raw, opts = {}) {
 
   if (!shape(raw, 'pack', ['format', 'id', 'name'], ['animals', 'items', 'coats', 'credits'])) return errors
   const pack = /** @type {any} */ (raw)
-  if (pack.format !== FORMAT) { err('format', `this Cachito reads format ${FORMAT}`); return errors } // another format: nothing else can be judged
+  if (pack.format !== FORMAT) { err('format', `this Hatchling reads format ${FORMAT}`); return errors } // another format: nothing else can be judged
   if (!named(pack.id)) err('id', 'must be 2 to 24 of a-z, 0-9 and -, a letter first')
   else if (taken.has(pack.id)) err('id', `"${pack.id}" is taken already`)
   label(pack.name, 'name')
@@ -314,7 +314,7 @@ export function compile(pack, builtin = false) {
 
 const shipped = validate(zoo.pack, { builtin: true })
 if (shipped.length) throw new Error(`sprites/zoo.js is not a sound pack: ${shipped.join('; ')}`)
-/** The drawings Cachito ships with, read as the pack they are. */
+/** The drawings Hatchling ships with, read as the pack they are. */
 export const BUILTIN = compile(zoo.pack, true)
 
 /** Everything there is to draw now: the shipped drawings and the person's packs. `install` fills it; the adapter only reads. */

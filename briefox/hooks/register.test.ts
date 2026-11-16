@@ -80,7 +80,7 @@ test('in a long chat a switch waits for the next compaction or the next chat, an
 })
 
 test('under the bench the choice kept on this machine stays out: the sentence is on', async ($, on) => {
-  world(on, { CACHITO_BENCH: '/out/run' })
+  world(on, { HATCHLING_BENCH: '/out/run' })
   on('store.get', () => ({ value: true })) // /briefox off, given by the person some day
   if (await absent($)) return
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })

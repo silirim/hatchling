@@ -8,11 +8,12 @@ W, H, MARGIN = 1280, 640, 80
 MIN_GAP = 8  # px between sprites, at least
 NIGHT, FLOOR, EDGE, STAR, SAND = "#1e1e2e", "#27273a", "#8d4325", "#ffd54f", "#efe9dc"
 FLOOR_H, EDGE_H = 115, 6
-TITLE, SUBTITLE = ("Which one hatches for you?", 196, 7), ("Cachito · a pixel pet for Claude Code", 292, 4)  # text, y, scale
+TITLE, SUBTITLE = ("Which one hatches for you?", 196, 7), ("Hatchling · a pixel pet for Claude Code", 292, 4)  # text, y, scale
 STARS = [(120, 70, 5), (250, 130, 10), (390, 50, 10), (520, 110, 5), (650, 150, 5), (760, 60, 10), (880, 120, 5), (1000, 45, 5), (1090, 140, 10), (1180, 80, 5)]  # x, y, size
 
 # 5 px wide pixel font; rows 8 and 9 are descenders. The capitals and signs the cover needs, and every small letter (sheet.py writes ids with it).
 FONT = {
+    "H": "#...#/#...#/#...#/#####/#...#/#...#/#...#",
     "W": "#...#/#...#/#...#/#.#.#/#.#.#/##.##/#...#",
     "C": ".###./#...#/#..../#..../#..../#...#/.###.",
     "a": "/.../.###./....#/.####/#...#/.####",

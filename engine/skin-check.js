@@ -17,7 +17,7 @@ try {
   else ({ pack, errors } = parse(readFileSync(file, 'utf8'), { taken: [...Object.keys(BUILTIN.species), ...Object.keys(BUILTIN.items), ...Object.keys(BUILTIN.coats)] }))
 } catch (e) { errors = [`file: could not be read (${tidy(String(/** @type {any} */ (e)?.code ?? e), 80)})`] }
 if (!pack) {
-  console.error(`${shown}: not a sound pack, Cachito would leave it out whole.\n${errors.map(e => `  ${tidy(e, 300)}`).join('\n')}`)
+  console.error(`${shown}: not a sound pack, Hatchling would leave it out whole.\n${errors.map(e => `  ${tidy(e, 300)}`).join('\n')}`)
   process.exit(1)
 }
 const ids = (/** @type {unknown} */ group) => Object.keys(group ?? {}).join(', ') || '–'

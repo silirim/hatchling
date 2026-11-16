@@ -1,11 +1,11 @@
 // @ts-check
-// Speech bubbles: what Cachito says for each issue and cheer, with a one-line fix and a docs link.
+// Speech bubbles: what Hatchling says for each issue and cheer, with a one-line fix and a docs link.
 
 import { STATS } from './persona.js'
 import { BASE, text, list, voicedAs } from './lang/index.js'
 import { tidy } from './width.js'
 
-export const DOCS = 'https://github.com/silirim/cachito-pet/blob/main/docs/fix/'
+export const DOCS = 'https://github.com/silirim/hatchling/blob/main/docs/fix/'
 
 // Notes, all of them: a friend's advice, worded without blame, and none costs the pet anything. The words are in engine/lang/.
 // `ask` is what the fix button puts in the prompt box: a command, or a line for the agent, which stays in English like the style.

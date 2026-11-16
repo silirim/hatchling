@@ -17,7 +17,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
   let probing = false // true while /briefox off asks what the others add: this plugin then adds nothing
   /**
    * The choice: on unless /briefox off was given; a store that cannot be read is no choice, so on. Under the bench (bench/run.mjs sets
-   * CACHITO_BENCH) the person's own choice stays out.
+   * HATCHLING_BENCH) the person's own choice stays out.
    * @param {string | undefined} bench @param {unknown} off
    */
   const wanted = (bench, off) => !!bench || off !== true
@@ -34,7 +34,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const r = await next(e)
     if (probing) return r
     asked = e
-    live = coming(wanted(await $.env.get('CACHITO_BENCH').catch(() => undefined), await $.store.get('off').catch(() => undefined)))
+    live = coming(wanted(await $.env.get('HATCHLING_BENCH').catch(() => undefined), await $.store.get('off').catch(() => undefined)))
     // with the pet installed too the section may be there already: an id is unique in the list, and the sentence goes in once
     return live && !r.sections.some(s => s.id === ID) ? { sections: [...r.sections, { id: ID, text: TEXT, scope: /** @type {const} */ ('session') }] } : r
   })
@@ -61,7 +61,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const arg = e.args.trim().toLowerCase()
     if (arg && arg !== 'on' && arg !== 'off') return { text: '/briefox shows the state, /briefox on and /briefox off switch the sentence.' }
     if (arg) await $.store.set('off', arg === 'off')
-    const want = wanted(await $.env.get('CACHITO_BENCH').catch(() => undefined), await $.store.get('off').catch(() => undefined)), waits = coming(want) !== want
+    const want = wanted(await $.env.get('HATCHLING_BENCH').catch(() => undefined), await $.store.get('off').catch(() => undefined)), waits = coming(want) !== want
     const when = waits ? 'at the next compaction or in the next chat: this chat is already long, and switching now would re-send the whole conversation' : 'from your next prompt'
     if (want) return { text: `Briefox on: "${TEXT}" is in the system prompt ${arg || waits ? when : 'of every request'}. /briefox off takes it out. ${BENCH}` }
     // another plugin of this repository (the pet, with /pet briefox on) may still send the same section

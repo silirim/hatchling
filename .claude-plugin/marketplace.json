@@ -1,5 +1,5 @@
 {
-  "name": "cachito-pet",
+  "name": "hatchling",
   "description": "A pixel pet for Claude Code and, apart, briefox: one sentence of system prompt, measured by a bench in the repository",
   "owner": {
     "name": "silirim"
@@ -11,7 +11,7 @@
       "description": "One sentence in the system prompt: Be brief. In our bench it did as well as eight lines. On as installed"
     },
     {
-      "name": "cachito",
+      "name": "hatchling",
       "source": "./",
       "description": "The pixel pet above your prompt. Optional; /pet briefox on|off switches the same sentence"
     }

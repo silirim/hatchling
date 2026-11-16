@@ -8,7 +8,7 @@ import { whole as diaryOf, open as diaryOpened, bought } from './diary.js'
 const T = new Date(2026, 10, 15, 9, 5, 7).getTime()
 const PREFS = { species: 'penguin', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], personality: 'A quiet one.', hatched: 1_700_000_000_000, cuddles: 12, cuddled: T - 5000, wear: 'sombrero golden', lang: 'es', style: true, hidden: false, model: 'claude-haiku-5-5', voice: true, voiceAsked: true, asked: true, chats: false, callme: "Ana-Li O'Neil", missing: 'robot', lost: false }
 const PET = { ...initialState(1), variant: 'golden', born: T - 9 * 86_400_000, coins: 123, affection: 456, days: 9, day: 20_000, lately: [19_999, 20_000], owned: ['sombrero', 'golden'], animals: ['penguin'], cuddledAt: T - 5000 }
-const DIARY = bought(diaryOpened(diaryOf(undefined), { now: T - 86_400_000, folder: 'cachito', born: true }), 'sombrero', T - 1000)
+const DIARY = bought(diaryOpened(diaryOf(undefined), { now: T - 86_400_000, folder: 'hatchling', born: true }), 'sombrero', T - 1000)
 const good = () => pack({ pet: PET, prefs: PREFS, diary: DIARY, now: T })
 /** The first fault of a file like the good one with `change` made to it. */
 const fault = (/** @type {(m: any) => void} */ change) => { const m = structuredClone(good()); change(m); const r = parse(JSON.stringify(m)); assert.equal(r.move, null); return r.errors[0] ?? '' }
@@ -17,8 +17,8 @@ test('a file holds the pet, its choices and the diary, and reads back as the sam
   const m = good(), r = parse(JSON.stringify(m, null, 2))
   assert.deepEqual(r.errors, [])
   assert.deepEqual(r.move, m)
-  assert.deepEqual(Object.keys(m), ['cachito', 'format', 'exported', 'pet', 'prefs', 'diary'])
-  assert.deepEqual([m.cachito, m.format, m.exported], ['pet', FORMAT, T])
+  assert.deepEqual(Object.keys(m), ['hatchling', 'format', 'exported', 'pet', 'prefs', 'diary'])
+  assert.deepEqual([m.hatchling, m.format, m.exported], ['pet', FORMAT, T])
   assert.deepEqual(m.pet, shared(PET))
   assert.deepEqual([m.pet.variant, m.pet.coins, m.pet.owned, m.pet.animals, m.pet.born], ['golden', 123, ['sombrero', 'golden'], ['penguin'], PET.born])
   assert.deepEqual(m.prefs, { species: 'penguin', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], personality: 'A quiet one.', hatched: 1_700_000_000_000, cuddles: 12, cuddled: T - 5000, wear: 'sombrero golden', lang: 'es', style: true, hidden: false, model: 'claude-haiku-5-5', voice: true, voiceAsked: true, asked: true, chats: false, callme: "Ana-Li O'Neil" })
@@ -26,6 +26,21 @@ test('a file holds the pet, its choices and the diary, and reads back as the sam
   assert.equal(stageOf(m), 'healthy')
   // nothing of a chat's own: no session, no notes, no cheer, no animal put aside, and no key but the ones named
   assert.doesNotMatch(JSON.stringify(m), /session|issues|cheer"|queued|missing|robot|lost/)
+})
+
+test('a file exported under the earlier name of the project is read as it is, and one with both names or neither is refused', () => {
+  const { hatchling, ...rest } = good(), old = { cachito: hatchling, ...rest }
+  const r = parse(JSON.stringify(old))
+  assert.deepEqual(r.errors, [])
+  assert.deepEqual([r.move?.pet, r.move?.prefs, r.move?.diary], [rest.pet, rest.prefs, rest.diary])
+  assert.equal(r.move && stageOf(r.move), 'healthy')
+  const NOT = ['file: not a pet saved by /pet export']
+  assert.deepEqual(validate({ ...old, hatchling: 'pet' }), NOT)
+  assert.deepEqual(validate(rest), NOT)
+  assert.deepEqual(validate({ ...rest, cachito: 'x' }), NOT)
+  assert.deepEqual(validate({ ...old, extra: 1 }), ['file: unknown field "extra"'])
+  // whatever the file is called: the path is the person's, the earlier file name included
+  assert.deepEqual(asked('~/.claude/cachito-share/cachito-miro-2026-11-15.json yes', '/home/me'), { path: '/home/me/.claude/cachito-share/cachito-miro-2026-11-15.json', yes: true, typed: '~/.claude/cachito-share/cachito-miro-2026-11-15.json' })
 })
 
 test('what an earlier version kept in a shape this one refuses is written whole, so the file made is always one that is read', () => {
@@ -37,14 +52,14 @@ test('what an earlier version kept in a shape this one refuses is written whole,
 test('a hostile file is refused whole, with what is wrong in one line', () => {
   for (const [text, why] of /** @type {[unknown, RegExp][]} */ ([
     [7, /^file: could not be read as text$/],
-    ['{"cachito":"pet",', /^file: not JSON/],
-    [`{"cachito":"pet","pad":"${'x'.repeat(LIMITS.bytes)}"}`, /^file: larger than 256 KiB$/],
+    ['{"hatchling":"pet",', /^file: not JSON/],
+    [`{"hatchling":"pet","pad":"${'x'.repeat(LIMITS.bytes)}"}`, /^file: larger than 256 KiB$/],
     ['[]', /^file: not a pet saved by \/pet export$/],
     ['{"format":1}', /^file: not a pet saved by/],
-    ['{"cachito":"pet","format":"1"}', /^format: must be a whole number from 1$/],
+    ['{"hatchling":"pet","format":"1"}', /^format: must be a whole number from 1$/],
   ])) { const r = parse(text); assert.equal(r.move, null); assert.match(r.errors[0] ?? '', why) }
   // a newer format says so, and nothing else of the file is judged
-  assert.equal(fault(m => { m.format = FORMAT + 1; m.pet = 'x' }), `format: the file was made by a newer Cachito (format ${FORMAT + 1}, this one reads ${FORMAT}): update Cachito here, then import it`)
+  assert.equal(fault(m => { m.format = FORMAT + 1; m.pet = 'x' }), `format: the file was made by a newer Hatchling (format ${FORMAT + 1}, this one reads ${FORMAT}): update Hatchling here, then import it`)
   // escape sequences, controls and invisible characters, wherever they are: in a value, in a list, in the name of a field
   assert.match(fault(m => { m.prefs.name = 'Mi\u001b[31mro' }), /^file\.prefs\.name: must be a text/)
   assert.match(fault(m => { m.prefs.callme = 'Ana\u202e' }), /^file\.prefs\.callme: must be a text/)
@@ -89,10 +104,10 @@ test('a hostile file is refused whole, with what is wrong in one line', () => {
 })
 
 test('the file is named by the pet and the day, in the folder whatever the name; a backup has the time too', () => {
-  assert.equal(movePath('/home/me/.claude/cachito-share', 'Miro', T), '/home/me/.claude/cachito-share/cachito-miro-2026-11-15.json')
-  assert.equal(movePath('/cfg/cachito-share/', 'Miro', T, true), '/cfg/cachito-share/cachito-miro-2026-11-15-backup-090507.json')
-  assert.equal(movePath('/d', '../../etc/x', T), '/d/cachito-etc-x-2026-11-15.json')
-  assert.equal(movePath('/d', '--', T), '/d/cachito-pet-2026-11-15.json')
+  assert.equal(movePath('/home/me/.claude/hatchling-share', 'Miro', T), '/home/me/.claude/hatchling-share/hatchling-miro-2026-11-15.json')
+  assert.equal(movePath('/cfg/hatchling-share/', 'Miro', T, true), '/cfg/hatchling-share/hatchling-miro-2026-11-15-backup-090507.json')
+  assert.equal(movePath('/d', '../../etc/x', T), '/d/hatchling-etc-x-2026-11-15.json')
+  assert.equal(movePath('/d', '--', T), '/d/hatchling-pet-2026-11-15.json')
 })
 
 test('the path typed after /pet import: spaces, quotes, ~, and yes after it', () => {

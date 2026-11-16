@@ -1,4 +1,4 @@
-// Reproducible A/B of Cachito's levers: the same requests, on the same commit of a public project,
+// Reproducible A/B of Hatchling's levers: the same requests, on the same commit of a public project,
 // one headless Claude Code session per run, with nothing of this machine's own setup loaded.
 // Usage: node bench/run.mjs <out dir> [--work tour|fix|short|real|gin] [--model claude-opus-5-5] [--effort low|medium|high|xhigh|max] [--runs 5] [--arms clean,style] [--task <git url or path>] [--ref <commit>] [--wait]
 //        node bench/run.mjs <out dir> --work real --dry [--fixes <folder of .diff>]   no model, nothing billed: the project's own tests at the pinned commit (they must pass), the hidden tests on the code as it is (they must fail), then with the fixes applied (they must pass)
@@ -17,11 +17,11 @@ import { block, emptied } from './block.mjs'
 /** @type {Record<string, { plugin: string, also?: string, env: Record<string, string> }>} */
 const ARMS = {
   clean: { plugin: '', env: {} }, // no plugin at all
-  observe: { plugin: 'cachito', env: {} }, // Cachito as installed: it watches and adds nothing
+  observe: { plugin: 'hatchling', env: {} }, // Hatchling as installed: it watches and adds nothing
   // the eight lines the repository shipped until 2026-11-16 (the plugin `cachito-lean`, and the pet's `/pet lean on`), kept under
   // arms/leanonly so that the past series run again: `leanonly` is the lines alone, `style` the pet with the lines beside it.
   // What ships today, briefox, is the text of the arm `brief` (arms.test.mjs)
-  style: { plugin: 'cachito', also: 'leanonly', env: {} },
+  style: { plugin: 'hatchling', also: 'leanonly', env: {} },
   leanonly: { plugin: 'leanonly', env: {} },
   // the arms `diet` and `lean` (diet and style) of the past series are gone with the diet: the mod has no such lever any more.
   // Those series can be run again only with the copy of the mod kept in each series' folder (bench/RESULTS.md)
@@ -60,7 +60,7 @@ const armOf = (/** @type {string} */ a) => { const arm = ARMS[a]; if (!arm) thro
 for (const a of arms) armOf(a)
 /** The plugins an arm loads: none, one, or two. @param {string} a */
 const pluginsOf = (a) => [armOf(a).plugin, armOf(a).also ?? ''].filter(Boolean)
-/** @type {Record<string, string | undefined>} */ const dirs = { caveman: opt('caveman'), ponytail: opt('ponytail') } // cachito's is set below
+/** @type {Record<string, string | undefined>} */ const dirs = { caveman: opt('caveman'), ponytail: opt('ponytail') } // hatchling's is set below
 for (const a of arms) if (armOf(a).plugin in dirs && !dirs[armOf(a).plugin]) throw new Error(`arm "${a}" needs --${armOf(a).plugin} <the plugin's folder>`)
 
 // Claude Code reads CLAUDE.md and AGENTS.md from every folder above the project: a run below one is not a clean run
@@ -90,7 +90,7 @@ const own = (/** @type {string} */ p) => !/\.test\.[jt]sx?$/.test(p) && !p.inclu
 for (const f of ['.claude-plugin/plugin.json', 'engine', 'hooks', 'types', 'sprites/zoo.js', 'briefox/text.js']) cpSync(join(ROOT, f), join(mod, f), { recursive: true, filter: own })
 for (const a of TEXT_ARMS) cpSync(join(HERE, 'arms', a), dirs[a] = join(out, a), { recursive: true, filter: own }) // the arms `brief`, `mini` and `leanonly`
 for (const d of [mod, ...TEXT_ARMS.map(a => join(out, a))]) execFileSync('claude', ['plugin', 'validate', d], { stdio: 'ignore' }) // a copy that does not load would run as `clean` without a word
-dirs.cachito = mod
+dirs.hatchling = mod
 /** @type {(d: string) => string[]} */ const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]).sort()
 const sha = (/** @type {(string | Buffer)[]} */ ...texts) => texts.reduce((h, t) => h.update(t), createHash('sha256')).digest('hex').slice(0, 16)
 const prompts = readFileSync(join(WORK, 'prompts.txt'), 'utf8').split('\n').filter(Boolean)
@@ -118,21 +118,25 @@ console.log(`at ${commit.slice(0, 7)}, before any run, with GOFLAGS="${TMP.GOFLA
 writeFileSync(join(out, 'manifest.json'), JSON.stringify({
   started: new Date().toISOString(), work, spec, goflags: TMP.GOFLAGS, umask: '022', baseline: { passing: BASE.tests.pass.length, unformatted: BASE.unformatted }, workHash: sha(...walk(WORK).map(f => readFileSync(f))), model, effort: effort ?? null, runs, arms: Object.fromEntries(arms.map(a => [a, armOf(a)])), task, ref, commit,
   claude: execFileSync('claude', ['--version'], { encoding: 'utf8' }).trim(), node: process.version, go, platform: process.platform,
-  others: Object.fromEntries(Object.entries(dirs).flatMap(([k, d]) => !k.startsWith('cachito') && !TEXT_ARMS.includes(k) && d ? [[k, { dir: d, version: JSON.parse(readFileSync(join(d, '.claude-plugin/plugin.json'), 'utf8')).version }]] : [])),
+  others: Object.fromEntries(Object.entries(dirs).flatMap(([k, d]) => !k.startsWith('hatchling') && !TEXT_ARMS.includes(k) && d ? [[k, { dir: d, version: JSON.parse(readFileSync(join(d, '.claude-plugin/plugin.json'), 'utf8')).version }]] : [])),
   prompts: sha(prompts.join('\n')), mod: sha(...walk(mod).map(f => readFileSync(f))), ...Object.fromEntries(TEXT_ARMS.map(a => [a, sha(...walk(join(out, a)).map(f => readFileSync(f)))])), runner: sha(readFileSync(new URL(import.meta.url).pathname)),
   flags: [...(effort ? ['--effort', effort] : []), ...ISOLATE, '--permission-mode', 'acceptEdits', '--allowedTools', ...ALLOW],
 }, null, 1))
+
+/** The mod's variables under today's name and the earlier one. @param {Record<string, string>} vars @returns {Record<string, string>} */
+const both = (vars) => Object.fromEntries(Object.entries(vars).flatMap(([k, v]) => [[`HATCHLING_${k}`, v], [`CACHITO_${k}`, v]]))
 
 /**
  * One session: the requests go in one at a time, each after the previous turn's result.
  * @param {string} dir @param {string} arm
  */
 async function session(dir, arm) {
-  mkdirSync(join(out, 'cachito-out', basename(dir)), { recursive: true })
+  mkdirSync(join(out, 'hatchling-out', basename(dir)), { recursive: true })
   const child = spawn('claude', ['-p', '--model', model, ...(effort ? ['--effort', effort] : []), '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', ...ISOLATE,
     '--permission-mode', 'acceptEdits', '--allowedTools', ...ALLOW, ...pluginsOf(arm).flatMap(p => ['--plugin-dir', /** @type {string} */ (dirs[p])])],
-  { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'], env: { ...BASE_ENV, CACHITO_STYLE: '', CACHITO_PLAIN: '1', CAVEMAN_DEFAULT_MODE: '', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', ...TMP, ...armOf(arm).env, CACHITO_BENCH: join(out, 'cachito-out', basename(dir)) } })
-  // CACHITO_BENCH: the mod then keeps its pet, preferences and marks in memory, one per run:
+  { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'], env: { ...BASE_ENV, CAVEMAN_DEFAULT_MODE: '', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', ...TMP, ...armOf(arm).env, ...both({ STYLE: '', PLAIN: '1', BENCH: join(out, 'hatchling-out', basename(dir)) }) } })
+  // each variable under both names: HATCHLING_* is what the mod reads today, CACHITO_* what the copies of the mod kept with the series before 2026-11-16 read
+  // HATCHLING_BENCH: the mod then keeps its pet, preferences and marks in memory, one per run:
   // nothing of the person's store is read or written, so the lever is the arm's variable and nothing else
   // background commands are off: one that ends later starts a turn of its own, and the answers no longer line up with the requests
   /** @type {string[]} */ const events = []

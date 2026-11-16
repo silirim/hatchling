@@ -1,5 +1,7 @@
 # Bench results
 
+> **Names.** Since 2026-11-16 the project is Hatchling (plugin `hatchling`). Until then it was Cachito: the plugin `cachito`, and the saving plugin `cachito-lean`, now `briefox`. The history below keeps the names as they were when each series ran.
+
 Not affiliated with caveman, ponytail, gin or their authors. Every figure comes from `node bench/report.mjs`. Run it yourself: [README.md](README.md). Method: [METHOD.md](METHOD.md).
 
 **What ships now (2026-11-16).** The saving plugin is `briefox`, and all it adds is the text of the arm `brief`: one section, `Be brief.` (`briefox/text.js`; `bench/arms.test.mjs` holds the two equal). Why: on the long session of VodMax that sentence cost 12.7% less than Claude Code alone (Series 9, p = 0.0006), and on neither project were the eight lines shown to beat it (Series 8 and 9). The eight lines, shipped until that day as the plugin `cachito-lean` and as the pet's `/pet lean on`, are shipped by nothing any more: they are kept as the bench arm `leanonly` (`bench/arms/leanonly`), and `style` is the pet with that arm beside it, so that the series below can be run again. Not measured: the sentence on gin against Claude Code alone, on a short task, against caveman or ponytail, or with the pet loaded. Everything below is as it was measured and written; where it says `cachito-lean`, `/pet lean` or "the style", it means the eight lines.

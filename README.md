@@ -2,7 +2,7 @@
   <img src="assets/cover.png" width="720" alt="The egg and six pixel animals in a row under a night sky: penguin, chick, dog, bunny, fox, cactus">
 </p>
 
-<h1 align="center">Cachito</h1>
+<h1 align="center">Hatchling</h1>
 
 <p align="center"><em>A pixel pet above your prompt, and one sentence that made a long session cost less.</em></p>
 
@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/animals-7-4caf50?style=flat-square" alt="7 animals">
   <img src="https://img.shields.io/badge/languages-4-4caf50?style=flat-square" alt="4 languages">
   <!-- when the repository is public:
-  <img src="https://img.shields.io/github/stars/silirim/cachito-pet?style=flat-square&color=4caf50" alt="GitHub stars">
+  <img src="https://img.shields.io/github/stars/silirim/hatchling?style=flat-square&color=4caf50" alt="GitHub stars">
   -->
 </p>
 
@@ -49,13 +49,15 @@
 Two plugins for Claude Code 2.1.275 or later. The pet:
 
 ```
-/plugin install cachito --marketplace silirim/cachito-pet
+/plugin install hatchling --marketplace silirim/hatchling
 ```
+
+Had the pet under its earlier name? [docs/renamed.md](docs/renamed.md) moves it.
 
 The sentence alone:
 
 ```
-/plugin install briefox --marketplace silirim/cachito-pet
+/plugin install briefox --marketplace silirim/hatchling
 ```
 
 ## The pet
@@ -64,7 +66,7 @@ The sentence alone:
   <img src="assets/animals.png" width="830" alt="Six animals as babies and as adults: penguin, chick, dog, bunny, fox, cactus. A seventh slot holds only a question mark">
 </p>
 
-- It tells you which chats wait for you, those without Cachito too.
+- It tells you which chats wait for you, those without Hatchling too.
 - It keeps your reminders.
 - It reports your day: chats, folders, turns, files changed.
 - An egg hatches into one of seven animals; the seventh is rare, and not shown.
@@ -152,7 +154,7 @@ Every run: [bench/RESULTS.md](bench/RESULTS.md). On your project: [bench/README.
 - **Kept locally**, in Claude Code's plugin store (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, your reminders (never sent or exported), and for each chat the full path of its folder and the times of its last turn (30 chats, 30 days), and your live sessions' folders and statuses. Never the content of a chat, a prompt, a file or a command. briefox keeps only its switch.
 - **Nothing is sent anywhere**, and no model is asked.
 - **The one exception is comments, off by default.** A small model, on your tokens (about 650 in, 75 out; at most 40 a day), gets the pet's character and language, your name if told, why it speaks, tool names (MCP servers' too) and counts, failed programs' names, how many files changed, the assistant's last 600 characters, its last two lines, three diary lines with folder names, another finished chat's folder name and times and, with `/pet say`, your first 300 characters. A pause or resume sends a recap: up to 16,000 characters of the last turn's text, 300 of your last prompt.
-- `/pet adopt` reads `~/.claude.json` once, when you run it. `/pet share` saves a picture in `~/.claude/cachito-share/`. `/pet export` saves the pet there as a file you carry yourself.
+- `/pet adopt` reads `~/.claude.json` once, when you run it. `/pet share` saves a picture in `~/.claude/hatchling-share/`. `/pet export` saves the pet there as a file you carry yourself.
 - Complete: [docs/privacy.md](docs/privacy.md).
 
 ## Development
@@ -162,5 +164,3 @@ Every run: [bench/RESULTS.md](bench/RESULTS.md). On your project: [bench/README.
 ## Licence
 
 MIT: [LICENSE](LICENSE).
-
-<p align="center"><sub><b>Not that Cachito.</b> This one has no Bluetooth, and only vibrates with joy when your tests pass.</sub></p>

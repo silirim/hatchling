@@ -12,7 +12,7 @@ import zoo from '../../sprites/zoo.js'
 const LINE = 44 // a line of the bubble, in columns (hooks/register.js BUBBLE_MAX)
 const en = /** @type {Record<string, string | string[]>} */ (LANGS[BASE])
 // what a {place} is filled with to measure a line: the longest value it meets in use
-const FILL = { how: 'measured in November 2026', d: '100', n: '12', turns: '3', pct: '93', name: 'cachito', ago: '', usd: '$0.00', in: '10000', out: '1000', cap: '40', parts: '' }
+const FILL = { how: 'measured in November 2026', d: '100', n: '12', turns: '3', pct: '93', name: 'hatchling', ago: '', usd: '$0.00', in: '10000', out: '1000', cap: '40', parts: '' }
 const filled = (/** @type {string} */ s, band = '') => s.replace(/\{(\w+)\}/g, (all, k) => k === 'band' ? band : /** @type {Record<string, string>} */ (FILL)[k] ?? all)
 /** The most columns a key may take; undefined for the replies of a command, which are not in the bubble. @param {string} key @param {string | string[]} v */
 function limit(key, v) {

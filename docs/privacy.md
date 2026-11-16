@@ -1,4 +1,4 @@
-# What Cachito keeps and what it sends
+# What Hatchling keeps and what it sends
 
 ## What is sent
 
@@ -36,9 +36,9 @@ In Claude Code's plugin store (`~/.claude/plugins/store/`):
 
 Never the content of a chat, a prompt or a command.
 
-In `~/.claude/cachito-share/` (or the config folder Claude Code was given), only when you run `/pet share`: one picture a pet name, `cachito-<name>.png`, written over each time (an `.svg` when there is no Node to write the PNG). On it: the pet, its name, animal, stage, character and stars. No folder, path, project, token or cost. Nothing is sent: you attach it to a post yourself.
+In `~/.claude/hatchling-share/` (or the config folder Claude Code was given), only when you run `/pet share`: one picture a pet name, `hatchling-<name>.png`, written over each time (an `.svg` when there is no Node to write the PNG). On it: the pet, its name, animal, stage, character and stars. No folder, path, project, token or cost. Nothing is sent: you attach it to a post yourself.
 
-In the same folder, only when you run `/pet export` (or `/pet import <path> yes`, which saves the pet that is there first): one JSON file, `cachito-<name>-<date>.json`, readable by you alone (mode 0600). Nothing is sent: you carry the file yourself.
+In the same folder, only when you run `/pet export` (or `/pet import <path> yes`, which saves the pet that is there first): one JSON file, `hatchling-<name>-<date>.json`, readable by you alone (mode 0600). Nothing is sent: you carry the file yourself.
 
 - **In the file**: the pet (animal, name, character and statistics, birth, days, affection, cuddles, stars, the items, coats and animals it has, what it wears, whether it was born golden, its two all-time token counters), your choices (language, lean, hidden, the board of the chats, the comments' model, comments on or off and whether you were asked), the name you gave with `/pet call me`, and the diary.
 - **Not in the file**: your reminders, the work counters, the last look at your sessions, the marks of the chats (full folder paths, times of turns), the pet's last lines, the comments' count, anything of a chat's content.
@@ -58,10 +58,10 @@ A headless run (`claude -p`) leaves no chat mark, keeps no diary and no work cou
 ## What is read
 
 - **`/pet adopt`** reads `~/.claude.json`, whole, when you run it and never otherwise. That file also holds your account data and the secrets of your MCP servers. Three fields are kept, the rest is dropped at once, and the file is never written.
-- **Skin packs** in `~/.claude/cachito-skins/` are read as data, never run as code.
+- **Skin packs** in `~/.claude/hatchling-skins/` are read as data, never run as code.
 
 `/pet chats off` hides this chat from your others; it still leaves its mark, with no sign of life.
 
 ## Left by earlier versions
 
-Nothing is written to `~/.claude/cachito-out` any more. If that folder exists, an earlier version saved long command outputs there. They can hold anything a command printed, secrets included: delete it.
+An earlier version saved long command outputs in a folder of its own, and nothing is written there any more. They can hold anything a command printed, secrets included: [renamed.md](renamed.md) names the folder; delete it.

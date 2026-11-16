@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// Turns a Codex pet into a Cachito skin pack: npm run skin:import <folder of the pet | its pet.json> [options]
+// Turns a Codex pet into a Hatchling skin pack: npm run skin:import <folder of the pet | its pet.json> [options]
 // A Codex pet is a folder with `pet.json` and one sprite sheet (spritesheet.webp or .png): 8 columns of cells of 192x208 pixels,
 // one row for each state (docs/skins.md, "Importing a Codex pet", has the sources). This reads those two files from the person's
 // own disk, and nothing else: it downloads nothing. The sheet is reduced to our grid of half blocks with a small palette, three
@@ -157,7 +157,7 @@ export function read(where) {
 }
 
 /** The folder the mod reads packs from. */
-export const skinsDir = () => join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'cachito-skins')
+export const skinsDir = () => join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'hatchling-skins')
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2)

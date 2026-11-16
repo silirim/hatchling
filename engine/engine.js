@@ -1,5 +1,5 @@
 // @ts-check
-// Cachito engine: pure state machine. Adapters (the Claude Code mod; Codex hooks are planned) feed it events
+// Hatchling engine: pure state machine. Adapters (the Claude Code mod; Codex hooks are planned) feed it events
 // and persist the JSON state; nothing here does IO or touches the model context.
 
 import { tidy } from './width.js'
