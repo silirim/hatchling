@@ -77,30 +77,30 @@ test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
   // the diet is gone: a long output passes whole, the command says it was taken out and why, and nothing is written
   const bash = { tool: 'Bash', command: 'cat big.log', tool_use_id: 't1' } as any
   expect((await $.tool.call(bash) as any).result.stdout).toBe(LONG)
-  expect(((await $.command.run({ command: 'pet', args: 'diet on' } as any)) as any).text).toBe('/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; the outputs it saved are still in ~/.claude/cachito-out. /pet lean, the style, is the lever that showed one.')
+  expect(((await $.command.run({ command: 'pet', args: 'diet on' } as any)) as any).text).toBe('/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; the outputs it saved are still in ~/.claude/cachito-out. /pet briefox, one sentence, is the lever that showed one.')
   expect((await $.tool.call(bash) as any).result.stdout).toBe(LONG)
   expect(Object.keys(files)).toEqual([])
 
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
   // the style: a section of the system prompt only when the person turned it on
   expect((await $.prompt.compose(ask)).sections.length).toBe(1)
-  await $.command.run({ command: 'pet', args: 'style on' } as any)
-  expect((await $.prompt.compose(ask)).sections.at(-1)).toMatchObject({ id: 'cachito:style', scope: 'session' })
+  await $.command.run({ command: 'pet', args: 'briefox on' } as any)
+  expect((await $.prompt.compose(ask)).sections.at(-1)).toMatchObject({ id: 'briefox', scope: 'session' })
 
   // the card: no saving claimed for this chat. Lean is the style, with the bench figure
   const card = JSON.stringify(await $.command.run({ command: 'pet', args: '' } as any))
   expect(card).toMatch(/Cachito the (\w+ )?\w+, baby/)
-  expect(card).toMatch(/lean on: the style\. In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving\\n/)
+  expect(card).toMatch(/briefox on: \\"Be brief\.\\" in the system prompt\. In our bench \\"Be brief\.\\" made a long task cost 12\.7% less, on one project; short tasks were not measured\\n/)
   expect(card).toMatch(/\\ncomments off: fixed lines only, nothing sent\. \/pet comments on lets a small model write them, on your tokens"/)
   expect(card).not.toMatch(/diet|trimmed/)
   expect(card).not.toMatch(/saved|streak|drowned|about 14|!/)
   expect(card).toMatch(/affection 0 over 0 days of use; grown up at 3 days and 60 affection\\n0 stars; owns nothing yet\. \/pet shop\\n/)
   expect(card).not.toMatch(/health|\/100|efficient|out cold|unlocked/)
-  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'lean off' } as any))).toMatch(/Lean off\./)
+  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'briefox off' } as any))).toMatch(/Briefox off\./)
   expect((await $.prompt.compose(ask)).sections.length).toBe(1)
   const off = JSON.stringify(await $.command.run({ command: 'pet', args: '' } as any))
-  expect(off).toMatch(/lean off: \/pet lean on adds the style\. In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving\\n/)
-  await $.command.run({ command: 'pet', args: 'lean on' } as any)
+  expect(off).toMatch(/briefox off: \/pet briefox on adds \\"Be brief\.\\" to the system prompt\. In our bench \\"Be brief\.\\" made a long task cost 12\.7% less, on one project; short tasks were not measured\\n/)
+  await $.command.run({ command: 'pet', args: 'briefox on' } as any)
 
   // a name that is no animal cannot be picked
   const rare = await Promise.all(['robot', 'yeti'].map(a => $.command.run({ command: 'pet', args: `animal ${a}` } as any)))
@@ -145,7 +145,7 @@ test('/clear keeps the preferences: the session state starts empty, the store st
   on('prompt.compose', () => ({ sections: [] }) as any)
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await $.command.run({ command: 'pet', args: 'lean on' } as any)
+  await $.command.run({ command: 'pet', args: 'briefox on' } as any)
   expect(prefsOf(disk)).toMatchObject({ style: true })
   await $.command.run({ command: 'pet', args: 'lang es' } as any)
   const before = prefsOf(disk)
@@ -158,12 +158,38 @@ test('/clear keeps the preferences: the session state starts empty, the store st
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await band.find({ type: 'Raster' })).toBeTruthy()
   await band.unmount()
-  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'lean' } as any))).toMatch(/Lean on/)
+  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'briefox' } as any))).toMatch(/Briefox on/)
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
-  expect((await $.prompt.compose(ask)).sections.at(-1)).toMatchObject({ id: 'cachito:style' })
+  expect((await $.prompt.compose(ask)).sections.at(-1)).toMatchObject({ id: 'briefox' })
   // a change after /clear must not write the empty session state over the stored animal
   await $.command.run({ command: 'pet', args: 'lang en' } as any)
   expect(prefsOf(disk)).toMatchObject({ lang: 'en', style: true, species: before.species, born: before.born })
+})
+
+test('a choice saved by an earlier version holds: /pet lean on was kept as the preference `style`, and that now sends "Be brief."; /pet lean and /pet style still switch it', async ($, on) => {
+  mock.clock(on)
+  const disk: Record<string, any> = { 'pref.species': 'fox', 'pref.born': 'fox', 'pref.style': true } // as /pet lean on left it
+  on('store.get', (_, e) => ({ value: disk[e.key] }))
+  on('store.set', (_, e) => { disk[e.key] = structuredClone(e.value); return { value: undefined } })
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('prompt.compose', () => ({ sections: [] }) as any)
+  const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
+  const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect((await $.prompt.compose(ask)).sections).toEqual([{ id: 'briefox', text: 'Be brief.', scope: 'session' }]) // the whole section: none of the eight lines
+  expect(await cmd('briefox')).toMatch(/^Briefox on: every request carries one sentence in the system prompt, "Be brief\." /)
+  // the two names of earlier versions are still answered, with today's words
+  expect(await cmd('lean off')).toMatch(/^Briefox off\. \/pet briefox on adds one sentence to the system prompt: "Be brief\." /)
+  expect(disk['pref.style']).toBe(false)
+  expect((await $.prompt.compose(ask)).sections).toEqual([])
+  expect(await cmd('style on')).toMatch(/^Briefox on/)
+  expect(await cmd('lean')).toMatch(/^Briefox on/)
+  expect(disk['pref.style']).toBe(true)
 })
 
 test('the diet and /pet weight are gone: a long output passes whole whatever was chosen before, the choice kept for the diet leaves the store at the first write, and each command says why', async ($, on) => {
@@ -228,7 +254,7 @@ test('two chats on one store: a change keeps what the other chat chose meanwhile
   await $.command.run({ command: 'pet', args: 'hide' } as any)
   expect(prefsOf(disk)).toMatchObject({ hidden: true, style: true, lang: 'pt', species: 'bunny' })
   // and this chat now goes by what the store holds
-  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'lean' } as any))).toMatch(/Lean on/)
+  expect(JSON.stringify(await $.command.run({ command: 'pet', args: 'briefox' } as any))).toMatch(/Briefox on/)
 
   // a store that lost the preferences: this chat's are written back, not the defaults
   forget(disk)
@@ -251,38 +277,38 @@ test('over 30k the style waits: lean is the style alone, the note goes while it 
   on('turn.complete', () => ({ text: '' }) as any)
 
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
-  const styled = async () => (await $.prompt.compose(ask)).sections.some((s: any) => s.id === 'cachito:style')
+  const styled = async () => (await $.prompt.compose(ask)).sections.some((s: any) => s.id === 'briefox')
   const turn = async () => { const has = await styled(); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any); return has }
   const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.findAll({ type: 'Text' })).slice(0, 2).map((x: any) => x.text).join('  '); await b.unmount(); return text } // the name and the phrase
   const cmd = async (args: string) => JSON.stringify(await $.command.run({ command: 'pet', args } as any))
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(await turn()).toBe(false)
-  expect(await band()).toMatch(/long chat, lean off: 70k/)
+  expect(await band()).toMatch(/long chat, briefox off: 70k/)
 
   // lean chosen: over 30k the style waits. No cheer, the bubble says so, the note is gone
-  const chosen = await cmd('lean on')
-  expect(chosen).toMatch(/Lean chosen: this chat is already long, so the style starts at the next compaction or the next chat\..*In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving\. Every run: bench\/RESULTS\.md in the repository\./)
+  const chosen = await cmd('briefox on')
+  expect(chosen).toMatch(/Briefox chosen: this chat is already long, so \\"Be brief\.\\" starts at the next compaction or the next chat\..*In our bench \\"Be brief\.\\" made a long task cost 12\.7% less, on one project; short tasks were not measured\. Every run: bench\/RESULTS\.md in the repository\./)
   expect(chosen).not.toMatch(/about 14|!|diet/i)
-  expect(await band()).toMatch(/long chat, lean chosen$/)
-  expect(await band()).not.toMatch(/at work|lean off/)
-  expect(await cmd('')).toMatch(/lean chosen, the style starts at the next compaction or chat/)
+  expect(await band()).toMatch(/long chat, briefox chosen$/)
+  expect(await band()).not.toMatch(/at work|briefox off/)
+  expect(await cmd('')).toMatch(/briefox chosen, \\"Be brief\.\\" starts at the next compaction or chat/)
   expect(await turn()).toBe(false)
-  expect(await band()).toMatch(/lean chosen/)
+  expect(await band()).toMatch(/briefox chosen/)
 
   // the compaction lets the style in: the cheer comes now, and the next request carries the style
   await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'old', toolUses: [], toolResults: [] }] } as any)
-  expect(await band()).toMatch(/lean on\. fewer words, finally/) // the cheer, as the wit says it
+  expect(await band()).toMatch(/briefox on\. fewer words, finally/) // the cheer, as the wit says it
   expect(await turn()).toBe(true)
-  expect(await cmd('')).toMatch(/lean on: the style\. In our bench/)
+  expect(await cmd('')).toMatch(/briefox on: \\"Be brief\.\\" in the system prompt\. In our bench/)
 
   // turned off in a long chat, the style stays in the prompt until a cheap moment, but lean is off for the pet at once
-  await cmd('lean off')
+  await cmd('briefox off')
   expect(await turn()).toBe(true)
-  expect(await band()).toMatch(/long chat, lean off: 70k/)
+  expect(await band()).toMatch(/long chat, briefox off: 70k/)
   expect(await band()).not.toMatch(/health|\d\/100/)
   // chosen again, by its other name, then /clear: the new chat carries it from its first request
-  await cmd('style on')
+  await cmd('lean on')
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
   expect(await styled()).toBe(true)
 })
@@ -619,7 +645,7 @@ test('the old /buddy: the config is read only when the person runs /pet adopt; a
   expect(k.reads.length).toBe(1)
 })
 
-test('with the cachito-lean plugin the style is on whatever /pet lean says: the card, /pet lean and the note of a long chat do not say lean off', async ($, on) => {
+test('with the briefox plugin the sentence is on whatever /pet briefox says: the card, /pet briefox and the note of a long chat do not say briefox off', async ($, on) => {
   mock.clock(on)
   mock.store(on, { prefs: { species: 'penguin', born: 'penguin', voiceAsked: true } })
   on('config.list', () => ({ value: [] }))
@@ -628,14 +654,14 @@ test('with the cachito-lean plugin the style is on whatever /pet lean says: the 
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('env.get', () => ({ value: undefined }))
   on('fs.list', () => ({ value: [] }))
-  // what the other plugin does to the prompt: its section, under the id the two plugins share, while its own /lean is on
+  // what the other plugin does to the prompt: its section, under the id the two plugins share, while its own /briefox is on
   let plugin = true
-  on('prompt.compose', () => ({ sections: plugin ? [{ id: 'intro', text: 'core', scope: 'shared' }, { id: 'cachito:style', text: 'the style', scope: 'session' }] : [{ id: 'intro', text: 'core', scope: 'shared' }] }) as any)
+  on('prompt.compose', () => ({ sections: plugin ? [{ id: 'intro', text: 'core', scope: 'shared' }, { id: 'briefox', text: 'Be brief.', scope: 'session' }] : [{ id: 'intro', text: 'core', scope: 'shared' }] }) as any)
   on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
   on('turn.complete', () => ({ text: '' }) as any)
 
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
-  const styles = async () => (await $.prompt.compose(ask)).sections.filter((s: any) => s.id === 'cachito:style').length
+  const styles = async () => (await $.prompt.compose(ask)).sections.filter((s: any) => s.id === 'briefox').length
   const turn = async () => { const n = await styles(); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any); return n }
   const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.findAll({ type: 'Text' })).slice(0, 2).map((x: any) => x.text).join('  '); await b.unmount(); return text } // the name and the phrase
   const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
@@ -643,24 +669,24 @@ test('with the cachito-lean plugin the style is on whatever /pet lean says: the 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(await turn()).toBe(1) // the plugin's section, and the pet adds none: /pet lean was never given
   // a long chat, 70k: with the style in, no note
-  expect(await band()).not.toMatch(/lean off|lean chosen/)
-  expect(await cmd('')).toMatch(/\nlean on: the style, by the cachito-lean plugin \(\/lean off takes it out\)\. In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving/)
-  expect(await cmd('')).not.toMatch(/lean off:|lean chosen/)
-  expect(await cmd('lean')).toMatch(/^Lean on: the cachito-lean plugin adds the style to the system prompt, whatever \/pet lean says\. \/lean off takes it out\./)
-  expect(await cmd('lean off')).toMatch(/^Lean on: the cachito-lean plugin adds the style/) // the pet's own lever is off, and says who holds the style on
+  expect(await band()).not.toMatch(/briefox off|briefox chosen/)
+  expect(await cmd('')).toMatch(/\nbriefox on, by the briefox plugin \(\/briefox off takes it out\)\. In our bench "Be brief\." made a long task cost 12\.7% less, on one project; short tasks were not measured/)
+  expect(await cmd('')).not.toMatch(/briefox off:|briefox chosen/)
+  expect(await cmd('briefox')).toMatch(/^Briefox on: the briefox plugin adds "Be brief\." to the system prompt, whatever \/pet briefox says\. \/briefox off takes it out\./)
+  expect(await cmd('briefox off')).toMatch(/^Briefox on: the briefox plugin adds "Be brief\."/) // the pet's own lever is off, and says who holds the style on
 
-  // /lean off in the other plugin: from the next prompt the section is gone, and the pet says what is true then
+  // /briefox off in the other plugin: from the next prompt the section is gone, and the pet says what is true then
   plugin = false
   expect(await turn()).toBe(0)
-  expect(await band()).toMatch(/long chat, lean off: 70k/)
-  expect(await cmd('')).toMatch(/\nlean off: \/pet lean on adds the style/)
-  expect(await cmd('lean')).toMatch(/^Lean off\./)
+  expect(await band()).toMatch(/long chat, briefox off: 70k/)
+  expect(await cmd('')).toMatch(/\nbriefox off: \/pet briefox on adds "Be brief\."/)
+  expect(await cmd('briefox')).toMatch(/^Briefox off\./)
 
   // and back: the style is in again, the note goes
   plugin = true
   expect(await turn()).toBe(1)
-  expect(await band()).not.toMatch(/lean off/)
-  expect(await cmd('')).toMatch(/\nlean on: the style, by the cachito-lean plugin/)
+  expect(await band()).not.toMatch(/briefox off/)
+  expect(await cmd('')).toMatch(/\nbriefox on, by the briefox plugin/)
 })
 
 test('one pet for two chats: a turn here keeps what another chat did meanwhile, the card and the band show the shared pet, and lean switched there counts here', async ($, on) => {
@@ -747,7 +773,7 @@ test('one pet for two chats: a turn here keeps what another chat did meanwhile, 
   elsewhere(k.disk, { style: true })
   await turn()
   expect(k.disk.pet.coins).toBe(14)
-  expect(await cardOf($)).toMatch(/lean chosen, the style starts at the next compaction or chat/)
+  expect(await cardOf($)).toMatch(/briefox chosen, "Be brief\." starts at the next compaction or chat/)
 })
 
 test('/pet demo shows every mood in turn, also while the pet sleeps, and the egg goes through all its phases', async ($, on) => {
@@ -873,7 +899,7 @@ test('under the bench the person\'s store is neither read nor written, and the l
   on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
   on('turn.complete', () => ({ text: '' }) as any)
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
-  const styled = async () => (await $.prompt.compose(ask)).sections.some((s: any) => s.id === 'cachito:style')
+  const styled = async () => (await $.prompt.compose(ask)).sections.some((s: any) => s.id === 'briefox')
   const bash = async () => ((await $.tool.call({ tool: 'Bash', command: 'cat big.log', tool_use_id: 't1' } as any)) as any).result.stdout as string
 
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: false })
@@ -1958,7 +1984,7 @@ test('the card, the shop and the short replies are in the language; command name
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const card = await cardOf($)
   expect(card).toMatch(/^Miro，Cachito，狐狸，幼年   .{5} (开心|平静)\n性格：说话干脆利落，却见到红字就一惊。\n  机智 █████████░  91  最强\n  好奇 █████░░░░░  45\n  沉稳 █░░░░░░░░░  12  弱点\n/)
-  expect(card).toMatch(/\n\d+ 颗星；拥有咖啡杯。\/pet shop\n  装扮：配饰 咖啡杯\nlean 未开：\/pet lean on 会加入风格。.*\n点评未开：.*\/pet comments on/)
+  expect(card).toMatch(/\n\d+ 颗星；拥有咖啡杯。\/pet shop\n  装扮：配饰 咖啡杯\nbriefox 未开：\/pet briefox on 会把“Be brief\.”加入系统提示。.*\n点评未开：.*\/pet comments on/)
   expect(card).not.toMatch(/[!！]|undefined|\{\w+\}/)
   const shop = await cardOf($, 'shop')
   expect(shop.split('\n')[0]).toMatch(/^CACHITO 商店 · 你有 \d+ 颗星$/)
@@ -2773,7 +2799,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   expect(await first('')).toMatch(/^McDuff, Cachito the/) // the card is /pet alone
   // an argument that is not understood
   expect(await cardOf($, 'lang fr')).toBe('No language fr. There are: en, es, pt, zh.')
-  expect(await cardOf($, 'lean maybe')).toBe('/pet lean takes on or off, not maybe.')
+  expect(await cardOf($, 'lean maybe')).toBe('/pet briefox takes on or off, not maybe.')
   expect(await cardOf($, 'comments loud')).toBe('/pet comments takes on or off, not loud.')
   expect(await first('animal axolotl')).toBe('The axolotl is not for sale: only a pet born as one is one.')
   expect(await first('animal dog')).toMatch(/^The dog is not yours yet: 100 stars unlock it/)
@@ -2785,7 +2811,7 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'remind', 'reminders', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'alerts', 'lean', 'comments', 'model', 'lang', 'share', 'export', 'import', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'remind', 'reminders', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'alerts', 'briefox', 'comments', 'model', 'lang', 'share', 'export', 'import', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }

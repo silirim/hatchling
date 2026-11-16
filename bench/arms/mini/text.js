@@ -1,7 +1,7 @@
 // @ts-check
 // The bench arm `mini` (bench/run.mjs): "Be brief." plus only the habits that sentence does not cover, how the agent reads. This file
 // is all that tells it from the other arms of this folder: the section's id and its whole text. The three reading lines are those of
-// lean/style.js, word for word (bench/arms.test.mjs): against `leanonly` the arm differs only by what is left out.
+// ../leanonly/text.js, word for word (bench/arms.test.mjs): against `leanonly` the arm differs only by what is left out.
 export const ID = 'bench:mini'
 export const TEXT = `# Working lean
 - Be brief.

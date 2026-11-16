@@ -80,7 +80,7 @@ test('one greeting, gone after the first prompt; a warning or a cheer holds the 
   assert.equal(say(s), CALM.short[0])
   // a long chat without lean is a warning: the greeting is not seen, and nothing is added to the bubble
   const long = run([at({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0 }), at({ type: 'greet', kind: 'first' })], start())
-  assert.deepEqual([bubble(view(long, t)).ask, bubble(view(long, t)).more], ['/pet lean on', null])
+  assert.deepEqual([bubble(view(long, t)).ask, bubble(view(long, t)).more], ['/pet briefox on', null])
   const cheered = run([at({ type: 'turnEnd' }), at({ type: 'greet', kind: 'first' })], { ...start(), days: RULES.grownAt.days, affection: RULES.grownAt.affection - 1, day: dayOf(t) })
   assert.equal(say(cheered), 'grew a stage')
 })
@@ -158,7 +158,7 @@ test('a long chat gets the outline offer once, lean on or off, then again only a
   // lean off: the heavy warning keeps the bubble and its button, the offer is a second line with its own
   s = run([long(), ...turn()], start())
   b = bubble(view(s, t))
-  assert.deepEqual([b.ask, b.label, b.more], ['/pet lean on', 'fix', { say: 'long chat: shall we put our thoughts in order?', ask: OUTLINE, label: 'outline' }])
+  assert.deepEqual([b.ask, b.label, b.more], ['/pet briefox on', 'fix', { say: 'long chat: shall we put our thoughts in order?', ask: OUTLINE, label: 'outline' }])
 })
 
 test('coffee break: after many turns in a row, once in a while; a pause ends the sitting', () => {

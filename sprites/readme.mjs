@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// Writes the pictures of README.md into assets/: animals.png, shop.png, coats.png and share.png. Each is drawn from the plugin's own
+// Writes the pictures of README.md into assets/: animals.png, shop.png, coats.png, share.png and the small briefox.png. Each is drawn from the plugin's own
 // sprites, prices and code (share.png is the picture of /pet share itself), on the cover's ground with rounded corners.
 //
 //   node sprites/readme.mjs
@@ -26,6 +26,7 @@ export const COATED = 'fox'
 // the pet of share.png: made up, with nothing of anyone's work
 export const SHARED = { name: 'Nube', animal: 'dog', stage: 'adult', peak: 'calm', stars: 86, worn: ['cap', 'scarf', 'duck'] }
 export const FILES = ['animals.png', 'shop.png', 'coats.png', 'share.png']
+export const MASCOT = 'briefox.png' // the fox of the pet, as the mascot of the briefox plugin: a small picture, not one of the wide ones
 
 /** A picture being drawn: one byte a pixel, an index into `colours`; index 0 is see-through. @param {number} w @param {number} h */
 function canvas(w, h) {
@@ -138,10 +139,19 @@ export function share() {
   return { w: pic.width, h: pic.height, colours: ['', ...pic.colours], px: pic.px.map(v => v + 1) }
 }
 
-export const DRAW = /** @type {Record<string, () => { w: number, h: number, colours: string[], px: Uint8Array }>} */ ({ 'animals.png': animals, 'shop.png': shop, 'coats.png': coats, 'share.png': share })
+/** The mascot of briefox: the pet's own fox, grown, with the plugin's name under it. */
+export function briefox() {
+  const c = canvas(240, 200), ground = 140
+  c.floor(ground)
+  c.pet(portrait('fox', 'adult', []), 120, ground, 9)
+  c.text('briefox', 120, ground + FLOOR_H + 18, 3)
+  return c
+}
+
+export const DRAW = /** @type {Record<string, () => { w: number, h: number, colours: string[], px: Uint8Array }>} */ ({ 'animals.png': animals, 'shop.png': shop, 'coats.png': coats, 'share.png': share, [MASCOT]: briefox })
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  for (const name of FILES) {
+  for (const name of [...FILES, MASCOT]) {
     const pic = /** @type {() => { w: number, h: number, colours: string[], px: Uint8Array }} */ (DRAW[name])(), file = png(pic)
     writeFileSync(new URL(`../assets/${name}`, import.meta.url), file)
     console.log(`assets/${name} ${pic.w}x${pic.h} ${file.length} bytes`)

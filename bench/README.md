@@ -50,11 +50,11 @@ node bench/report.mjs <out dir>
 | Arm | What is loaded |
 |---|---|
 | `clean` | Claude Code alone |
-| `leanonly` | the cachito-lean plugin alone |
-| `style` | the pet with `/pet lean on` |
+| `leanonly` | the eight lines of the past series, alone (`bench/arms/leanonly`); nothing ships them any more |
+| `style` | the pet with those eight lines beside it |
 | `caveman`, `ponytail` | that plugin alone |
-| `brief` | a plugin of two words, `Be brief.`, alone (`bench/arms/brief`) |
-| `mini` | a plugin of `Be brief.` and the three reading lines of the style, alone (`bench/arms/mini`) |
+| `brief` | a plugin of two words, `Be brief.`, alone (`bench/arms/brief`): the text the briefox plugin ships |
+| `mini` | a plugin of `Be brief.` and the three reading lines of the eight, alone (`bench/arms/mini`) |
 
 Use one out dir for each task, model and effort. A stopped series resumes with the same command. A long series outlives the terminal only as its own service (`systemd-run --user ...`).
 

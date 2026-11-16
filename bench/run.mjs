@@ -14,23 +14,26 @@ import { goflags, baseline, tested, unformatted, against, added } from './checks
 import { block, emptied } from './block.mjs'
 
 // an arm differs from `clean` only in what is listed here
-/** @type {Record<string, { plugin: string, env: Record<string, string> }>} */
+/** @type {Record<string, { plugin: string, also?: string, env: Record<string, string> }>} */
 const ARMS = {
   clean: { plugin: '', env: {} }, // no plugin at all
   observe: { plugin: 'cachito', env: {} }, // Cachito as installed: it watches and adds nothing
-  style: { plugin: 'cachito', env: { CACHITO_STYLE: '1' } }, // the pet with what /pet lean on turns on
-  leanonly: { plugin: 'cachito-lean', env: {} }, // the cachito-lean plugin alone, as installed: the same lines, no pet
+  // the eight lines the repository shipped until 2026-11-16 (the plugin `cachito-lean`, and the pet's `/pet lean on`), kept under
+  // arms/leanonly so that the past series run again: `leanonly` is the lines alone, `style` the pet with the lines beside it.
+  // What ships today, briefox, is the text of the arm `brief` (arms.test.mjs)
+  style: { plugin: 'cachito', also: 'leanonly', env: {} },
+  leanonly: { plugin: 'leanonly', env: {} },
   // the arms `diet` and `lean` (diet and style) of the past series are gone with the diet: the mod has no such lever any more.
   // Those series can be run again only with the copy of the mod kept in each series' folder (bench/RESULTS.md)
   // two other plugins, each alone, for comparison: their folders come from --caveman <dir> and --ponytail <dir>
   caveman: { plugin: 'caveman', env: { CAVEMAN_DEFAULT_MODE: 'caveman' } }, // it stays off in a headless session unless this is set
   ponytail: { plugin: 'ponytail', env: {} },
-  // "just write 'be brief'": a plugin of this folder (arms/brief) that adds one section, `Be brief.`, the way cachito-lean adds its lines
+  // "just write 'be brief'": a plugin of this folder (arms/brief) that adds one section, `Be brief.`, the text and the section the briefox plugin ships
   brief: { plugin: 'brief', env: {} },
-  // `Be brief.` plus the three reading lines of the style, the habits that sentence does not cover (arms/mini), added the same way
+  // `Be brief.` plus the three reading lines of the eight (arms/leanonly), the habits that sentence does not cover (arms/mini), added the same way
   mini: { plugin: 'mini', env: {} },
 }
-const TEXT_ARMS = ['brief', 'mini'] // the plugins of bench/arms: the same module, each with its own text (arms/<name>/text.js)
+const TEXT_ARMS = ['brief', 'mini', 'leanonly'] // the plugins of bench/arms: the same module, each with its own text (arms/<name>/text.js)
 // user settings (plugins, hooks, permissions) and MCP servers of the machine stay out; the sessions are not saved among the person's own
 const ISOLATE = ['--setting-sources', 'project', '--strict-mcp-config', '--no-session-persistence']
 const ALLOW = ['Bash(git:*)', 'Bash(ls:*)', 'Bash(grep:*)', 'Bash(find:*)', 'Bash(cat:*)', 'Bash(wc:*)', 'Bash(head:*)', 'Bash(sort:*)', 'Bash(go:*)', 'Bash(gofmt:*)']
@@ -55,6 +58,8 @@ const spec = JSON.parse(readFileSync(join(WORK, 'task.json'), 'utf8')) // what t
 const task = opt('task', spec.task ?? 'https://github.com/silirim/VodMax.git'), ref = opt('ref', spec.ref ?? '902e44ef6887488767f3ac898e3feecf100c9407')
 const armOf = (/** @type {string} */ a) => { const arm = ARMS[a]; if (!arm) throw new Error(`no arm "${a}": ${Object.keys(ARMS).join(', ')}`); return arm }
 for (const a of arms) armOf(a)
+/** The plugins an arm loads: none, one, or two. @param {string} a */
+const pluginsOf = (a) => [armOf(a).plugin, armOf(a).also ?? ''].filter(Boolean)
 /** @type {Record<string, string | undefined>} */ const dirs = { caveman: opt('caveman'), ponytail: opt('ponytail') } // cachito's is set below
 for (const a of arms) if (armOf(a).plugin in dirs && !dirs[armOf(a).plugin]) throw new Error(`arm "${a}" needs --${armOf(a).plugin} <the plugin's folder>`)
 
@@ -79,16 +84,13 @@ const MODS = { TMPDIR: join(out, 'tmp'), GOCACHE: join(out, 'gocache'), GOMODCAC
 const TMP = { ...MODS, GOPROXY: 'off' }
 
 // the mod under test is copied once: the runs use that copy, and the copy stays as the record of what was tested
-// (lean/style.js is the style's text, which the pet takes from the cachito-lean plugin's folder; engine/stub is for a Node test only)
-const mod = join(out, 'mod'), leanMod = join(out, 'lean')
+// (briefox/text.js is the sentence, which the pet takes from the briefox plugin's folder; engine/stub is for a Node test only)
+const mod = join(out, 'mod')
 const own = (/** @type {string} */ p) => !/\.test\.[jt]sx?$/.test(p) && !p.includes('.claude-plugin/types') && !p.includes('engine/stub')
-for (const f of ['.claude-plugin/plugin.json', 'engine', 'hooks', 'types', 'sprites/zoo.js', 'lean/style.js']) cpSync(join(ROOT, f), join(mod, f), { recursive: true, filter: own })
-// the cachito-lean plugin is its folder and nothing else, as an install copies it
-cpSync(join(ROOT, 'lean'), leanMod, { recursive: true, filter: own })
-for (const a of TEXT_ARMS) cpSync(join(HERE, 'arms', a), dirs[a] = join(out, a), { recursive: true, filter: own }) // the arms `brief` and `mini`
-for (const d of [mod, leanMod, ...TEXT_ARMS.map(a => join(out, a))]) execFileSync('claude', ['plugin', 'validate', d], { stdio: 'ignore' }) // a copy that does not load would run as `clean` without a word
+for (const f of ['.claude-plugin/plugin.json', 'engine', 'hooks', 'types', 'sprites/zoo.js', 'briefox/text.js']) cpSync(join(ROOT, f), join(mod, f), { recursive: true, filter: own })
+for (const a of TEXT_ARMS) cpSync(join(HERE, 'arms', a), dirs[a] = join(out, a), { recursive: true, filter: own }) // the arms `brief`, `mini` and `leanonly`
+for (const d of [mod, ...TEXT_ARMS.map(a => join(out, a))]) execFileSync('claude', ['plugin', 'validate', d], { stdio: 'ignore' }) // a copy that does not load would run as `clean` without a word
 dirs.cachito = mod
-dirs['cachito-lean'] = leanMod
 /** @type {(d: string) => string[]} */ const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]).sort()
 const sha = (/** @type {(string | Buffer)[]} */ ...texts) => texts.reduce((h, t) => h.update(t), createHash('sha256')).digest('hex').slice(0, 16)
 const prompts = readFileSync(join(WORK, 'prompts.txt'), 'utf8').split('\n').filter(Boolean)
@@ -117,7 +119,7 @@ writeFileSync(join(out, 'manifest.json'), JSON.stringify({
   started: new Date().toISOString(), work, spec, goflags: TMP.GOFLAGS, umask: '022', baseline: { passing: BASE.tests.pass.length, unformatted: BASE.unformatted }, workHash: sha(...walk(WORK).map(f => readFileSync(f))), model, effort: effort ?? null, runs, arms: Object.fromEntries(arms.map(a => [a, armOf(a)])), task, ref, commit,
   claude: execFileSync('claude', ['--version'], { encoding: 'utf8' }).trim(), node: process.version, go, platform: process.platform,
   others: Object.fromEntries(Object.entries(dirs).flatMap(([k, d]) => !k.startsWith('cachito') && !TEXT_ARMS.includes(k) && d ? [[k, { dir: d, version: JSON.parse(readFileSync(join(d, '.claude-plugin/plugin.json'), 'utf8')).version }]] : [])),
-  prompts: sha(prompts.join('\n')), mod: sha(...walk(mod).map(f => readFileSync(f))), lean: sha(...walk(leanMod).map(f => readFileSync(f))), ...Object.fromEntries(TEXT_ARMS.map(a => [a, sha(...walk(join(out, a)).map(f => readFileSync(f)))])), runner: sha(readFileSync(new URL(import.meta.url).pathname)),
+  prompts: sha(prompts.join('\n')), mod: sha(...walk(mod).map(f => readFileSync(f))), ...Object.fromEntries(TEXT_ARMS.map(a => [a, sha(...walk(join(out, a)).map(f => readFileSync(f)))])), runner: sha(readFileSync(new URL(import.meta.url).pathname)),
   flags: [...(effort ? ['--effort', effort] : []), ...ISOLATE, '--permission-mode', 'acceptEdits', '--allowedTools', ...ALLOW],
 }, null, 1))
 
@@ -128,7 +130,7 @@ writeFileSync(join(out, 'manifest.json'), JSON.stringify({
 async function session(dir, arm) {
   mkdirSync(join(out, 'cachito-out', basename(dir)), { recursive: true })
   const child = spawn('claude', ['-p', '--model', model, ...(effort ? ['--effort', effort] : []), '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', ...ISOLATE,
-    '--permission-mode', 'acceptEdits', '--allowedTools', ...ALLOW, ...(armOf(arm).plugin ? ['--plugin-dir', /** @type {string} */ (dirs[armOf(arm).plugin])] : [])],
+    '--permission-mode', 'acceptEdits', '--allowedTools', ...ALLOW, ...pluginsOf(arm).flatMap(p => ['--plugin-dir', /** @type {string} */ (dirs[p])])],
   { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'], env: { ...BASE_ENV, CACHITO_STYLE: '', CACHITO_PLAIN: '1', CAVEMAN_DEFAULT_MODE: '', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', ...TMP, ...armOf(arm).env, CACHITO_BENCH: join(out, 'cachito-out', basename(dir)) } })
   // CACHITO_BENCH: the mod then keeps its pet, preferences and marks in memory, one per run:
   // nothing of the person's store is read or written, so the lever is the arm's variable and nothing else
@@ -243,9 +245,9 @@ async function once(arm, n) {
 }
 /** The checks of one run, and its result. @param {NonNullable<Awaited<ReturnType<typeof once>>>} run */
 function checked({ arm, n, name, dir, base, results, loaded, ended }) {
-  const want = armOf(arm).plugin
+  const want = pluginsOf(arm).sort().join()
   const r = { arm, n, cost: results.at(-1)?.total_cost_usd, turns: results.reduce((s, x) => s + (x.num_turns ?? 0), 0), loaded,
-    isolated: loaded.plugins.join() === want && loaded.mcp.length === 0 && loaded.failed.length === 0, ...grade(dir, base, results, ended), modelUsage: results.at(-1)?.modelUsage, answers: results.map(x => x.result) }
+    isolated: [...loaded.plugins].sort().join() === want && loaded.mcp.length === 0 && loaded.failed.length === 0, ...grade(dir, base, results, ended), modelUsage: results.at(-1)?.modelUsage, answers: results.map(x => x.result) }
   writeFileSync(join(out, `${name}.patch`), execFileSync('git', ['-C', dir, 'diff', '--cached', base], { encoding: 'utf8', maxBuffer: 1 << 26 }))
   // a run that did not answer every request (a usage limit, a crash) is not a result: it is kept apart, run again on resume, and the bench stops after this block
   if (!r.checks.answered) stopped = `${name}: ${String(results.find(x => x.is_error || !x.result)?.result ?? 'no answer').slice(0, 120)}`

@@ -2,6 +2,8 @@
 
 Not affiliated with caveman, ponytail, gin or their authors. Every figure comes from `node bench/report.mjs`. Run it yourself: [README.md](README.md). Method: [METHOD.md](METHOD.md).
 
+**What ships now (2026-11-16).** The saving plugin is `briefox`, and all it adds is the text of the arm `brief`: one section, `Be brief.` (`briefox/text.js`; `bench/arms.test.mjs` holds the two equal). Why: on the long session of VodMax that sentence cost 12.7% less than Claude Code alone (Series 9, p = 0.0006), and on neither project were the eight lines shown to beat it (Series 8 and 9). The eight lines, shipped until that day as the plugin `cachito-lean` and as the pet's `/pet lean on`, are shipped by nothing any more: they are kept as the bench arm `leanonly` (`bench/arms/leanonly`), and `style` is the pet with that arm beside it, so that the series below can be run again. Not measured: the sentence on gin against Claude Code alone, on a short task, against caveman or ponytail, or with the pet loaded. Everything below is as it was measured and written; where it says `cachito-lean`, `/pet lean` or "the style", it means the eight lines.
+
 In short:
 
 - **The eight lines cost less than Claude Code alone on long sessions.** -14.8% on a read-heavy one (Series 4, p = 0.0014). -31.8% on six real defects of gin (Series 7, p = 0.0002).
@@ -10,7 +12,7 @@ In short:
 - **They are not shown to beat the single sentence "Be brief."**, on either project. On gin the lines read 5.0% lower than a plugin that says only that (Series 8, p = 0.5009: not shown; no arm without a plugin). On the long session of VodMax they read 3.5% higher (Series 9, p = 0.3368: not shown).
 - **On that long session "Be brief." alone cost 12.7% less than Claude Code alone** (Series 9, p = 0.0006), the eight lines 9.7% less (p = 0.0022), "Be brief." with the three reading lines 11.1% less (p = 0.0053). No one of the three texts is shown to differ from another.
 - **No saving is shown on the two short tasks**, for any arm.
-- **The diet showed no saving** (-3.6%, p = 0.3110) and is gone. In the tables the arm `lean` is the diet and the style together; today's `/pet lean` is the arm `style`, and the cachito-lean plugin alone is `leanonly`.
+- **The diet showed no saving** (-3.6%, p = 0.3110) and is gone. In the tables the arm `lean` is the diet and the style together; the pet with the eight lines is the arm `style`, and the eight lines alone are `leanonly`.
 - **No arm is shown to fix more defects than another.**
 - **Do not expect a third on your own work.** The model knows gin well, and in three blocks of eight the agents disturbed each other.
 - Two Go projects, two models, 8 runs an arm, no person in the sessions.

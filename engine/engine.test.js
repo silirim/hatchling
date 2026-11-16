@@ -273,7 +273,7 @@ test('a long chat without lean is a note at every turn until lean is on, then th
   t += RULES.cheerGapMs
   let s = run([at({ type: 'sessionStart' }), ...heavyTurn(), ...heavyTurn()])
   const v = view(s, t)
-  assert.deepEqual([v.mood, v.issue?.kind, bubble(v).ask, bubble(v).fix], ['bloated', 'heavy', '/pet lean on', 'A note only. In our bench the style cost less on long tasks.'])
+  assert.deepEqual([v.mood, v.issue?.kind, bubble(v).ask, bubble(v).fix], ['bloated', 'heavy', '/pet briefox on', 'A note only. In our bench "Be brief." cost less on a long task.'])
   s = run([at({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0, lean: true }), at({ type: 'turnEnd' })], s)
   assert.deepEqual([view(s, t).issue, s.cheer?.kind], [null, 'lean'])
   assert.equal(run([at({ type: 'sessionStart' }), ...heavyTurn(), at({ type: 'lean', on: true })]).cheer?.kind, 'lean') // the command is answered at once
@@ -294,7 +294,7 @@ test('calm bubbles say the real state of the chat', () => {
   for (const line of CALM.long) assert.match(line, /long/)
   // long with lean off: the heavy message, already before the turn ends
   const early = bubble(view(run([at({ type: 'sessionStart' }), long]), t))
-  assert.deepEqual([early.say, early.ask], ['long chat, lean off: over 60k tokens re-read per request', '/pet lean on'])
+  assert.deepEqual([early.say, early.ask], ['long chat, briefox off: over 60k tokens re-read per request', '/pet briefox on'])
 })
 
 test('every line is short and sober: one line, no exclamation mark', () => {
@@ -317,7 +317,7 @@ test('lean chosen while the style still waits: no note, no cheer, the bubble say
   s = run([at({ type: 'lean', on: false, wait: true })], s)
   let v = view(s, t), b = bubble(v)
   assert.deepEqual([v.issue, v.cheer, v.lean, v.wait], [null, null, false, true]) // the heavy issue goes, and nothing is celebrated
-  assert.deepEqual([b.say, b.fix, b.ask], ['long chat, lean chosen', 'The style starts at the next compaction or chat.', ''])
+  assert.deepEqual([b.say, b.fix, b.ask], ['long chat, briefox chosen', '"Be brief." starts at the next compaction or chat.', ''])
   s = run([at({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0, lean: false, wait: true }), at({ type: 'turnEnd' })], s)
   assert.deepEqual([view(s, t).issue, s.cheer], [null, null]) // no note while it waits
   // the compaction lets the style in: now the pet cheers

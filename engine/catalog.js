@@ -15,7 +15,7 @@ const NOTE = /** @type {Record<string, { doc: string, ask: string }>} */ ({
   stomach: { doc: 'cache-break.md', ask: '' }, // a habit of the person, nothing to tell the agent
   dizzy: { doc: 'rereads.md', ask: 'Use what is already in context instead of reading unchanged files again.' },
   loop: { doc: 'loops.md', ask: 'That command keeps failing. Read the error, explain the cause, then try a different approach.' },
-  heavy: { doc: 'long-chat.md', ask: '/pet lean on' },
+  heavy: { doc: 'long-chat.md', ask: '/pet briefox on' },
   bloated: { doc: 'context-full.md', ask: '/compact' },
 })
 /**
@@ -41,8 +41,8 @@ export const CHEERS = /** @type {Record<string, (value?: number, lang?: string, 
   evolve: (_, lang, stat) => voicedAs(lang, 'cheer.evolve', at(stat)),
 })
 
-// What /pet lean on adds to the system prompt: written once, in the cachito-lean plugin of this repository (lean/style.js).
-export { BENCH, STYLE, STYLE_ID } from '../lean/style.js'
+// What /pet briefox on adds to the system prompt: written once, in the briefox plugin of this repository (briefox/text.js).
+export { BENCH, TEXT as BRIEF, ID as BRIEF_ID } from '../briefox/text.js'
 
 // Calm lines rotate with the turn. Each one is true of its state: a short chat, or a long one with lean on.
 const SPOKEN = ['calm.short.0', 'calm.short.1', 'calm.short.2', 'calm.long.0', 'calm.long.1', 'calm.long.2', 'greet.first', 'greet.new', 'cheer.lean', 'cheer.evolve']
@@ -68,7 +68,7 @@ export const called = (line, name, lang, n) => name && n % 3 === 0 ? text(lang, 
 
 const pick = (/** @type {string[]} */ lines, /** @type {number} */ turn) => /** @type {string} */ (lines[turn % lines.length])
 
-const LEAN_FIX = { link: DOCS + 'long-chat.md', ask: '/pet lean on' }
+const LEAN_FIX = { link: DOCS + 'long-chat.md', ask: '/pet briefox on' }
 
 // The companion's lines. All of it is local text: nothing here enters the model's context, except the outline request, and that only
 // when the person presses the button and then Enter.

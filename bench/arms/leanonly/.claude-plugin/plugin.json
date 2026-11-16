@@ -1,0 +1,10 @@
+{
+  "name": "leanonly",
+  "version": "0.1.0",
+  "description": "A bench arm, not a plugin to install: the eight lines measured in Series 4 to 9, which nothing ships any more",
+  "author": {
+    "name": "silirim",
+    "url": "https://github.com/silirim"
+  },
+  "license": "MIT"
+}

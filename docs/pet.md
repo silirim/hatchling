@@ -58,7 +58,7 @@ The pet notes where a session wastes tokens. A note is advice and costs nothing;
 
 **After a long pause.** When you write after more than an hour away and the chat holds 100k tokens or more, the pet says the cache has expired and offers `/compact`. The hour is an assumption: the cache lasts 1 hour on a subscription and 5 minutes with an API key, and the pet cannot tell which you have. It never compacts by itself.
 
-**Lean.** `/pet lean on|off` switches the eight lines of [cachito-lean](../README.md#cachito-lean); off by default in the pet. In a chat over 30k tokens the switch waits for the next compaction or chat. With both plugins installed the lines are sent once, and stay while either has them on.
+**Briefox.** `/pet briefox on|off` switches the one sentence of [briefox](../README.md#briefox), `Be brief.`; off by default in the pet. In a chat over 30k tokens the switch waits for the next compaction or chat. With both plugins installed the sentence is sent once, and stays while either has it on. A choice made with `/pet lean` in an earlier version holds, and `/pet lean` is still answered.
 
 ## What else it says
 
@@ -135,7 +135,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet skins` | list your skin packs |
 | `/pet chats [on\|off]` | the chats board; on by default |
 | `/pet alerts [on\|off]` | a desktop notification when another chat may be waiting for your OK; off by default |
-| `/pet lean <on\|off>` | the eight lines |
+| `/pet briefox <on\|off>` | the sentence `Be brief.` |
 | `/pet comments <on\|off>` | comments by a small model, on your tokens |
 | `/pet model [alias\|id\|default]` | the model of the comments: [comments.md](comments.md) |
 | `/pet say <text>` | speak to the pet: [comments.md](comments.md) |

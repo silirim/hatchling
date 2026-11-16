@@ -1,7 +1,7 @@
 {
-  "name": "cachito-lean",
+  "name": "briefox",
   "version": "0.1.0",
-  "description": "Eight lines in the system prompt: short answers, the least code, read-only calls sent together. On as installed; /lean off turns them off",
+  "description": "One sentence in the system prompt: Be brief. In our bench it did as well as eight lines. On as installed; /briefox off takes it out",
   "author": {
     "name": "silirim",
     "url": "https://github.com/silirim"

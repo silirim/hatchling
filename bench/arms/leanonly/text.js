@@ -1,16 +1,10 @@
 // @ts-check
-// The style: the lines the two plugins of this repository add to the system prompt, and the one place they are written.
-// cachito-lean (this folder) sends them as installed; the pet (the repository's root) sends them with /pet lean on.
-
-// One id for both plugins: whichever composes second finds the section there and adds nothing.
-export const STYLE_ID = 'cachito:style'
-
-// What the bench showed of the style (bench/RESULTS.md, Series 4 to 7: the style alone, on two projects),
-// and the one place the figures are written in English: /lean, /pet lean, the pet's card and its note all say this sentence.
-export const BENCH = 'In our bench the style made long tasks cost about 12% to about a third less, depending on the project; short tasks showed no saving'
-
-// A light "say it short, build little", and the habits the receipts show as costly.
-export const STYLE = `# Working lean
+// The bench arm `leanonly` (bench/run.mjs): the eight lines the plugin of this repository shipped as `cachito-lean` until 2026-11-16,
+// kept so that every past series can be run again. Nothing ships them any more: briefox sends `Be brief.` (briefox/text.js). This
+// file is all that tells the arm from the others of this folder: the section's id, the one the lines were measured under, and its
+// whole text. The arm `style` is the pet with this arm beside it.
+export const ID = 'cachito:style'
+export const TEXT = `# Working lean
 - Answer first, in short plain sentences. No preamble, no recap of what you just did, no closing offer. Every fact, number, path, command and warning stays exact and complete.
 - Write the least code that fully does the task: reuse what the project has, and add no option, abstraction or dependency nobody asked for. Validation, error handling, security and the tests the change needs are never the part to cut.
 - Lean is about what you add, never about care: new logic gets a test that covers its edge cases, a bug is fixed at its cause after checking who calls the code, and a change reaches every caller, test and fixture it breaks.

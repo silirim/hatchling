@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { inflateSync } from 'node:zlib'
 import zoo from '../sprites/zoo.js'
 import { RULES } from './engine.js'
-import { ANIMALS, WORN, COATED, SHARED, FILES, DRAW, png } from '../sprites/readme.mjs'
+import { ANIMALS, WORN, COATED, SHARED, FILES, MASCOT, DRAW, png } from '../sprites/readme.mjs'
 
 const root = new URL('../', import.meta.url), at = (/** @type {string} */ path) => fileURLToPath(new URL(path, root))
 const README = readFileSync(at('README.md'), 'utf8')
@@ -31,7 +31,7 @@ test('every picture of the README has an alt text, and is a file of the reposito
     assert.match(src, /^assets\/[\w.-]+$/, `a relative path: ${src}`)
     assert.ok(existsSync(at(src)), `missing: ${src}`)
   }
-  for (const name of [...FILES, 'cover.png', 'hatch.gif', 'terminal.gif', 'results.svg']) assert.ok(shown.includes(`src="assets/${name}"`), name)
+  for (const name of [...FILES, MASCOT, 'cover.png', 'hatch.gif', 'terminal.gif', 'results.svg']) assert.ok(shown.includes(`src="assets/${name}"`), name)
 })
 
 test('every link of the README stays in the repository, and leads to a file or to a heading of the page', () => {
@@ -59,10 +59,10 @@ test('the rare animal is named nowhere: not in the README, not in what draws its
 const rows = (file) => { const from = file.indexOf('IDAT', 0, 'latin1'); return inflateSync(file.subarray(from + 4, from + 4 + file.readUInt32BE(from - 4))) }
 
 test('the pictures made for the README: on disk as the script draws them now, under 200 KB, at most 1200 px wide, the corners see-through', () => {
-  for (const name of FILES) {
+  for (const name of [...FILES, MASCOT]) {
     const pic = /** @type {() => { w: number, h: number, colours: string[], px: Uint8Array }} */ (DRAW[name])(), file = at(`assets/${name}`)
     assert.ok(statSync(file).size < 200_000, name)
-    assert.ok(pic.w <= 1200 && pic.w >= 800, name)
+    assert.ok(pic.w <= 1200 && (pic.w >= 800 || name === MASCOT), name) // the mascot is a small picture
     const disk = readFileSync(file)
     assert.deepEqual([disk.readUInt32BE(16), disk.readUInt32BE(20)], [pic.w, pic.h], `${name} is stale: node sprites/readme.mjs`)
     assert.ok(rows(disk).equals(rows(png(pic))), `${name} is stale: node sprites/readme.mjs`)
@@ -72,8 +72,10 @@ test('the pictures made for the README: on disk as the script draws them now, un
 
 test('the README says what must stay in sight, and its prose is 750 words or fewer', () => {
   const open = shown.replace(/<details>[\s\S]*?<\/details>/g, '')
-  assert.match(open, /It does not beat ponytail on gin/)
-  assert.match(open, /It is not shown to beat a single "Be brief\."\*\*, on either project/)
+  assert.match(open, /ponytail cost less than the eight lines on gin/)
+  assert.match(open, /On gin there is no arm without a plugin for "Be brief\."/)
+  assert.match(open, /No text is shown to differ from another/)
+  assert.match(open, /Short tasks showed no saving\*\* for the eight lines\. The sentence was not run on them/)
   assert.match(open, /Bluetooth/)
   assert.doesNotMatch(README, /\/pet where/)
   const n = words(README)

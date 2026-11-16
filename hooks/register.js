@@ -1,6 +1,7 @@
 // Cachito for Claude Code: feeds session events to the engine and draws the pet above the prompt.
 // As installed it observes only: nothing is added to the model's context. Two levers the person turns on change that:
-// /pet lean adds a short section to the system prompt (the style, the one lever the bench showed).
+// /pet briefox adds one sentence to the system prompt, in a section of its own (briefox/text.js; the one lever the bench showed).
+// In the code the lever keeps the name it had when it was eight lines: `style` (the preference, kept so that an earlier choice still holds), `lean` (the engine's word).
 // What the pet says is local text. A button only fills the prompt box: the person sends it, or not.
 // A third thing the person can turn on, /pet comments, spends their tokens: a small model then writes a line about the turn (engine/voice.js;
 // in the code and the store it is still the `voice`).
@@ -13,7 +14,7 @@ import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled a
 import { marks, greeting, finished, folder, counts, listing, leftOf, WATCH, sight, seen, watched } from '../engine/company.js'
 import { whole as workOf, opened as workOpened, turned as workTurned, said as workSaid, report, yesterday } from '../engine/work.js'
 import { whole as remindersOf, asked as remindAsked, add as remindAdd, done as remindDone, ready as remindReady, due as remindDue, LIMITS as REMIND } from '../engine/remind.js'
-import { bubble, cuddle as cuddleLine, called, ago, since, BENCH, STYLE, STYLE_ID, DOCS } from '../engine/catalog.js'
+import { bubble, cuddle as cuddleLine, called, ago, since, BENCH, BRIEF, BRIEF_ID, DOCS } from '../engine/catalog.js'
 import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX, cleanCall, CALL_MAX } from '../engine/persona.js'
 import { text, put, list as listOf, voicedAs, asLang, fromLocale } from '../engine/lang/index.js'
 import { cols, pad, wrap, tidy } from '../engine/width.js'
@@ -75,8 +76,8 @@ const STYLE_SWITCH_UNDER = 30_000 // context tokens under which switching the st
 const styleOn = async (/** @type {any} */ $) => (await getPrefs($)).style || (await $.env.get('CACHITO_STYLE').catch(() => undefined)) === '1'
 /** Whether the next request carries the style: the choice when a switch is cheap (no request yet, a small chat, right after a compaction), else what it carries now. */
 const styleNext = (/** @type {boolean} */ want) => styleLive === undefined || ctxTokens < STYLE_SWITCH_UNDER || afterCompact ? want : styleLive
-// The cachito-lean plugin (lean/ in this repository) sends the same section under the same id, on as installed. With it the style is
-// in the system prompt whatever /pet lean says, and the pet must not call that `lean off`. Asked of the prompt itself, not of the
+// The briefox plugin (briefox/ in this repository) sends the same section under the same id, on as installed. With it the sentence is
+// in the system prompt whatever /pet briefox says, and the pet must not call that `briefox off`. Asked of the prompt itself, not of the
 // other plugin's store: $.prompt.compose goes through every other plugin's hook, above this one or below, and not through this one.
 /** @type {boolean | undefined} */ let styleOther // whether the others put the style in; undefined: not asked since the last prompt was composed
 /** @type {import('claude-code').PromptComposeInput | undefined} */ let styleAsked // the last prompt composed: the same facts are asked again
@@ -84,11 +85,11 @@ let styleProbing = false // true while the pet asks what the others add: where t
 async function otherStyle(/** @type {any} */ $) {
   if (styleOther === undefined) {
     styleProbing = true
-    try { styleOther = (await $.prompt.compose(styleAsked)).sections.some((/** @type {any} */ s) => s.id === STYLE_ID) } catch { styleOther = false } finally { styleProbing = false }
+    try { styleOther = (await $.prompt.compose(styleAsked)).sections.some((/** @type {any} */ s) => s.id === BRIEF_ID) } catch { styleOther = false } finally { styleProbing = false }
   }
   return styleOther
 }
-/** Lean for the engine. Lean is the style alone: `lean` with the style really in (by the pet or by cachito-lean), `wait` with it chosen and waiting for a cheap moment. */
+/** Lean for the engine. Lean is the style alone: `lean` with the style really in (by the pet or by the briefox plugin), `wait` with it chosen and waiting for a cheap moment. */
 async function leanState(/** @type {any} */ $) {
   const style = await styleOn($), live = styleNext(style)
   if (!style && await otherStyle($)) return { lean: true, wait: false }
@@ -1187,7 +1188,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await recapResume($, fresh).catch(() => {})
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
-    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet lean <on|off> (the style), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary [today|yesterday|week], /pet remind <text>, /pet reminders, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet alerts <on|off>, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
+    await $.command.register({ name: 'pet', description: 'Cachito: show the pet card. Also: /pet briefox <on|off> (one sentence in the system prompt), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary [today|yesterday|week], /pet remind <text>, /pet reminders, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet alerts <on|off>, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
     $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
     return next(e)
   })
@@ -1200,9 +1201,9 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const want = await styleOn($)
     styleLive = styleNext(want)
     styleAsked = e
-    styleOther = r.sections.some(s => s.id === STYLE_ID) || undefined // there already: by a plugin below. Not there: one above may still add it, asked when needed
-    // with the cachito-lean plugin installed too the section may be there already: an id is unique in the list, and the style goes in once
-    return styleLive && !r.sections.some(s => s.id === STYLE_ID) ? { sections: [...r.sections, { id: STYLE_ID, text: STYLE, scope: /** @type {const} */ ('session') }] } : r
+    styleOther = r.sections.some(s => s.id === BRIEF_ID) || undefined // there already: by a plugin below. Not there: one above may still add it, asked when needed
+    // with the briefox plugin installed too the section may be there already: an id is unique in the list, and the style goes in once
+    return styleLive && !r.sections.some(s => s.id === BRIEF_ID) ? { sections: [...r.sections, { id: BRIEF_ID, text: BRIEF, scope: /** @type {const} */ ('session') }] } : r
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -1405,14 +1406,14 @@ export function register(/** @type {import('claude-code').On} */ on) {
     // two commands of earlier versions, taken out: each says so, and why
     if (verb === 'weight') return { text: text((await getPrefs($)).lang, 'gone.weight') }
     if (verb === 'diet') return { text: text((await getPrefs($)).lang, 'gone.diet') }
-    if (verb === 'lean' || verb === 'style') { // one lever, two names: lean is the style
-      const bad = onOff(verb)
+    if (verb === 'briefox' || verb === 'lean' || verb === 'style') { // one lever: `lean` and `style` are its names of earlier versions, still answered
+      const bad = onOff('briefox')
       if (bad) return bad
       if (arg === 'on' || arg === 'off') { await setPrefs($, { style: arg === 'on' }); await feedLean($) }
       const p = await getPrefs($), wait = p.style && !styleNext(true)
-      if (!p.style && await otherStyle($)) return { text: `Lean on: the cachito-lean plugin adds the style to the system prompt, whatever /pet lean says. /lean off takes it out. ${STYLE_BENCH}\n\n${STYLE}` }
-      if (!p.style) return { text: `Lean off. /pet lean on adds the style to the system prompt: short answers, the least code, read-only calls sent together. ${STYLE_BENCH}` }
-      return { text: `${wait ? 'Lean chosen: this chat is already long, so the style starts at the next compaction or the next chat. Switching now would re-send the whole conversation.' : 'Lean on: every request carries the style, these lines in the system prompt. Switching rewrites the cache once.'} ${STYLE_BENCH}\n\n${STYLE}` }
+      if (!p.style && await otherStyle($)) return { text: `Briefox on: the briefox plugin adds "${BRIEF}" to the system prompt, whatever /pet briefox says. /briefox off takes it out. ${STYLE_BENCH}` }
+      if (!p.style) return { text: `Briefox off. /pet briefox on adds one sentence to the system prompt: "${BRIEF}" ${STYLE_BENCH}` }
+      return { text: `${wait ? `Briefox chosen: this chat is already long, so "${BRIEF}" starts at the next compaction or the next chat. Switching now would re-send the whole conversation.` : `Briefox on: every request carries one sentence in the system prompt, "${BRIEF}" Switching rewrites the cache once.`} ${STYLE_BENCH}` }
     }
     if (verb === 'model') { // the model the comments are asked of: an alias or a full id, checked for its shape only; `default` goes back to MODEL
       const typed = e.args.trim().split(/\s+/).slice(1) // as typed: an id keeps its capitals

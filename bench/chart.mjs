@@ -1,14 +1,19 @@
 // Draws assets/results.svg: the mean cost of a session per arm of one series, each run as a dot.
-// Usage: node bench/chart.mjs [out dir]
-// With the folder of the series, the figures are read from its run files and kept in bench/series7.json; without it, they are read from that file.
+// Usage: node bench/chart.mjs [<out dir> <series number>]
+// With the folder of a series and its number in bench/RESULTS.md, the figures are read from its run files and kept in bench/chart.json;
+// without them, they are read from that file. Today's chart is Series 9: node bench/chart.mjs <out>/tour-mini 9
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mean, permutation } from './stats.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const kept = join(here, 'series7.json'), svgFile = join(here, '..', 'assets', 'results.svg')
-const out = process.argv[2]
+const kept = join(here, 'chart.json'), svgFile = join(here, '..', 'assets', 'results.svg')
+const out = process.argv[2], series = Number(process.argv[3])
+if (out && !Number.isInteger(series)) { console.error('usage: node bench/chart.mjs <out dir> <series number>'); process.exit(2) }
+// how an arm is named on the chart: `brief` is the text briefox ships, `leanonly` the eight lines of the past series
+const LABEL = /** @type {Record<string, string>} */ ({ clean: 'clean', brief: 'Be brief.', mini: 'brief + 3 lines', leanonly: 'eight lines' })
+const OURS = 'brief'
 
 /**
  * What the chart needs of a series, read as report.mjs reads it: the runs that were isolated and finished.
@@ -17,19 +22,20 @@ const out = process.argv[2]
 function read(dir) {
   const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
   const rows = readdirSync(dir).filter(f => f.endsWith('.result.json')).map(f => JSON.parse(readFileSync(join(dir, f), 'utf8')))
-  const [, project, tag] = /(\S+\/\S+) at (v[\d.]+)/.exec(manifest.spec.about) ?? []
-  if (!project) throw new Error('no project and tag in the manifest')
+  // a task that names its project says `owner/name at vX.Y.Z`; one that names none is on the bench's default project, known by its commit
+  const [, project = /([^/:]+\/[^/]+?)(\.git)?$/.exec(manifest.task)?.[1], tag = manifest.commit.slice(0, 7)] = /(\S+\/\S+) at (v[\d.]+)/.exec(manifest.spec.about) ?? []
+  if (!project) throw new Error('no project in the manifest')
   /** @type {Record<string, { label: string, cost: number[] }>} */ const arms = {}
   for (const arm of Object.keys(manifest.arms)) {
     const version = manifest.others?.[arm]?.version
     const cost = rows.filter(r => r.arm === arm && r.isolated && r.checks.answered).sort((x, y) => x.n - y.n).map(r => r.cost)
-    if (cost.length) arms[arm] = { label: arm === 'leanonly' ? 'cachito-lean' : version ? `${arm} ${version}` : arm, cost }
+    if (cost.length) arms[arm] = { label: version ? `${arm} ${version}` : LABEL[arm] ?? arm, cost }
   }
-  return { series: 7, project, tag, model: manifest.model, started: manifest.started, runs: manifest.runs, arms }
+  return { series, project, tag, model: manifest.model, started: manifest.started, runs: manifest.runs, arms }
 }
 
 if (out) writeFileSync(kept, JSON.stringify(read(out), null, 1) + '\n')
-else if (!existsSync(kept)) { console.error('usage: node bench/chart.mjs <out dir>  (no bench/series7.json to read instead)'); process.exit(2) }
+else if (!existsSync(kept)) { console.error('usage: node bench/chart.mjs <out dir> <series number>  (no bench/chart.json to read instead)'); process.exit(2) }
 /** @type {ReturnType<typeof read>} */ const data = JSON.parse(readFileSync(kept, 'utf8'))
 
 // the cover's colours
@@ -49,7 +55,7 @@ for (let t = 0; t <= top; t++) {
   parts.push(text(x(t), axis + 18, `$${t}`, ` text-anchor="middle" font-size="12"${quiet}`))
 }
 arms.forEach(([arm, a], i) => {
-  const mid = TOP + i * ROW + ROW / 2, m = mean(a.cost), ours = arm === 'leanonly', end = x(m)
+  const mid = TOP + i * ROW + ROW / 2, m = mean(a.cost), ours = arm === OURS, end = x(m)
   parts.push(text(X0 - 12, mid + 5, a.label, ` text-anchor="end" font-size="14"${ours ? ' font-weight="bold"' : ''}`))
   // flat at the baseline, rounded at the data end
   parts.push(`<path d="M${X0} ${mid - BAR / 2}H${n(end - 4)}a4 4 0 0 1 4 4V${mid + BAR / 2 - 4}a4 4 0 0 1 -4 4H${X0}Z" fill="${ours ? STAR : SAND}"${ours ? '' : ' fill-opacity=".42"'}/>`)
@@ -63,7 +69,7 @@ arms.forEach(([arm, a], i) => {
 })
 
 const day = new Date(data.started).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
-const title = 'Mean cost of a whole coding session, by plugin'
+const title = 'Mean cost of a whole coding session, by what is added to the prompt'
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="t d" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="${SAND}">
 <title id="t">${title}</title>
 <desc id="d">${arms.map(([, a]) => `${a.label} $${mean(a.cost).toFixed(2)}`).join(', ')}. ${data.project} ${data.tag}, ${data.model}, ${data.runs} runs an arm.</desc>

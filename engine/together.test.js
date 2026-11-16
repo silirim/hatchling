@@ -1,6 +1,6 @@
 // @ts-check
 // The two plugins of this repository installed together: both hooks modules as they are, their prompt.compose hooks chained as the
-// engine chains them, in either order. The style is written once (lean/style.js) and enters the system prompt once.
+// engine chains them, in either order. The sentence is written once (briefox/text.js) and enters the system prompt once.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -9,8 +9,8 @@ import { register } from 'node:module'
 // the pet's module imports the engine's own 'claude-code', which only the engine has: a stand-in holds its three functions
 register('./stub/loader.js', import.meta.url)
 const { register: pet } = await import('../hooks/register.js')
-const { register: lean } = await import('../lean/hooks/register.js')
-const { STYLE, STYLE_ID } = await import('../lean/style.js')
+const { register: lean } = await import('../briefox/hooks/register.js')
+const { TEXT: STYLE, ID: STYLE_ID } = await import('../briefox/text.js')
 const catalog = await import('./catalog.js')
 
 /** The hooks a module registers, by event. @param {(on: any) => void} register */
@@ -27,13 +27,13 @@ const engine = (env, disk) => ({
 const CORE = { id: 'intro', text: 'core', scope: 'shared' }
 const ASK = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] }
 
-test('the style has one source: the pet sends the text and the id of lean/style.js, and neither hooks module writes them again', () => {
-  assert.equal(catalog.STYLE, STYLE)
-  assert.equal(catalog.STYLE_ID, STYLE_ID)
-  assert.equal(STYLE.split('\n').filter(l => l.startsWith('- ')).length, 8)
-  for (const file of ['../hooks/register.js', '../lean/hooks/register.js', './catalog.js']) {
+test('the sentence has one source: the pet sends the text and the id of briefox/text.js, and neither hooks module writes the text again', () => {
+  assert.equal(catalog.BRIEF, STYLE)
+  assert.equal(catalog.BRIEF_ID, STYLE_ID)
+  assert.equal(STYLE, 'Be brief.')
+  for (const file of ['../hooks/register.js', '../briefox/hooks/register.js', './catalog.js']) {
     const source = readFileSync(new URL(file, import.meta.url), 'utf8')
-    assert.ok(!source.includes('# Working lean') && !source.includes(STYLE_ID), `${file} writes the style or its id itself`)
+    assert.ok(!source.includes(STYLE) && !/id: 'briefox'/.test(source), `${file} writes the sentence or its id itself`)
   }
 })
 
@@ -56,22 +56,22 @@ test('both installed: the style enters the system prompt once, whichever plugin 
   }
 })
 
-test('both installed, the pet with /pet lean never given: the pet asks the prompt and says lean on while cachito-lean sends the style, above it or below', async () => {
+test('both installed, the pet with /pet briefox never given: the pet asks the prompt and says briefox on while the briefox plugin sends the sentence, above it or below', async () => {
   const petHooks = hooksOf(pet), leanHooks = hooksOf(lean)
   const leanDisk = /** @type {Record<string, unknown>} */ ({})
   const $lean = engine({}, leanDisk), bottom = async () => ({ sections: [CORE] })
   // as the engine answers $.prompt.compose to the pet: through every other plugin's hook, and not through the pet's own
   const others = { prompt: { compose: async () => /** @type {Function} */ (leanHooks['prompt.compose'])($lean, ASK, bottom) } }
   const $pet = { ...engine({ CACHITO_BENCH: '/out/run', CACHITO_PLAIN: '1' }, {}), ...others, clock: { now: async () => 1_800_000_000_000 } }
-  const leanSays = async () => String((await /** @type {Function} */ (petHooks['command.run'])($pet, { command: 'pet', args: 'lean' })).text)
+  const leanSays = async () => String((await /** @type {Function} */ (petHooks['command.run'])($pet, { command: 'pet', args: 'briefox' })).text)
   for (const order of ['pet above', 'lean above']) {
     const [top, $top, low, $low] = order === 'pet above' ? [petHooks, $pet, leanHooks, $lean] : [leanHooks, $lean, petHooks, $pet]
     const composed = async () => (await /** @type {Function} */ (top['prompt.compose'])($top, ASK, () => /** @type {Function} */ (low['prompt.compose'])($low, ASK, bottom))).sections
     leanDisk.off = false
     assert.equal((await composed()).filter((/** @type {any} */ s) => s.id === STYLE_ID).length, 1, order)
-    assert.match(await leanSays(), /^Lean on: the cachito-lean plugin adds the style to the system prompt/, order)
-    leanDisk.off = true // /lean off: from the next prompt the style is gone, and the pet says so
+    assert.match(await leanSays(), /^Briefox on: the briefox plugin adds "Be brief\." to the system prompt/, order)
+    leanDisk.off = true // /briefox off: from the next prompt the sentence is gone, and the pet says so
     assert.equal((await composed()).filter((/** @type {any} */ s) => s.id === STYLE_ID).length, 0, order)
-    assert.match(await leanSays(), /^Lean off\. \/pet lean on adds the style/, order)
+    assert.match(await leanSays(), /^Briefox off\. \/pet briefox on adds one sentence/, order)
   }
 })

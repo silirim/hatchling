@@ -91,13 +91,13 @@ test('a key a language lacks is said in English; a key nobody has reads as the f
   const es = /** @type {Record<string, string | string[]>} */ (LANGS.es), kept = { say: es['wait.say'], six: es['greet.new'] }
   try {
     delete es['wait.say']; delete es['greet.new']
-    assert.equal(text('es', 'wait.say'), 'long chat, lean chosen')
+    assert.equal(text('es', 'wait.say'), 'long chat, briefox chosen')
     assert.equal(voicedAs('es', 'greet.new', 2), 'a new folder. we look around slowly')
-    assert.equal(text('es', 'wait.fix'), 'El estilo empieza en la próxima compactación o chat.') // the rest stays Spanish
+    assert.equal(text('es', 'wait.fix'), '"Be brief." empieza en la próxima compactación o chat.') // the rest stays Spanish
   } finally { es['wait.say'] = /** @type {string} */ (kept.say); es['greet.new'] = /** @type {string[]} */ (kept.six) }
-  assert.equal(text('es', 'wait.say'), 'chat largo, lean elegido')
-  assert.equal(text('xx', 'wait.say'), 'long chat, lean chosen') // a language there is not
-  assert.equal(text(undefined, 'wait.say'), 'long chat, lean chosen')
+  assert.equal(text('es', 'wait.say'), 'chat largo, briefox elegido')
+  assert.equal(text('xx', 'wait.say'), 'long chat, briefox chosen') // a language there is not
+  assert.equal(text(undefined, 'wait.say'), 'long chat, briefox chosen')
   assert.equal(text('es', 'animal.robot', {}, 'robot'), 'robot')
   assert.equal(text('es', 'no.such.key'), 'no.such.key')
   assert.deepEqual(list('es', 'no.such.key'), [])
@@ -118,7 +118,7 @@ test('the bubble speaks the language: notes, cheers, calm lines, greetings, cudd
   assert.deepEqual([resume.say, resume.ask, resume.label], ['uma conversa aqui terminou o turno há 12 min. retomar?', '/resume', 'retomar'])
   // a note: the words are translated, the command and the line for the agent are not
   const note = (/** @type {string} */ kind, /** @type {string} */ lang, detail = /** @type {string | undefined} */ (undefined)) => bubble({ ...v, long: true, issue: /** @type {any} */ ({ kind, detail, untilTurn: 0, until: 0 }) }, { lang })
-  assert.deepEqual([note('heavy', 'es').say, note('heavy', 'es').ask, note('heavy', 'es').label], ['chat largo sin lean: más de 60k tokens releídos por petición', '/pet lean on', 'arreglar'])
+  assert.deepEqual([note('heavy', 'es').say, note('heavy', 'es').ask, note('heavy', 'es').label], ['chat largo sin briefox: más de 60k tokens releídos por petición', '/pet briefox on', 'arreglar'])
   assert.equal(note('dizzy', 'zh', '/src/a.txt').say, '重复读取，内容没变：a.txt')
   assert.equal(note('dizzy', 'zh').ask, note('dizzy', 'en').ask)
   assert.equal(note('stomach', 'pt', 'ttl_expired_5m').say, 'cache refeito: mais de 5 minutos sem atividade')
@@ -127,7 +127,7 @@ test('the bubble speaks the language: notes, cheers, calm lines, greetings, cudd
   assert.equal(note('bloated', 'en').say, 'context almost full')
   assert.equal(note('bloated', 'es', '91').say, 'contexto al 91%')
   assert.deepEqual(Object.keys(CHEERS), ['lean', 'evolve']) // none about the cache: a high hit is the usual case and nothing the person did
-  assert.equal(/** @type {any} */ (CHEERS.lean)(0, 'zh'), 'lean 已开：风格生效了')
+  assert.equal(/** @type {any} */ (CHEERS.lean)(0, 'zh'), 'briefox 已开：那句话生效了')
   assert.equal(TALK.recap({ kind: 'recap', at: 0, fails: { npm: 2, '?': 1, go: 1 }, rereads: 1, rebuilds: 2 }, 'es').say, 'turno largo: npm falló 2 veces, un comando falló una vez, otros 1 con fallos, 1 relectura, caché reconstruida 2 veces')
   assert.equal(TALK.recap({ kind: 'recap', at: 0, fails: { npm: 2 }, rereads: 3 }, 'zh').say, '这一轮很长：npm 失败 2 次，重复读取 3 次')
   assert.equal(TALK.silly({ kind: 'silly', at: 0, n: 0.99 }, 'pt').say, 'protagonista')

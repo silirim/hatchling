@@ -2,7 +2,7 @@
 
 ## What is sent
 
-**As installed, nothing.** Neither plugin sends anything anywhere or asks any model. The work report, the reminders and the watch on your other chats are made on your machine, with no model. cachito-lean adds its eight lines to the system prompt of your own chat, and reads the token count of each request to know when the chat is long.
+**As installed, nothing.** Neither plugin sends anything anywhere or asks any model. The work report, the reminders and the watch on your other chats are made on your machine, with no model. briefox adds its one sentence to the system prompt of your own chat, and reads the token count of each request to know when the chat is long.
 
 **The one exception is comments**, off until you turn them on ([comments.md](comments.md) has the cost). Each comment, and each `/pet say`, is one request to a small model on your own account, with:
 
@@ -32,7 +32,7 @@ In Claude Code's plugin store (`~/.claude/plugins/store/`):
 - **Comments' count**: lines, tokens and cost, the time of the last line, the pet's last two lines.
 - **One mark for each chat**: the **full path of its working folder**, when its last turn started and ended, when it last gave a sign of life, whether that turn was cut short, the time of the pause a recap was already made for, and since when a tool call has waited for your leave. Not which tool or command. The 30 newest are kept, for 30 days at most.
 - **After `/pet adopt`**: three fields of your old `/buddy` (`name`, `personality`, `hatchedAt`).
-- **cachito-lean**: whether you turned the lines off.
+- **briefox**: whether you turned the sentence off.
 
 Never the content of a chat, a prompt or a command.
 

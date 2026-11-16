@@ -4,7 +4,7 @@
 
 <h1 align="center">Cachito</h1>
 
-<p align="center"><em>A pixel pet above your prompt, and eight lines that make long sessions cost less.</em></p>
+<p align="center"><em>A pixel pet above your prompt, and one sentence that made a long session cost less.</em></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/licence-MIT-4caf50?style=flat-square" alt="Licence: MIT">
@@ -20,7 +20,7 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#the-pet">The pet</a> ·
-  <a href="#cachito-lean">cachito-lean</a> ·
+  <a href="#briefox">briefox</a> ·
   <a href="bench/RESULTS.md">Results</a> ·
   <a href="#what-stays-on-your-machine">Privacy</a>
 </p>
@@ -29,8 +29,8 @@
   <tr>
     <td align="center" width="25%"><h3>7</h3>animals to hatch<br><sub><a href="docs/pet.md">docs/pet.md</a></sub></td>
     <td align="center" width="25%"><h3>0 tokens</h3>unless you turn comments on<br><sub><a href="docs/privacy.md">docs/privacy.md</a></sub></td>
-    <td align="center" width="25%"><h3>-31.8%</h3>session cost on gin with cachito-lean<br><sub>8+8 runs, Opus 5.5, p 0.0002: <a href="bench/RESULTS.md">Series 7</a></sub></td>
-    <td align="center" width="25%"><h3>-12% to -15%</h3>on a second project<br><sub>VodMax: <a href="bench/RESULTS.md">Series 4 to 6</a></sub></td>
+    <td align="center" width="25%"><h3>-12.7%</h3>cost of a long session with "Be brief."<br><sub>8+8 runs, Opus 5.5, p 0.0006: <a href="bench/RESULTS.md">Series 9</a></sub></td>
+    <td align="center" width="25%"><h3>8 lines, 1 sentence</h3>the lines were not shown to beat the sentence<br><sub>two projects: <a href="bench/RESULTS.md">Series 8 and 9</a></sub></td>
   </tr>
 </table>
 
@@ -52,10 +52,10 @@ Two plugins for Claude Code 2.1.275 or later. The pet:
 /plugin install cachito --marketplace silirim/cachito-pet
 ```
 
-The eight lines alone:
+The sentence alone:
 
 ```
-/plugin install cachito-lean --marketplace silirim/cachito-pet
+/plugin install briefox --marketplace silirim/cachito-pet
 ```
 
 ## The pet
@@ -109,7 +109,7 @@ Use earns stars. The shop takes them for things to wear, three coats and the oth
 | `/pet export`, `/pet import <path>` | move the pet to another computer |
 | `/pet comments on\|off` | comments; off by default |
 | `/pet model [alias\|id]` | comments' model; default `haiku` |
-| `/pet lean on\|off` | cachito-lean's eight lines, from the pet |
+| `/pet briefox on\|off` | briefox's sentence, from the pet |
 | `/pet hide`, `/pet show` | hide or show it |
 | `/pet help` | every command |
 
@@ -117,34 +117,39 @@ Use earns stars. The shop takes them for things to wear, three coats and the oth
 
 The rest: [docs/pet.md](docs/pet.md).
 
-## cachito-lean
+## briefox
 
 <p align="center">
-  <img src="assets/results.svg" alt="Mean cost of a session on gin: no plugin $2.40, cachito-lean $1.64, caveman $2.17, ponytail $1.47">
+  <img src="assets/briefox.png" width="120" alt="A pixel fox with the name briefox under it">
 </p>
 
-Eight lines in the system prompt ask for short answers, the least code and read-only calls sent together. They are in [lean/style.js](lean/style.js).
+One sentence in the system prompt: `Be brief.` ([briefox/text.js](briefox/text.js)). On as installed; `/briefox on|off` switches it.
 
-`/lean on|off` switches them; on as installed. In a long chat a switch waits for the next compaction.
+We measured eight lines of advice against that sentence on two projects. The sentence did as well, so we ship the sentence.
 
-Our bench measured whole headless sessions with and without the lines: 8 runs an arm, 5 in the third row. VodMax is the author's own public project.
+<p align="center">
+  <img src="assets/results.svg" alt="Mean cost of a long session on VodMax: no plugin $3.61, Be brief. $3.15, Be brief. and three lines $3.21, the eight lines $3.26">
+</p>
 
-| Session | Model | Claude Code alone | With the lines | Difference | p |
-|---|---|---|---|---|---|
-| VodMax: long, read-heavy | Opus 5.5 | $3.649 | $3.107 | -14.8% | 0.0014 |
-| VodMax: six real defects | Opus 5.5 | $3.360 | $2.943 | -12.4% | 0.0485, at the edge |
-| VodMax: the same | Fable 5.2, low effort | $4.273 | $3.684 | -13.8% | 0.0238 |
-| gin: six real defects | Opus 5.5 | $2.404 | $1.639 | -31.8% | 0.0002 |
+Whole headless sessions, Opus 5.5, 8 runs an arm, a long task on VodMax, the author's own project (Series 9):
 
-- **It does not beat ponytail on gin**: ponytail saved 38.7% and cost 10.0% less than the lines (p 0.0141).
-- **It is not shown to beat a single "Be brief."**, on either project: against that one sentence the lines read 5.0% lower on gin (p 0.50) and 3.5% higher on the VodMax long task (p 0.34).
-- **Short tasks showed no saving.**
+| In the system prompt | Mean cost | Against nothing | p |
+|---|---|---|---|
+| nothing | $3.610 | | |
+| `Be brief.` | $3.151 | -12.7% | 0.0006 |
+| `Be brief.` and three lines | $3.210 | -11.1% | 0.0053 |
+| the eight lines | $3.260 | -9.7% | 0.0022 |
 
-Every run and its limits: [bench/RESULTS.md](bench/RESULTS.md). Run it on your own project: [bench/README.md](bench/README.md).
+- **No text is shown to differ from another.** The lines read 3.5% higher than the sentence (p 0.34).
+- **On gin there is no arm without a plugin for "Be brief."**, so no saving figure: beside it the lines read 5.0% lower (Series 8, p 0.50, not shown).
+- **ponytail cost less than the eight lines on gin**: 10.0% less (Series 7, p 0.0141). The sentence was not run against ponytail.
+- **Short tasks showed no saving** for the eight lines. The sentence was not run on them.
+
+Every run: [bench/RESULTS.md](bench/RESULTS.md). On your project: [bench/README.md](bench/README.md).
 
 ## What stays on your machine
 
-- **Kept locally**, in Claude Code's plugin store (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, your reminders (never sent or exported), and for each chat the full path of its folder and the times of its last turn (30 chats, 30 days), and your live sessions' folders and statuses. Never the content of a chat, a prompt, a file or a command. cachito-lean keeps only its switch.
+- **Kept locally**, in Claude Code's plugin store (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, your reminders (never sent or exported), and for each chat the full path of its folder and the times of its last turn (30 chats, 30 days), and your live sessions' folders and statuses. Never the content of a chat, a prompt, a file or a command. briefox keeps only its switch.
 - **Nothing is sent anywhere**, and no model is asked.
 - **The one exception is comments, off by default.** A small model, on your tokens (about 650 in, 75 out; at most 40 a day), gets the pet's character and language, your name if told, why it speaks, tool names (MCP servers' too) and counts, failed programs' names, how many files changed, the assistant's last 600 characters, its last two lines, three diary lines with folder names, another finished chat's folder name and times and, with `/pet say`, your first 300 characters. A pause or resume sends a recap: up to 16,000 characters of the last turn's text, 300 of your last prompt.
 - `/pet adopt` reads `~/.claude.json` once, when you run it. `/pet share` saves a picture in `~/.claude/cachito-share/`. `/pet export` saves the pet there as a file you carry yourself.

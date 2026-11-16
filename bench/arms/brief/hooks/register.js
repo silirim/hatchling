@@ -1,5 +1,5 @@
 // @ts-check
-// A text arm of the bench (bench/run.mjs): one section in the system prompt, added as lean/hooks/register.js adds the style (appended
+// A text arm of the bench (bench/run.mjs): one section in the system prompt, added as briefox/hooks/register.js adds its sentence (appended
 // last, scope `session`). This file is the same in every arm of bench/arms (bench/arms.test.mjs): the arms differ only in ../text.js.
 import { ID, TEXT } from '../text.js'
 

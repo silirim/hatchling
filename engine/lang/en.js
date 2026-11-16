@@ -3,7 +3,7 @@
 // A list of six is one line said plainly, then by the wit, the curious, the calm, the rigorous and the warm one: each its own way,
 // short, sober, never an exclamation mark, and true of the same state. A line of the bubble is at most 44 columns.
 
-import { BENCH } from '../../lean/style.js'
+import { BENCH } from '../../briefox/text.js'
 
 /** @type {Record<string, string | string[]>} */
 export default {
@@ -15,12 +15,12 @@ export default {
   'calm.short.0': ['short chat, travelling light', 'short chat. barely any luggage', 'short chat, light pack. where to?', 'short chat, light load, no hurry', 'short chat: little carried, as intended', 'short chat, and a light one. lovely'],
   'calm.short.1': ['short chat, nothing to trim', 'nothing to trim. the chat is that short', 'a short chat. what would I even trim?', 'short chat. the trimming can wait', 'short chat: checked, nothing to trim', 'a short chat needs no trimming. rest easy'],
   'calm.short.2': ['small context, easy day', 'small context. I have had harder days', 'small context. room to look around', 'small context. an easy day, take it slow', 'context small, day easy, all in order', 'small context, an easy day for us both'],
-  'calm.long.0': ['long chat, lean on, steady pace', 'long chat, lean on. it holds, somehow', 'long chat, lean on. how far does it go?', 'long chat, lean on, one step at a time', 'long chat, lean on, pace steady: noted', 'long chat, lean on. we are doing fine'],
-  'calm.long.1': ['long chat, but lean is on', 'long chat. lean is on, so I let it be', 'a long chat with lean on. does it show?', 'long chat, yet lean is on. it will hold', 'long chat. lean: on. I checked', 'lean is on for this long chat. thank you'],
+  'calm.long.0': ['long chat, briefox on, steady pace', 'long chat, briefox on. it holds, somehow', 'long chat, briefox on. how far does it go?', 'long chat, briefox on, one step at a time', 'long chat, briefox on, pace steady: noted', 'long chat, briefox on. we are doing fine'],
+  'calm.long.1': ['long chat, but briefox is on', 'long chat. briefox is on, so I let it be', 'a long chat with briefox on. does it show?', 'long chat, yet briefox is on. it will hold', 'long chat. briefox: on. I checked', 'briefox is on for this long chat. thank you'],
   'calm.long.2': ['long haul, packed light', 'long haul. at least we packed light', 'long haul, light pack. what is ahead?', 'long way to go, light pack. we get there', 'long haul. pack light, nothing loose', 'a long haul, a light pack, and I am here'],
   'greet.first': ['first chat of the day, here we go', 'first chat of the day. so it begins', 'first chat of the day. what is it about?', 'first chat of the day, when you are ready', 'chat one of the day, to be precise', 'first chat of the day. good to see you'],
   'greet.new': ['a new folder, let us look around', 'a new folder. same files, I expect', 'a new folder. what is in here?', 'a new folder. we look around slowly', 'a new folder. every corner, in order', 'a new folder. let us explore together'],
-  'cheer.lean': ['lean on: the style is at work', 'lean on. fewer words, finally', 'lean on: the style is in. what changes?', 'lean on. the style settles in', 'lean on: style in the prompt, confirmed', 'lean is on and at work. thank you'],
+  'cheer.lean': ['briefox on: the sentence is at work', 'briefox on. fewer words, finally', 'briefox on: it is in. what changes?', 'briefox on. the sentence settles in', 'briefox on: in the prompt, confirmed', 'briefox is on and at work. thank you'],
   'cheer.evolve': ['grew a stage', 'grew a stage. try to contain yourself', 'grew a stage. so this is what it is like', 'grew a stage. it took a while', 'grew a stage. exactly one', 'grew a stage, thanks to you'],
 
   // cuddles: two lines for each character, in turn
@@ -51,15 +51,15 @@ export default {
   'loop.say.turns': '{d} failed {n} times in a row, over {turns} turns',
   'loop.none': 'same command',
   'loop.fix': 'A note only. Fix asks the agent to read the error first.',
-  'heavy.say': 'long chat, lean off: {d}k tokens re-read per request',
+  'heavy.say': 'long chat, briefox off: {d}k tokens re-read per request',
   'heavy.none': 'over 60',
-  'heavy.fix': 'A note only. In our bench the style cost less on long tasks.',
-  bench: BENCH, // written once, in lean/style.js
+  'heavy.fix': 'A note only. In our bench "Be brief." cost less on a long task.',
+  bench: BENCH, // written once, in briefox/text.js
   'bloated.say': 'context {d}% full',
   'bloated.say.none': 'context almost full',
   'bloated.fix': 'Run /compact to keep room. It frees space, it is not a saving.',
-  'wait.say': 'long chat, lean chosen',
-  'wait.fix': 'The style starts at the next compaction or chat.',
+  'wait.say': 'long chat, briefox chosen',
+  'wait.fix': '"Be brief." starts at the next compaction or chat.',
 
   // the companion
   'ago.now': 'just now',
@@ -272,11 +272,11 @@ export default {
   'card.points': '{points}; owns {items}. /pet shop',
   'card.points.none': '{points}; owns nothing yet. /pet shop',
   nothing: 'nothing yet',
-  'card.lean.wait': 'lean chosen, the style starts at the next compaction or chat',
-  'card.lean.on': 'lean on: the style. {bench}',
-  'card.lean.plugin': 'lean on: the style, by the cachito-lean plugin (/lean off takes it out). {bench}',
-  'card.lean.off': 'lean off: /pet lean on adds the style. {bench}',
-  'gone.diet': '/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; the outputs it saved are still in ~/.claude/cachito-out. /pet lean, the style, is the lever that showed one.',
+  'card.lean.wait': 'briefox chosen, "Be brief." starts at the next compaction or chat',
+  'card.lean.on': 'briefox on: "Be brief." in the system prompt. {bench}',
+  'card.lean.plugin': 'briefox on, by the briefox plugin (/briefox off takes it out). {bench}',
+  'card.lean.off': 'briefox off: /pet briefox on adds "Be brief." to the system prompt. {bench}',
+  'gone.diet': '/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; the outputs it saved are still in ~/.claude/cachito-out. /pet briefox, one sentence, is the lever that showed one.',
   'gone.weight': '/pet weight was taken out: /context in Claude Code already shows what every request carries.',
   'card.comments.off': 'comments off: fixed lines only, nothing sent. /pet comments on lets a small model write them, on your tokens',
   'card.comments.on': 'comments on: model {model}, about {in} tokens in and {out} out a line, {n} of {cap} lines today, {today} tokens today, {all} in all',
@@ -355,7 +355,7 @@ export default {
   'gone.budget': "The context budget was taken out: no valid run of ours showed that compacting at a threshold pays; on paper it did not on a large model. Nothing was set. After a long pause in a large chat the pet suggests /compact, and you decide.",
   'diary.unkept': "The diary could not be cleared: the store cannot be written now.",
   'shop.debt': "The balance is under zero: two chats spent the same stars at once. Both things are yours; nothing more can be bought until use brings it back to zero.",
-  'help': ["Cachito commands", "  /pet                       the pet card", "  /pet pet                   a cuddle", "  /pet say <text>            talk to the pet (with comments on)", "  /pet remind <text>         keep a reminder; in <20m|2h|1d> <text> times it", "  /pet reminders             list them; /pet remind done <n|all> removes", "  /pet name [name]           its name, or a new one", "  /pet call me [name]        what it calls you; nobody forgets it", "  /pet shop [item|animal]    the shop; with a name, buys or unlocks", "  /pet skin                  what is on, part by part", "  /pet wear <item>           put a thing on its part, or take it off", "  /pet wear none             take everything off", "  /pet wear plain|golden     the coat: its own colours, or the golden one", "  /pet animal [name]         the animals you have; with a name, switches", "  /pet skins                 your skin packs", "  /pet chats [on|off]        your open chats: working, waiting, or asking", "  /pet alerts [on|off]       a desktop notification when a chat waits for your OK", "  /pet lean [on|off]         the style in the system prompt", "  /pet comments [on|off]     lines by a small model, on your tokens", "  /pet model [alias|id]      the model of the comments, now {model}", "  /pet lang [en|es|pt|zh]    its language", "  /pet share                 a picture of the pet to attach to a post", "  /pet export                save the pet to a file, for another computer", "  /pet import <file> [yes]   bring in a pet saved with /pet export", "  /pet diary [today|yesterday|week]  the work report: chats, folders, turns, files changed", "  /pet diary lines           the pet's own diary", "  /pet diary clear           empty both", "  /pet adopt                 take the name and character of your old /buddy", "  /pet hide                  hide the band", "  /pet show                  show it again", "  /pet demo                  every mood, 5 s each", "  /pet where                 troubleshooting: where the pet draws, and what", "  /pet help                  this list"],
+  'help': ["Cachito commands", "  /pet                       the pet card", "  /pet pet                   a cuddle", "  /pet say <text>            talk to the pet (with comments on)", "  /pet remind <text>         keep a reminder; in <20m|2h|1d> <text> times it", "  /pet reminders             list them; /pet remind done <n|all> removes", "  /pet name [name]           its name, or a new one", "  /pet call me [name]        what it calls you; nobody forgets it", "  /pet shop [item|animal]    the shop; with a name, buys or unlocks", "  /pet skin                  what is on, part by part", "  /pet wear <item>           put a thing on its part, or take it off", "  /pet wear none             take everything off", "  /pet wear plain|golden     the coat: its own colours, or the golden one", "  /pet animal [name]         the animals you have; with a name, switches", "  /pet skins                 your skin packs", "  /pet chats [on|off]        your open chats: working, waiting, or asking", "  /pet alerts [on|off]       a desktop notification when a chat waits for your OK", "  /pet briefox [on|off]      one sentence in the system prompt: Be brief.", "  /pet comments [on|off]     lines by a small model, on your tokens", "  /pet model [alias|id]      the model of the comments, now {model}", "  /pet lang [en|es|pt|zh]    its language", "  /pet share                 a picture of the pet to attach to a post", "  /pet export                save the pet to a file, for another computer", "  /pet import <file> [yes]   bring in a pet saved with /pet export", "  /pet diary [today|yesterday|week]  the work report: chats, folders, turns, files changed", "  /pet diary lines           the pet's own diary", "  /pet diary clear           empty both", "  /pet adopt                 take the name and character of your old /buddy", "  /pet hide                  hide the band", "  /pet show                  show it again", "  /pet demo                  every mood, 5 s each", "  /pet where                 troubleshooting: where the pet draws, and what", "  /pet help                  this list"],
   'store.lost': "The pet's store cannot be read right now: nothing is shown or changed until it can be.",
   'peer.ask.here': "the other chat in this folder ({name}) may be waiting for your OK",
   'peer.ask.away': "another chat may be waiting for your OK",

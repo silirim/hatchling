@@ -1,19 +1,19 @@
 {
   "name": "cachito-pet",
-  "description": "A pixel pet for Claude Code and, apart, eight lines of system prompt measured by a bench in the repository",
+  "description": "A pixel pet for Claude Code and, apart, briefox: one sentence of system prompt, measured by a bench in the repository",
   "owner": {
     "name": "silirim"
   },
   "plugins": [
     {
-      "name": "cachito-lean",
-      "source": "./lean",
-      "description": "Eight lines in the system prompt: short answers, the least code, read-only calls sent together. On as installed"
+      "name": "briefox",
+      "source": "./briefox",
+      "description": "One sentence in the system prompt: Be brief. In our bench it did as well as eight lines. On as installed"
     },
     {
       "name": "cachito",
       "source": "./",
-      "description": "The pixel pet above your prompt. Optional; /pet lean on|off switches the same lines"
+      "description": "The pixel pet above your prompt. Optional; /pet briefox on|off switches the same sentence"
     }
   ]
 }
