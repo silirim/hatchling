@@ -11,7 +11,8 @@ import { atom, read, update } from 'claude-code'
 import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
 import { MODEL, MODEL_MAX, asModel, unavailable, tellGone, measuredHow, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question, lastTurn, recap as recapOf, cleanRecap, RECAP_COST } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page, dated, lasting } from '../engine/diary.js'
-import { marks, greeting, finished, folder, counts, listing, leftOf, WATCH, sight, seen, watched } from '../engine/company.js'
+import { marks, greeting, finished, folder, counts, listing, leftOf, WATCH, sight, seen, watched, namesOf } from '../engine/company.js'
+import { titles, TITLES } from '../engine/titles.js'
 import { whole as workOf, opened as workOpened, turned as workTurned, said as workSaid, report, yesterday } from '../engine/work.js'
 import { whole as remindersOf, asked as remindAsked, add as remindAdd, done as remindDone, ready as remindReady, due as remindDue, LIMITS as REMIND } from '../engine/remind.js'
 import { bubble, cuddle as cuddleLine, called, ago, since, BENCH, BRIEF, BRIEF_ID, DOCS } from '../engine/catalog.js'
@@ -121,6 +122,7 @@ const PEER_TICKS = 20 // 10 s
 let social = false // only with a person at the prompt: a headless run leaves no mark and greets nobody
 let cwd = ''
 let chatId = ''
+/** @type {string[]} */ let formerIds = [] // the ids this process had before a /clear: its own closed chats, never "another chat" on the board
 let openedAt = 0
 /** @type {Record<string, number>} */ let peersSeen = {}
 /** @type {Record<string, number>} */ let peersTold = {} // when each other chat was last told of
@@ -137,7 +139,7 @@ async function chats(/** @type {any} */ $) {
   return { ...old, ...marks(own) }
 }
 // The thin watcher (engine/company.js `seen`): `claude agents --json` lists every live session, the ones without Hatchling too. One
-// look serves every chat: it is kept in the store (ids, folders, statuses, one fixed label), and a chat takes a new one only when
+// look serves every chat: it is kept in the store (ids, folders, statuses, one fixed label, the names the person gave), and a chat takes a new one only when
 // the one kept is WATCH.everyMs old. Never under the bench or without a person, never two at once in a chat, with a time limit;
 // the first failure (no `claude` found, an older version, a surface that runs no command) ends it for this chat, which then
 // knows the other chats by their marks alone, as before.
@@ -159,7 +161,27 @@ async function watch(/** @type {any} */ $) {
   } catch { watchOff = true } finally { watching = false }
 }
 /** The other chats as this one knows them: their marks, and what the watcher saw of the ones that left none. */
-async function known(/** @type {any} */ $, /** @type {number} */ now) { return watched(await chats($), await looked($).catch(() => null), await myId($), now) }
+async function known(/** @type {any} */ $, /** @type {number} */ now) { return watched(await chats($), await looked($).catch(() => null), await myId($), now, formerIds) }
+/**
+ * The automatic titles (/pet chats titles on; off unless the person turned it on, the choice under the store's key `titles`): for
+ * the other chats listed that the person did not name, the last title line of each one's transcript (engine/titles.js). With it
+ * off nothing is looked for: no stat, no list, no command. The file system here reads a whole file or none, and none over 4 MiB,
+ * so the end of a transcript comes from `tail -c`: a bounded piece, of which only a title line is parsed. What is read stays in
+ * `titled`, in this chat's memory: never in the store or the state, the diary, an export, a picture or a call to a model.
+ */
+/** @type {Map<string, import('../engine/titles.js').Titled>} */ const titled = new Map()
+async function titlesOf(/** @type {any} */ $, /** @type {{ id: string, cwd: string }[]} */ rows, /** @type {number} */ now) {
+  if (!social || await bench($) || (await storeGet($, 'titles').catch(() => false)) !== true) { titled.clear(); return {} }
+  const base = (await $.env.get('CLAUDE_CONFIG_DIR').catch(() => undefined)) || await $.env.get('HOME').then((/** @type {string | undefined} */ h) => h ? `${h}/.claude` : '', () => '')
+  const bin = base && rows.length ? await nodePath($, 'tail') : ''
+  if (!bin) return {}
+  /** @type {import('../engine/titles.js').TitleIo} */ const io = {
+    stat: path => $.fs.stat(path),
+    list: path => $.fs.list(path),
+    tail: async (path, bytes) => { const r = await $.process.run([bin, '-c', String(bytes), path], { timeoutMs: TITLES.timeoutMs }); return r.exitCode === 0 ? r.stdout : '' },
+  }
+  return titles(io, `${String(base).replace(/[\\/]+$/, '')}/projects`, rows, titled, now)
+}
 /** This chat's id; a new one after /clear. */
 async function myId(/** @type {any} */ $) { return chatId ||= String(await $.session.id().catch(() => '') || `c${Math.random().toString(36).slice(2)}`) }
 /** @type {import('../engine/company.js').Mark | null} */ let myMark = null // this chat's mark as it last wrote it
@@ -464,7 +486,7 @@ async function peers(/** @type {any} */ $) {
   const need = n.waiting + n.asking, said = need ? count1(p.lang, 'chats.need', need) : '' // one short count: the chats that need the person
   if (said !== board) { board = said; await update($, anim, a => ({ ...a, hush: a.hush + 1 })) } // drawn again with the new count
   if (!p.chats || now - lastOwn > RULES.peerActiveMs) return
-  const r = finished(all, peersSeen, { id, cwd, since: openedAt, now, told: peersTold })
+  const r = finished(all, peersSeen, { id, cwd, since: openedAt, now, told: peersTold, names: namesOf(await looked($).catch(() => null)) })
   // a turn that ended while another piece of news is still fresh is not lost: it is looked at again, and told when the wait is over
   if (r.peer && !r.peer.ask && now - peerSaidAt < RULES.peerGapMs) return
   peersSeen = r.seen
@@ -472,15 +494,16 @@ async function peers(/** @type {any} */ $) {
   if (!r.peer) return
   const peer = r.peer
   peerSaidAt = now
-  await feed($, { type: 'peer', ...peer })
+  const named = peer.name !== peer.dir // told by the name the person gave it: the small model is told the folder, as ever
+  await feed($, { type: 'peer', ...peer, named })
   if (peer.ask) { // a chat began to wait for the person's OK: one toast, and a desktop notification only when /pet alerts is on
-    const line = text(p.lang, 'chats.ask.toast', { name: peer.name || '/' })
+    const line = text(p.lang, named ? 'chats.ask.toast.named' : 'chats.ask.toast', { name: peer.name || '/' })
     try { $.ui.toast(line) } catch { /* no toast on this surface */ }
     if ((await storeGet($, 'alerts').catch(() => false)) === true) Promise.resolve($.ui.notify(line, { title: p.name, key: 'hatchling-ask' })).catch(() => {})
   }
   // said: with the comments on the small model says the same in the pet's character, and its line takes the place of the fixed one. Not awaited: the drawing goes on
   const on = view(cur, now).talk
-  if (on?.kind === 'peer' && on.name === peer.name) peerLine($, peer).then(line => line ? feed($, { type: 'peer', ...peer, said: line }) : undefined).catch(() => {})
+  if (on?.kind === 'peer' && on.name === peer.name) peerLine($, { ...peer, name: peer.dir }).then(line => line ? feed($, { type: 'peer', ...peer, named, said: line }) : undefined).catch(() => {})
 }
 /**
  * The news of another chat as the small model says it, in the pet's character, when the comments are on: '' when they are off, the
@@ -1189,7 +1212,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await recapResume($, fresh).catch(() => {})
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
-    await $.command.register({ name: 'pet', description: 'Hatchling: show the pet card. Also: /pet briefox <on|off> (one sentence in the system prompt), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary [today|yesterday|week], /pet remind <text>, /pet reminders, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet alerts <on|off>, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
+    await $.command.register({ name: 'pet', description: 'Hatchling: show the pet card. Also: /pet briefox <on|off> (one sentence in the system prompt), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary [today|yesterday|week], /pet remind <text>, /pet reminders, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet chats titles <on|off>, /pet alerts <on|off>, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
     $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
     return next(e)
   })
@@ -1312,7 +1335,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     // closed, the mark still tells when the last turn was and whether it was cut
     const was = social && cwd ? myMark ?? await ownMark($).catch(() => undefined) : undefined, last = was ? leftOf(was) : null
     await mark($, true, { closed: true, ...(last && { left: last.at, ...(last.mid && { mid: /** @type {const} */ (true) }) }) }).catch(() => {}) // this chat is over: the others stop counting it at once (after /clear the next one has an id of its own)
-    if (e.reason === 'clear') { if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' })).catch(() => {}); ctxTokens = turnAt = 0; styleOther = undefined; turnSaid = ''; styleLive = undefined; chatId = ''; await feed($, { type: 'sessionStart' }).catch(() => {}); await feedLean($) }
+    if (e.reason === 'clear') { if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' })).catch(() => {}); ctxTokens = turnAt = 0; styleOther = undefined; turnSaid = ''; styleLive = undefined; if (chatId) formerIds = [...formerIds, chatId].slice(-16); chatId = ''; await feed($, { type: 'sessionStart' }).catch(() => {}); await feedLean($) }
     await share($, true).catch(() => {})
     return next(e)
   })
@@ -1370,13 +1393,23 @@ export function register(/** @type {import('claude-code').On} */ on) {
     }
     if (verb === 'chats') { // the board of the chats: which of the person's open chats is working, waiting for them, or may be waiting for an OK
       if (await bench($)) return { text: 'No board of the chats: under the bench no chat leaves a mark.' }
+      if (arg === 'titles') { // the automatic titles: off unless turned on here, and said plainly what is read
+        if (arg2 && arg2 !== 'on' && arg2 !== 'off') return { text: text(L0, 'onoff', { verb: 'chats titles', arg: tidy(arg2, 24) }) }
+        if (arg2 && !(await storeSet($, 'titles', arg2 === 'on').then(() => true, () => false))) return { text: text(L0, 'alerts.unkept') }
+        if (arg2 === 'off') titled.clear()
+        return { text: text(L0, (await storeGet($, 'titles').catch(() => false)) === true ? 'chats.titles.on' : 'chats.titles.off') }
+      }
       const bad = onOff('chats')
       if (bad) return bad
       if (arg === 'on' || arg === 'off') { await setPrefs($, { chats: arg === 'on' }); await showing($).catch(() => {}); await peers($).catch(() => {}); return { text: text(L0, arg === 'on' ? 'chats.on' : 'chats.off') } }
       if (!(await getPrefs($)).chats) return { text: text(L0, 'chats.off') }
-      const now = await $.clock.now(), rows = listing(await known($, now), await myId($), now), wide = Math.max(0, ...rows.map(c => cols(c.name))) + 2
+      const now = await $.clock.now(), all = await known($, now), rows = listing(all, await myId($), now, namesOf(await looked($).catch(() => null)))
       const others = rows.filter(c => !c.me)
-      return { text: [text(L0, 'chats.title'), ...rows.map(c => `  ${pad(c.name, wide)}${text(L0, `chats.state.${c.state}`)}, ${ago(c.ago, L0)}${c.me ? `  (${text(L0, 'chats.me')})` : ''}`), ...(others.length ? [] : [text(L0, 'chats.none')]), text(L0, 'chats.help')].join('\n') }
+      // what a chat is called: the name the person gave it, else (with the titles on, and never for this chat) its title, else its folder alone
+      const titlesOn = (await storeGet($, 'titles').catch(() => false)) === true
+      const title = await titlesOf($, others.filter(c => !c.label).map(c => ({ id: c.id, cwd: all[c.id]?.cwd ?? '' })), now).catch(() => /** @type {Record<string, string>} */ ({}))
+      const heads = rows.map(c => c.label || (Object.hasOwn(title, c.id) ? title[c.id] : '') || c.name), wide = Math.max(0, ...heads.map(h => cols(h ?? ''))) + 2
+      return { text: [text(L0, 'chats.title'), ...rows.map((c, i) => `  ${pad(heads[i] ?? '', wide)}${heads[i] !== c.name ? `${c.name}, ` : ''}${text(L0, `chats.state.${c.state}`)}, ${ago(c.ago, L0)}${c.me ? `  (${text(L0, 'chats.me')})` : ''}`), ...(others.length ? [] : [text(L0, 'chats.none')]), text(L0, titlesOn ? 'chats.help.titles' : 'chats.help')].join('\n') }
     }
     if (verb === 'skins') { // the folder is read anew: a pack just put there, or just mended, shows without a restart
       if (await bench($)) return { text: 'No skin packs: under the bench none is read.' }

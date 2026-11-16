@@ -80,7 +80,11 @@ With several chats open, each is in one of four states:
 
 The band counts the chats that wait for you: the waiting and the asking ones. A chat whose turn ended counts for 2 hours, then it is listed and no longer counted. When another chat ends a turn of 2 minutes or more, the pet says so once, with the folder's name. When one may be waiting for your OK it says so once too, with one toast; `/pet alerts on` adds a desktop notification, through the channel Claude Code is set to (off by default). `/pet chats` lists them: folder, state, since when.
 
-**Chats without Hatchling.** About every 30 seconds one of your open chats runs `claude agents --json` (Claude Code 2.1.139 or later; 5 seconds at most), which lists every live session. A session that left no mark of its own is then counted and listed too: busy is working, one that waits for an approval is asking, and an idle one is waiting only after a look saw it go from busy to idle (an idle session never seen busy is left out: it may never have had a turn). Of each session only its id, folder and status are kept, and whether it waits for an approval: never its name, a prompt, or the text of what it waits for. If the command is missing or fails, the chat stops trying and knows the others by their marks alone. Never in a headless run.
+**Names.** A chat you named yourself is told by that name, in the list (name, then folder and state), in the bubble and in the toast. The name Claude Code makes by itself, the folder with two hex digits (`workspace-5a`), says no more than the folder and is not shown.
+
+**Titles**, off by default. `/pet chats titles on` adds to the list the title Claude Code gives each chat (`Fix the login bug   vodmax, working, 3 min ago`), 48 columns at most. It is read from the last title line of that chat's transcript, and nothing else of it is; it is kept in memory only, read again after 10 minutes, and shown nowhere but in `/pet chats`. A name you gave goes before a title, and this chat's own title is not read. It needs `tail` on the PATH; without it, or for a chat with no title yet, the list shows the folder. [privacy.md](privacy.md) has the detail.
+
+**Chats without Hatchling.** About every 30 seconds one of your open chats runs `claude agents --json` (Claude Code 2.1.139 or later; 5 seconds at most), which lists every live session. A session that left no mark of its own is then counted and listed too: busy is working, one that waits for an approval is asking, and an idle one is waiting only after a look saw it go from busy to idle (an idle session never seen busy is left out: it may never have had a turn). Of each session only its id, folder and status are kept, whether it waits for an approval, and the name you gave it when you gave one: never a prompt, or the text of what it waits for. While that list is there, it also says who is still open: a chat whose session is no longer in it is not counted or listed as waiting, and after `/clear` a chat's earlier id is never shown as another chat. If the command is missing or fails, the chat stops trying and knows the others by their marks alone. Never in a headless run.
 
 `/pet chats off` works both ways: your other chats no longer see this one, and this one no longer sees them and runs no command. A chat with the board off that has not had a turn yet has left no mark, so the others still learn of it from Claude Code's own list.
 
@@ -137,6 +141,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet animal [name]` | switch animal; with no name, list yours |
 | `/pet skins` | list your skin packs |
 | `/pet chats [on\|off]` | the chats board; on by default |
+| `/pet chats titles [on\|off]` | each chat's title in that list, read from its transcript's title line; off by default |
 | `/pet alerts [on\|off]` | a desktop notification when another chat may be waiting for your OK; off by default |
 | `/pet briefox <on\|off>` | the sentence `Be brief.` |
 | `/pet comments <on\|off>` | comments by a small model, on your tokens |

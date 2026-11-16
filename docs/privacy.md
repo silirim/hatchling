@@ -2,7 +2,7 @@
 
 ## What is sent
 
-**As installed, nothing.** Neither plugin sends anything anywhere or asks any model. The work report, the reminders and the watch on your other chats are made on your machine, with no model. briefox adds its one sentence to the system prompt of your own chat, and reads the token count of each request to know when the chat is long.
+**As installed, nothing.** Neither plugin sends anything anywhere or asks any model. The work report, the reminders, the watch on your other chats and their titles are made on your machine, with no model. briefox adds its one sentence to the system prompt of your own chat, and reads the token count of each request to know when the chat is long.
 
 **The one exception is comments**, off until you turn them on ([comments.md](comments.md) has the cost). Each comment, and each `/pet say`, is one request to a small model on your own account, with:
 
@@ -27,7 +27,7 @@ In Claude Code's plugin store (`~/.claude/plugins/store/`):
 - **The diary**: at most 40 lines of times, counts and folder names. `/pet diary clear` empties it.
 - **The work counters**, for 8 days: for each day how many chats opened, the names of their folders (12 at most), how many turns ended and how many files they changed. `/pet diary clear` empties them too.
 - **Your reminders**: at most 20 lines of 200 characters, as you typed them after `/pet remind`, each with when it was written and when it falls due. They stay on this machine: never sent to the comments model (comments on or off), not on the picture of `/pet share`, not in the file of `/pet export`. When you set or list them, the answer is a line of this chat, as with any command, so this chat's assistant can read it; the bubble is drawn locally and is not a chat line.
-- **The last look at your sessions**, renewed about every 30 seconds while a chat is open: for each live session its id, the **full path of its working folder**, its status (busy, idle, waiting), whether it waits for an approval, since when, and when it was seen ending a turn. Not its name, and not what it waits for.
+- **The last look at your sessions**, renewed about every 30 seconds while a chat is open: for each live session its id, the **full path of its working folder**, its status (busy, idle, waiting), whether it waits for an approval, since when, when it was seen ending a turn, and **the name you gave it, when you gave one** (cleaned, 32 columns at most). Not the name Claude Code makes by itself (`workspace-5a`), and not what it waits for. A name is shown in `/pet chats`, in the pet's bubble and in the toast and notification about that chat; it is kept under this one key and nowhere else, and is not sent to the comments model, which is told the folder's name as before.
 - **Alerts**: whether you turned `/pet alerts` on.
 - **Comments' count**: lines, tokens and cost, the time of the last line, the pet's last two lines.
 - **One mark for each chat**: the **full path of its working folder**, when its last turn started and ended, when it last gave a sign of life, whether that turn was cut short, the time of the pause a recap was already made for, and since when a tool call has waited for your leave. Not which tool or command. The 30 newest are kept, for 30 days at most.
@@ -51,14 +51,15 @@ A headless run (`claude -p`) leaves no chat mark, keeps no diary and no work cou
 
 ## What is run
 
-- **`claude agents --json`**, Claude Code's own list of your live sessions, about every 30 seconds by one of your open chats, with a limit of 5 seconds. Its output can hold a session's name and the text of what it waits for, which can name a tool and its command: both are dropped as it is read, and only what is listed above is kept. Not with `/pet chats off`, and never again in a chat after it fails once.
-- **`/pet alerts on`** lets the pet raise a desktop notification, through Claude Code's own notification channel, when another chat may be waiting for your OK. Its text is the folder's name and that line, nothing else.
+- **`claude agents --json`**, Claude Code's own list of your live sessions, about every 30 seconds by one of your open chats, with a limit of 5 seconds. Its output holds each session's name and can hold the text of what it waits for, which can name a tool and its command: that text and a name Claude Code made are dropped as it is read, and only what is listed above is kept. Not with `/pet chats off`, and never again in a chat after it fails once.
+- **`/pet alerts on`** lets the pet raise a desktop notification, through Claude Code's own notification channel, when another chat may be waiting for your OK. Its text is the folder's name, or the name you gave that chat, and that line, nothing else.
 - **Node**, when it is on the PATH, writes the files of `/pet share` and `/pet export`.
 
 ## What is read
 
 - **`/pet adopt`** reads `~/.claude.json`, whole, when you run it and never otherwise. That file also holds your account data and the secrets of your MCP servers. Three fields are kept, the rest is dropped at once, and the file is never written.
 - **Skin packs** in `~/.claude/hatchling-skins/` are read as data, never run as code.
+- **Titles, only with `/pet chats titles on`** (off as installed; the choice is kept in the store, the titles are not). Hatchling never reads the content of a chat, except, if you turn titles on, each open chat's title line. When you run `/pet chats`, for each of your other open chats that you did not name, `tail -c` hands the last 256 KB of its transcript (`~/.claude/projects/<project>/<session id>.jsonl`), or the last 4 MB once when no title is in those, with a limit of 2 seconds. In that piece only the lines that begin as a title line (`{"type":"ai-title"…`) are parsed, the last one is the title, and the piece is dropped. The title is cleaned, cut to 48 columns and kept in the memory of the chat that asked, for 10 minutes before it is read again: never in the store, the diary, the file of `/pet export`, the picture of `/pet share` or a request to the comments model. It is shown in the answer of `/pet chats`, which is a line of this chat, as with any command, so this chat's assistant can read it. Never this chat's own transcript, at most 8 transcripts for one `/pet chats`, and nothing at all with titles off, under the bench or in a headless run. `/pet chats titles off` stops it and forgets the titles.
 
 `/pet chats off` hides this chat from your others; it still leaves its mark, with no sign of life.
 

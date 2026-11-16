@@ -507,7 +507,7 @@ function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 
   on('session.end', (_: any, e: any) => ({ sessionId: e.sessionId }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'HOME' ? '/home/me' : k.env[e.name] }))
   // `skins` is the person's folder of skin packs: name -> content (an object is written as JSON), 'link' for a link, a number for a size too big to read; null is a folder that cannot be listed
-  on('fs.list', (_: any, e: any) => { if (!k.skins) throw new Error('EACCES'); return { value: e.path === SKINS ? Object.entries(k.skins).map(([name, v]) => ({ name, kind: v === 'link' ? 'other' : 'file', size: typeof v === 'number' ? v : 100, mtimeMs: 0, isLink: v === 'link' })) : [] } })
+  on('fs.list', (_: any, e: any) => { (k as any).lists?.push(String(e.path)); if (!k.skins) throw new Error('EACCES'); return { value: e.path === SKINS ? Object.entries(k.skins).map(([name, v]) => ({ name, kind: v === 'link' ? 'other' : 'file', size: typeof v === 'number' ? v : 100, mtimeMs: 0, isLink: v === 'link' })) : [] } })
   on('fs.read', (_: any, e: any) => {
     if (String(e.path).startsWith(SKINS)) { k.skinReads.push(e.path); const v = k.skins?.[String(e.path).slice(SKINS.length + 1)]; return { value: typeof v === 'string' ? v : JSON.stringify(v) } }
     k.reads.push(e.path); return { value: k.files[e.path] ?? JSON.stringify(config) } // `files`: what a test put at a path, or the mod wrote there
@@ -1658,7 +1658,7 @@ function voiceKit($: any, on: any, prefs: object = {}) {
   const v = { calls: [] as any[], reply: { isAnswered: true, text: 'Three failures, then green. Noted.', usage: USAGE } as any, boxAfter: undefined as string | undefined, fail: false, said: '', context: 100, onCall: null as (() => void) | null }
   on('model.complete', (_: any, e: any) => { v.calls.push(e); v.onCall?.(); if (v.boxAfter !== undefined) k.box = v.boxAfter; return { value: v.reply } })
   on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
-  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 5, isLink: false } }))
+  on('fs.stat', (_: any, e: any) => { (k as any).stats?.push(String(e.path)); if ((k as any).missing?.(String(e.path))) throw new Error('ENOENT'); return { value: { kind: 'file', size: 1, mtimeMs: 5, isLink: false } } }) // `stats`: the paths asked, when a test keeps them; `missing`: the ones that are not there
   on('tool.call', () => (v.fail ? { result: { stdout: 'SECRET OUTPUT', stderr: 'boom', interrupted: false }, isError: true } : { result: { stdout: 'SECRET OUTPUT', stderr: '', interrupted: false } }) as any)
   on('turn.step', async function* () { return { answer: v.said, toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: v.context, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
   on('turn.complete', () => ({ text: '' }) as any)
@@ -2839,7 +2839,7 @@ test('which chat needs me: beside the name how many other chats work, wait or as
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
   await k.clock.advance(10_500)
   expect(await head()).toMatch(/^Miro  ★ \d+$/)
-  expect(await cardOf($, 'chats')).toBe('Your open chats\n  here  working, just now  (this chat)\nNo other chat is open.\nFolder names and times only, nothing of what is in a chat. /pet chats off turns the board off.')
+  expect(await cardOf($, 'chats')).toBe('Your open chats\n  here  working, just now  (this chat)\nNo other chat is open.\nFolder names, the names you gave your chats and times only, nothing of what is in a chat. /pet chats titles on adds each chat\'s title; /pet chats off turns the board off.')
   // four other chats: one at work, one waiting for the person, one stopped on a permission, one that died without a word
   const now = () => Number(k.disk['chat.me'].beat)
   const others = () => {
@@ -2881,7 +2881,7 @@ test('which chat needs me: beside the name how many other chats work, wait or as
     expect.stringMatching(/^  notes   waiting for you, (just now|\d+ min ago)$/),
     expect.stringMatching(/^  api     may be waiting for your OK, (just now|\d+ min ago)$/),
     expect.stringMatching(/^  vodmax  working, \d+ min ago$/),
-    'Folder names and times only, nothing of what is in a chat. /pet chats off turns the board off.',
+    'Folder names, the names you gave your chats and times only, nothing of what is in a chat. /pet chats titles on adds each chat\'s title; /pet chats off turns the board off.',
   ])
   expect(list).not.toMatch(/  old |secret|home\//) // the dead one is closed, and no path is shown
   expect(k.v.calls).toEqual([]) // comments off: not one token
@@ -4039,17 +4039,54 @@ test('reminders: back after a pause the pet says them again at the next prompt; 
   expect(k.v.calls).toEqual([])
 })
 
+test('the watcher: after /clear the old id of this chat is not another chat that waits, and a mark whose session left the live list is not counted', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  k.env.PATH = '/usr/bin'
+  const row = (sessionId: string, cwd: string, status: string) => ({ pid: 1, cwd, kind: 'interactive', startedAt: 5, sessionId, name: `${cwd.split('/').pop()}-5a`, status })
+  let sessions: object[] = [row('me', '/w/here', 'busy')]
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify(sessions), stderr: '' } }) as any)
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
+  const others = async () => (await cardOf($, 'chats')).split('\n').slice(1, -1).filter(l => !/this chat/.test(l)).map(l => l.trim())
+  await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await k.clock.advance(10_500); await k.settle() // a look sees this chat at work
+  await k.turn()
+  sessions = [row('me', '/w/here', 'idle')]
+  await k.clock.advance(40_000); await k.settle() // and the next one sees its turn ended
+  expect(k.disk.agents.rows[0]).toMatchObject({ id: 'me', st: 'idle' })
+  expect(k.disk.agents.rows[0].done).toBeGreaterThan(0)
+  // /clear: the process goes on under a new id, and the list still holds the old one
+  ;(k as any).id = 'me2'
+  await $.session.end({ reason: 'clear', sessionId: 'me', resume: { id: 'me' } } as any)
+  expect(k.disk['chat.me'].closed).toBe(true)
+  for (const wait of [1_000, 40_000, 40_000]) { // with the look from before the /clear, and with later ones
+    await k.clock.advance(wait); await k.settle()
+    expect(await others()).toEqual(['No other chat is open.'])
+    expect(await head()).not.toMatch(/wait/)
+  }
+  // another chat's mark still says it waits, but its session is not in the live list: not counted, not listed
+  const now = k.clock.now()
+  k.disk['chat.dead'] = { cwd: '/w/dead', at: now - 60_000, done: true, beat: now }
+  k.disk['chat.live'] = { cwd: '/w/live', at: now - 60_000, done: true, beat: now }
+  sessions = [row('me2', '/w/here', 'idle'), row('live', '/w/live', 'idle')]
+  await k.clock.advance(40_000); await k.settle()
+  k.disk['chat.dead'].beat = k.disk['chat.live'].beat = k.clock.now()
+  await k.clock.advance(10_500); await k.settle()
+  expect((await others()).map(l => l.replace(/, .*/, ''))).toEqual(['live  waiting for you'])
+  expect(await head()).toMatch(/1 chat waits for you$/)
+})
+
 test('the watcher: claude agents --json adds the chats that run without Hatchling to the count, the list and the news; one toast for a permission, a notification only with /pet alerts on', async ($, on) => {
   const k = voiceKit($, on, { voice: false })
   k.env.PATH = '/usr/bin'
   const ran: any[] = [], notes: any[] = []
   let sessions: object[] = []
-  const row = (sessionId: string, cwd: string, status: string, more: object = {}) => ({ pid: 1, cwd, kind: 'interactive', startedAt: 5, sessionId, name: 'named-by-the-person', status, ...more })
+  const row = (sessionId: string, cwd: string, status: string, more: object = {}) => ({ pid: 1, cwd, kind: 'interactive', startedAt: 5, sessionId, name: `${cwd.split('/').pop()}-5a`, status, ...more }) // named by Claude Code, unless a test says the person named it
   let printed = () => JSON.stringify(sessions)
   on('process.run', (_: any, e: any) => { ran.push(e); return { value: { exitCode: 0, stdout: printed(), stderr: '' } } as any })
   on('ui.notify', (_: any, e: any) => { notes.push(e); return { value: { isSent: true, channel: 'terminal_bell' } } as any })
   const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
-  sessions = [row('me', '/w/here', 'busy'), row('s1', '/home/me/work/vodmax', 'busy'), row('s2', '/home/me/work/notes', 'idle'), row('s3', '/home/me/secret-client/api', 'waiting', { waitingFor: 'approve Bash: rm -rf /srv --token=hunter2' })]
+  sessions = [row('me', '/w/here', 'busy'), row('s1', '/home/me/work/vodmax', 'busy', { name: '\x1b[31mrelease\x07 notes\n' }), row('s2', '/home/me/work/notes', 'idle'), row('s3', '/home/me/secret-client/api', 'waiting', { waitingFor: 'approve Bash: rm -rf /srv --token=hunter2' })]
   await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
   await k.clock.advance(10_500); await k.settle()
@@ -4058,10 +4095,13 @@ test('the watcher: claude agents --json adds the chats that run without Hatchlin
   expect(await head()).toMatch(/^Miro  ★ \d+  ·  1 chat waits for you$/) // the one that waits for an OK; the idle one was never seen busy
   expect(k.toasts).toEqual(['Hatchling: the chat in api may be waiting for your OK'])
   expect(notes).toEqual([]) // alerts are off until asked for
-  expect((await cardOf($, 'chats')).split('\n').slice(1, -1).map(l => l.trim().replace(/, .*/, '')).sort()).toEqual(['api     may be waiting for your OK', 'here    working', 'vodmax  working'])
-  // what is kept of the look: ids, folders, statuses and the one label. Never the name, the command, or what it waits for
+  expect((await cardOf($, 'chats')).split('\n').slice(1, -1).map(l => l.trim().replace(/, .*/, '')).sort()).toEqual(['api            may be waiting for your OK', 'here           working', 'release notes  vodmax']) // the name the person gave, cleaned, then the folder
+  // what is kept of the look: ids, folders, statuses, the one label, and a name only where the person gave one. Never the name Claude Code made, the command, or what it waits for
   expect(Object.keys(k.disk.agents.rows[3]).sort()).toEqual(['cwd', 'id', 'since', 'st', 'wait'])
-  expect(JSON.stringify(k.disk)).not.toMatch(/hunter2|rm -rf|approve|named-by-the-person/)
+  expect(Object.keys(k.disk.agents.rows[1]).sort()).toEqual(['cwd', 'id', 'name', 'since', 'st', 'wait'])
+  expect(k.disk.agents.rows[1].name).toBe('release notes')
+  expect(JSON.stringify(k.disk)).not.toMatch(/hunter2|rm -rf|approve|-5a/)
+  expect(JSON.stringify({ ...k.disk, agents: 0 })).not.toMatch(/release/) // the name is under the key of the look and nowhere else
   // the same wait is told once; one look serves 30 seconds, whoever took it
   await k.clock.advance(60_000); await k.settle()
   expect(k.toasts.length).toBe(1)
@@ -4071,12 +4111,13 @@ test('the watcher: claude agents --json adds the chats that run without Hatchlin
   expect(await cardOf($, 'alerts')).toMatch(/^Alerts off/)
   expect(await cardOf($, 'alerts on')).toMatch(/^Alerts on/)
   expect(await cardOf($, 'alerts maybe')).toMatch(/alerts/)
-  sessions = [...sessions.map((s: any) => s.sessionId === 's1' ? { ...s, status: 'idle' } : s), row('s4', '/home/me/work/gin', 'waiting', { waitingFor: 'approve plan' })] // and the one at work ends its turn
+  sessions = [...sessions.map((s: any) => s.sessionId === 's1' ? { ...s, status: 'idle' } : s), row('s4', '/home/me/work/gin', 'waiting', { waitingFor: 'approve plan', name: 'deploy' })] // and the one at work ends its turn
   await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any)
   await k.clock.advance(70_000); await k.settle()
-  expect(k.toasts.at(-1)).toBe('Hatchling: the chat in gin may be waiting for your OK')
-  expect(notes.map(n => [n.text ?? n.message, n.options?.title ?? n.title])).toEqual([['Hatchling: the chat in gin may be waiting for your OK', 'Miro']])
+  expect(k.toasts.at(-1)).toBe('Hatchling: your chat “deploy” may be waiting for your OK')
+  expect(notes.map(n => [n.text ?? n.message, n.options?.title ?? n.title])).toEqual([['Hatchling: your chat “deploy” may be waiting for your OK', 'Miro']])
   expect(await head()).toMatch(/·  3 chats wait for you$/) // two wait for an OK, and the one seen going from busy to idle
+  expect(JSON.stringify({ ...k.disk, agents: 0 })).not.toMatch(/deploy|release/) // a name told in the bubble and the toast is still kept under the key of the look alone
   // the sessions go: after a new look nothing is counted
   sessions = [row('me', '/w/here', 'busy')]
   await k.clock.advance(45_000); await k.settle()
@@ -4107,6 +4148,69 @@ test('the watcher runs nothing under the bench, without a person, with the board
   expect(ran.length).toBe(1) // it failed: once, and never again in this chat
   expect(k.disk.agents).toBeUndefined()
   expect(k.toasts).toEqual([])
+})
+
+test('/pet chats titles: off by default and then nothing of a transcript is asked for; on, it says what is read, reads only the end of the other chats\' transcripts, and keeps the title in memory alone', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  k.env.PATH = '/usr/bin'
+  const title = (t: string) => JSON.stringify({ type: 'ai-title', aiTitle: t, sessionId: 'x' })
+  const SECRET = JSON.stringify({ type: 'user', message: { role: 'user', content: 'the secret plan of the client' } })
+  const tails: Record<string, string> = { s1: `${SECRET}\n${title('Old title')}\n${SECRET}\n${title('\x1b[31mFix the login\x07 bug\n and ' + 'x'.repeat(80))}\n${SECRET}\n`, s2: title('Hidden by the name'), me: title('My own chat'), s3: `${SECRET}\n` }
+  const ran: string[][] = []
+  const row = (sessionId: string, cwd: string, status: string, more: object = {}) => ({ pid: 1, cwd, kind: 'interactive', startedAt: 5, sessionId, name: `${cwd.split('/').pop()}-5a`, status, ...more })
+  const sessions = [row('me', '/w/here', 'busy'), row('s1', '/home/me/work/vodmax', 'busy'), row('s2', '/home/me/work/notes', 'busy', { name: 'release notes' }), row('s3', '/home/me/work/gin', 'busy'), row('s4', '/home/me/work/gone', 'busy')]
+  on('process.run', (_: any, e: any) => {
+    ran.push(e.argv)
+    if (e.argv[1] === 'agents') return { value: { exitCode: 0, stdout: JSON.stringify(sessions), stderr: '' } } as any
+    const id = String(e.argv.at(-1)).split('/').pop()!.replace('.jsonl', '')
+    return { value: { exitCode: 0, stdout: tails[id] ?? '', stderr: '' } } as any
+  })
+  const stats: string[] = [], lists: string[] = []
+  Object.assign(k, { stats, lists, missing: (path: string) => path.includes('s4.jsonl') })
+  await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await k.clock.advance(21_000); await k.settle()
+  const lines = async () => (await cardOf($, 'chats')).split('\n')
+  const transcript = () => [...stats, ...lists, ...k.reads, ...ran.map(a => a.join(' '))].filter(x => /projects|\.jsonl|tail/.test(x))
+  // off, as installed: the list has folders and the person's own names; not one stat, list, read or command about a transcript
+  expect(k.disk.titles).toBeUndefined()
+  let list = await lines()
+  expect(list.slice(1, -1).map(l => l.trim().replace(/, (just now|\d+ \w+ ago).*$/, '').replace(/ {2,}/g, ' | ')).sort()).toEqual(['gin | working', 'gone | working', 'here | working', 'release notes | notes, working', 'vodmax | working'])
+  expect(list.at(-1)).toMatch(/^Folder names, the names you gave your chats and times only/)
+  expect(await cardOf($, 'chats titles')).toMatch(/^Titles are off: nothing of a transcript is read\./)
+  expect(transcript()).toEqual([])
+  // on: one plain notice of what is read
+  expect(await cardOf($, 'chats titles maybe')).toMatch(/chats titles/)
+  expect(await cardOf($, 'chats titles on')).toBe("Titles are on. What is read: the title line of your other chats' transcripts, nothing else, kept in memory only. /pet chats shows them; /pet chats titles off stops it.")
+  expect(k.disk.titles).toBe(true)
+  expect(transcript()).toEqual([]) // nothing is read until the list is asked for
+  list = await lines()
+  // the title, cleaned and cut to 48 columns, then the folder and the state; the person's name goes before a title; a chat with no title line, or no transcript, shows its folder
+  const cut = `Fix the login bug and ${'x'.repeat(25)}…`
+  expect(cut.length).toBe(48)
+  expect(list.slice(1, -1).map(l => l.trim().replace(/, (just now|\d+ \w+ ago).*$/, '').replace(/ {2,}/g, ' | ')).sort()).toEqual([`${cut} | vodmax, working`, 'gin | working', 'gone | working', 'here | working', 'release notes | notes, working'])
+  expect(list.at(-1)).toMatch(/^Titles are on: the title line of your other chats' transcripts is read, nothing else/)
+  // what was asked: the end of the transcripts of the other chats without a name, by their ids, with a limit of time. Never this chat's, never the named one's, never a whole file
+  const tailed = ran.filter(a => a[0] === '/usr/bin/tail')
+  expect(tailed.map(a => a.slice(0, 3))).toEqual([['/usr/bin/tail', '-c', '262144'], ['/usr/bin/tail', '-c', '262144'], ['/usr/bin/tail', '-c', '4000000']])
+  expect(tailed.map(a => a[3])).toEqual(['/home/me/.claude/projects/-home-me-work-vodmax/s1.jsonl', '/home/me/.claude/projects/-home-me-work-gin/s3.jsonl', '/home/me/.claude/projects/-home-me-work-gin/s3.jsonl'])
+  expect(k.reads.filter(x => /projects|jsonl/.test(x))).toEqual([]) // never a whole file
+  expect(lists.filter(x => /projects/.test(x))).toEqual(['/home/me/.claude/projects']) // once, for the transcript that is not where its folder says
+  expect(transcript().filter(x => /me\.jsonl|s2\.jsonl/.test(x))).toEqual([])
+  // memory only: nothing of a title in the store or the state, and no call to a model
+  expect(JSON.stringify([k.disk, k.state])).not.toMatch(/login|Old title|Hidden by|My own|secret plan/)
+  expect(k.v.calls).toEqual([])
+  // asked again at once: what is remembered serves, and only the missing transcript is not looked for before a minute
+  const work = () => transcript().filter(x => x !== '/usr/bin/tail').length // but for finding `tail` on the PATH
+  const before = work()
+  await lines()
+  expect(work()).toBe(before)
+  // off again: said, forgotten, and nothing more is asked
+  expect(await cardOf($, 'chats titles off')).toMatch(/^Titles are off/)
+  expect(k.disk.titles).toBe(false)
+  list = await lines()
+  expect(list.join('\n')).not.toMatch(/login/)
+  expect(work()).toBe(before)
 })
 
 for (const [what, bench, isInteractive] of [['under the bench', '/tmp/bench', true], ['in a headless run', '', false]] as const) test(`the watcher ${what}: no command is run`, async ($, on) => {

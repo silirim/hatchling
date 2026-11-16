@@ -5,7 +5,7 @@
 // the store holds, for up to RULES.marksMax chats and RULES.marksMs. Never the content of the chat, a prompt, the path of a file or a command.
 
 import { RULES } from './engine.js'
-import { tidy } from './width.js'
+import { tidy, cols } from './width.js'
 
 const AHEAD_MS = 60_000 // a mark dated later than this after now was left by a clock that was ahead: it is not believed
 
@@ -60,10 +60,11 @@ export function counts(all, id, now) {
 /**
  * The chats that are open, for /pet chats: this one first, then the others, the one that changed last on top. Each with its
  * folder's name (never its path), its state and for how long: nothing of what is in it.
- * @param {Marks} all @param {string} id @param {number} now @returns {{ me: boolean, name: string, state: ChatState, ago: number }[]}
+ * @param {Marks} all @param {string} id @param {number} now `label` is the name the person gave the chat ('' with none), from `names` (see `namesOf`); `id` is the chat's.
+ * @param {Record<string, string>} [names] @returns {{ id: string, me: boolean, name: string, label: string, state: ChatState, ago: number }[]}
  */
-export function listing(all, id, now) {
-  return Object.entries(all).map(([k, m]) => ({ me: k === id, name: folder(m.cwd), state: stateOf(m, now), ago: Math.max(0, now - sinceOf(m)) }))
+export function listing(all, id, now, names = {}) {
+  return Object.entries(all).map(([k, m]) => ({ id: k, me: k === id, name: folder(m.cwd), label: Object.hasOwn(names, k) ? /** @type {string} */ (names[k]) : '', state: stateOf(m, now), ago: Math.max(0, now - sinceOf(m)) }))
     .filter(c => c.state !== 'closed').sort((a, b) => Number(b.me) - Number(a.me) || a.ago - b.ago)
 }
 
@@ -78,6 +79,23 @@ export function remember(all, id, mark) {
 
 /** The last part of a folder's path, the only part ever shown. @param {string} cwd */
 export const folder = (cwd) => tidy(String(cwd).split(/[\\/]/).filter(Boolean).pop() ?? '', 24) // cleaned: it is shown, and sent to the small model
+
+/** A text from outside cut to `max` columns, with an ellipsis when it was longer: cleaned as `tidy` cleans. @param {unknown} raw @param {number} max */
+export function clip(raw, max) {
+  const s = tidy(raw)
+  return cols(s) <= max ? s : `${tidy(s, max - 1)}…`
+}
+export const NAME_COLS = 32 // the widest a chat's name is shown
+/**
+ * The name the person gave a chat, or '' when it has none: Claude Code names a chat by itself `<folder>-<two hex digits>`
+ * (`workspace-5a`), and that says no more than the folder does. A name is text from outside: cleaned, and cut to NAME_COLS.
+ * @param {unknown} name as `claude agents --json` prints it @param {string} cwd the chat's folder
+ */
+export function chatName(name, cwd) {
+  if (typeof name !== 'string' || name.length > 1024) return ''
+  const dir = String(cwd).split(/[\\/]/).filter(Boolean).pop() ?? '', auto = /^(.*)-[0-9a-f]{2}$/s.exec(name)
+  return auto && auto[1] === dir ? '' : clip(name, NAME_COLS)
+}
 
 /**
  * The one greeting of a chat that opens in `cwd`, from what the other chats left: a chat left here lately, else a return after
@@ -100,11 +118,13 @@ export function greeting(all, { id, cwd, now }) {
  * waiting for. A short turn is no news. `seen` is what this chat saw then, by chat id; a chat not seen before counts from `since`.
  * `told` is when each chat was last told of, by id: the same chat is not news again within RULES.peerAgainMs.
  * The news names the chat by its folder and says how long ago it ended (`ago`) and how long the turn took (`took`), in ms.
- * @param {Marks} all @param {Record<string, number>} seen @param {{ id: string, cwd: string, since: number, now: number, told?: Record<string, number> }} me
+ * @param {Marks} all @param {Record<string, number>} seen @param {{ id: string, cwd: string, since: number, now: number, told?: Record<string, number>, names?: Record<string, string> }} me
  * A chat that may be waiting for the person's OK (`ask`) goes first, and the finished turn it passed over is told at the next look.
- * @returns {{ seen: Record<string, number>, told: Record<string, number>, peer: { here: boolean, name: string, ago: number, took: number, ask: boolean } | null }}
+ * With `names` (see `namesOf`) a chat the person named is told by that name; `dir` is always its folder, the one the small model is told.
+ * @returns {{ seen: Record<string, number>, told: Record<string, number>, peer: { here: boolean, name: string, dir: string, ago: number, took: number, ask: boolean } | null }}
  */
-export function finished(all, seen, { id, cwd, since, now, told = {} }) {
+export function finished(all, seen, { id, cwd, since, now, told = {}, names = {} }) {
+  const who = (/** @type {string} */ k, /** @type {Mark} */ m) => { const dir = folder(m.cwd); return { name: (Object.hasOwn(names, k) && names[k]) || dir, dir } }
   /** @type {Record<string, number>} */ const next = {}
   /** @type {[string, Mark] | null} */ let hit = null
   /** @type {[string, Mark] | null} */ let ask = null
@@ -116,20 +136,21 @@ export function finished(all, seen, { id, cwd, since, now, told = {} }) {
     const news = m.done && m.at > (seen[k] ?? since) && (m.took ?? 0) >= RULES.peerMinTurnMs && (told[k] === undefined || now - told[k] >= RULES.peerAgainMs)
     if (news && (!hit || m.at > hit[1].at)) hit = [k, m]
   }
-  if (ask) { const [k, m] = ask; return { seen: { ...seen, ...Object.fromEntries(Object.entries(next).filter(([x]) => x !== hit?.[0])) }, told: { ...told, [`${k}?`]: /** @type {number} */ (m.asking) }, peer: { here: m.cwd === cwd, name: folder(m.cwd), ago: Math.max(0, now - /** @type {number} */ (m.asking)), took: 0, ask: true } } }
+  if (ask) { const [k, m] = ask; return { seen: { ...seen, ...Object.fromEntries(Object.entries(next).filter(([x]) => x !== hit?.[0])) }, told: { ...told, [`${k}?`]: /** @type {number} */ (m.asking) }, peer: { here: m.cwd === cwd, ...who(k, m), ago: Math.max(0, now - /** @type {number} */ (m.asking)), took: 0, ask: true } } }
   if (!hit) return { seen: next, told, peer: null }
   const [k, m] = hit
-  return { seen: next, told: { ...told, [k]: now }, peer: { here: m.cwd === cwd, name: folder(m.cwd), ago: Math.max(0, now - m.at), took: m.took ?? 0, ask: false } }
+  return { seen: next, told: { ...told, [k]: now }, peer: { here: m.cwd === cwd, ...who(k, m), ago: Math.max(0, now - m.at), took: m.took ?? 0, ask: false } }
 }
 
 // The thin watcher: `claude agents --json` (Claude Code 2.1.139 or later) lists every live session of the person, the ones that run
 // without Hatchling too. What it prints is input from outside: capped in size, checked row by row, and of each row only the session's
-// id, its folder, its status and one fixed label are kept. Never its name, a prompt or the text of what it waits for.
+// id, its folder, its status, one fixed label and the name the person gave it (`chatName`: never the one Claude Code made) are kept.
+// Never a prompt or the text of what it waits for.
 export const WATCH = { bytes: 262_144, rows: 64, everyMs: 30_000, timeoutMs: 5_000 }
 const STATUS = ['busy', 'idle', 'waiting']
 /** Why a session waits, as one of the labels there are: a leave to give, or '' for anything else. The text itself can name a tool and its command, and is dropped here. @param {unknown} why */
 const labelOf = (why) => typeof why === 'string' && (/^approve\b/i.test(why) || why === 'sandbox request') ? 'permission' : ''
-/** A session as the watcher keeps it: `since` is when it was first seen in this status, `done` when a look saw it go from busy to idle (a turn ended). @typedef {{ id: string, cwd: string, st: string, wait: string, since: number, done?: number }} Seen */
+/** A session as the watcher keeps it: `since` is when it was first seen in this status, `done` when a look saw it go from busy to idle (a turn ended), `name` the name the person gave it. @typedef {{ id: string, cwd: string, st: string, wait: string, since: number, done?: number, name?: string }} Seen */
 /** What the watcher last saw, and when. @typedef {{ at: number, rows: Seen[] }} Sight */
 
 /** A row made whole, or null: an id that is a plain name, a path with no control character, a status there is. @param {any} r @param {number} now @returns {Seen | null} */
@@ -137,8 +158,11 @@ function seenOf(r, now) {
   if (!r || typeof r !== 'object' || typeof r.id !== 'string' || !/^[\w-]{1,64}$/.test(r.id) || r.id === '__proto__' || typeof r.cwd !== 'string' || !r.cwd || r.cwd.length > 1024 || /\p{Cc}/u.test(r.cwd) || !STATUS.includes(r.st)) return null
   const since = typeof r.since === 'number' && Number.isFinite(r.since) && r.since > 0 ? Math.min(r.since, now) : now
   const done = r.st === 'idle' && typeof r.done === 'number' && Number.isFinite(r.done) && r.done > 0 ? Math.min(r.done, now) : 0
-  return { id: r.id, cwd: r.cwd, st: r.st, wait: r.st === 'waiting' && r.wait === 'permission' ? 'permission' : '', since, ...(done && { done }) }
+  const name = chatName(r.name, r.cwd)
+  return { id: r.id, cwd: r.cwd, st: r.st, wait: r.st === 'waiting' && r.wait === 'permission' ? 'permission' : '', since, ...(done && { done }), ...(name && { name }) }
 }
+/** The names the person gave their chats, by chat id, from a look: only the chats that have one. @param {Sight | null} look @returns {Record<string, string>} */
+export const namesOf = (look) => Object.fromEntries((look?.rows ?? []).flatMap(r => r.name ? [[r.id, r.name]] : []))
 /** What the store holds of the last look, made whole; null when it holds none. @param {any} raw @returns {Sight | null} */
 export function sight(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.at !== 'number' || !Number.isFinite(raw.at) || raw.at <= 0 || !Array.isArray(raw.rows)) return null
@@ -156,7 +180,7 @@ export function seen(stdout, was, now) {
   try { list = JSON.parse(stdout) } catch { return null }
   if (!Array.isArray(list)) return null
   const rows = list.slice(0, WATCH.rows).flatMap((/** @type {any} */ r) => {
-    const row = seenOf({ id: r?.sessionId, cwd: r?.cwd, st: r?.status, wait: labelOf(r?.waitingFor) }, now)
+    const row = seenOf({ id: r?.sessionId, cwd: r?.cwd, st: r?.status, wait: labelOf(r?.waitingFor), name: r?.name }, now)
     const before = row && was?.rows.find(o => o.id === row.id), old = before && before.st === row.st && before.wait === row.wait ? before : null
     const done = row?.st !== 'idle' ? 0 : before?.st === 'busy' ? now : old?.done ?? 0
     return row ? [{ ...row, since: old ? Math.min(old.since, now) : now, ...(done && { done: Math.min(done, now) }) }] : []
@@ -169,16 +193,25 @@ export function seen(stdout, was, now) {
  * only when a look saw it end a turn (from then, see `counts`); one never seen busy is left out: it may never have had a turn. A chat
  * with a living mark stays as its mark tells it; one whose board is off (a mark with no sign of life, not closed) stays hidden;
  * a look older than RULES.chatDeadMs is not believed.
- * @param {Marks} all @param {Sight | null} look @param {string} id @param {number} now @returns {Marks}
+ * A chat that said it closed (it ended, or its /clear gave the process a new id) is not brought back by a row that shows no life
+ * after that: a look taken before it closed, or a list that still holds the old id. And the list is the truth of who is alive:
+ * a mark with a sign of life whose session is not in it, and that did nothing since the look, is closed (a list cut at
+ * WATCH.rows is not whole, and closes nobody). With no look to believe, the marks alone, as they are.
+ * `mine` are the ids this process had before a /clear: never another chat, they are left out whatever the look says.
+ * @param {Marks} all @param {Sight | null} look @param {string} id @param {number} now @param {readonly string[]} [mine] @returns {Marks}
  */
-export function watched(all, look, id, now) {
+export function watched(all, look, id, now, mine = []) {
+  if (mine.some(k => Object.hasOwn(all, k))) all = Object.fromEntries(Object.entries(all).filter(([k]) => !mine.includes(k)))
   if (!look || now - look.at > RULES.chatDeadMs || look.at - now > AHEAD_MS) return all
   const more = look.rows.flatMap(r => {
     const m = Object.hasOwn(all, r.id) ? all[r.id] : undefined
-    if (r.id === id || (m && (stateOf(m, now) !== 'closed' || (!m.closed && !m.beat)))) return []
+    if (r.id === id || mine.includes(r.id) || (m && (stateOf(m, now) !== 'closed' || (!m.closed && !m.beat)))) return []
+    if (m?.closed && (look.at <= m.at || Math.max(r.since, r.done ?? 0) <= m.at)) return []
     const ask = r.st === 'waiting' && r.wait === 'permission'
     if (r.st === 'idle' && !r.done) return []
     return [[r.id, /** @type {Mark} */ ({ cwd: r.cwd, at: r.done ?? r.since, done: r.st !== 'busy' && !ask, beat: Math.min(look.at, now), ...(ask && { asking: r.since }) })]]
   })
-  return { ...all, ...Object.fromEntries(more) }
+  const live = new Set(look.rows.map(r => r.id))
+  const gone = look.rows.length >= WATCH.rows ? [] : Object.entries(all).flatMap(([k, m]) => k !== id && !live.has(k) && m.at <= look.at && stateOf(m, now) !== 'closed' ? [[k, /** @type {Mark} */ ({ ...m, closed: true })]] : [])
+  return { ...all, ...Object.fromEntries(more), ...Object.fromEntries(gone) }
 }

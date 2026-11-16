@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { initialState, reduce, view, program, dayOf, RULES } from './engine.js'
 import { bubble, ago, TALK, SILLY, OUTLINE, CALM } from './catalog.js'
-import { marks, remember, greeting, finished, folder, stateOf, counts, listing } from './company.js'
+import { marks, remember, greeting, finished, folder, stateOf, counts, listing, chatName, clip, namesOf, NAME_COLS } from './company.js'
+import { cols } from './width.js'
 
 const run = (events, s = initialState(1)) => events.reduce(reduce, s)
 let t = Date.UTC(2026, 10, 12, 12)
@@ -109,14 +110,14 @@ test('another chat ending a long turn is told once, with its folder and since wh
   let r = finished(all, {}, me)
   assert.deepEqual(r, { seen: { old: 50, busy: 300, quick: 400 }, told: {}, peer: null })
   r = finished({ ...all, busy: { cwd: '/w/a', at: 400, done: true, took: took3 } }, r.seen, me)
-  assert.deepEqual(r.peer, { here: true, name: 'a', ago: 600, took: took3, ask: false })
+  assert.deepEqual(r.peer, { here: true, name: 'a', dir: 'a', ago: 600, took: took3, ask: false })
   assert.deepEqual(r.told, { busy: 1000 })
   assert.equal(finished({ ...all, busy: { cwd: '/w/a', at: 400, done: true, took: took3 } }, r.seen, { ...me, told: r.told }).peer, null) // once
   // the same chat ends another long turn: not news again within 10 minutes, news after
   const again = { busy: { cwd: '/w/a', at: 900, done: true, took: took3 } }
   assert.equal(finished(again, r.seen, { ...me, now: 1000 + 9 * MIN, told: r.told }).peer, null)
   assert.deepEqual(finished(again, r.seen, { ...me, now: 1000 + 10 * MIN, told: r.told }).peer?.name, 'a')
-  assert.deepEqual(finished({ new: { cwd: '/w/zed', at: 150, done: true, took: 2 * MIN } }, {}, me).peer, { here: false, name: 'zed', ago: 850, took: 2 * MIN, ask: false })
+  assert.deepEqual(finished({ new: { cwd: '/w/zed', at: 150, done: true, took: 2 * MIN } }, {}, me).peer, { here: false, name: 'zed', dir: 'zed', ago: 850, took: 2 * MIN, ask: false })
   assert.equal(finished({ new: { cwd: '/w/zed', at: 150, done: true } }, {}, me).peer, null) // a mark of before the durations: unknown, so not told
   // a mark keeps its duration through the store, and only a number
   assert.deepEqual(marks({ a: { cwd: '/w', at: 1, done: true, took: 5 }, b: { cwd: '/w', at: 1, done: true, took: 'x' } }), { a: { cwd: '/w', at: 1, done: true, took: 5 }, b: { cwd: '/w', at: 1, done: true } })
@@ -261,19 +262,19 @@ test('which chat needs me: a chat is at work, waits for the person, may wait for
   assert.deepEqual(counts(all, 'me', now), { working: 1, waiting: 1, asking: 1 })
   assert.deepEqual(counts({ me: /** @type {any} */ (all.me) }, 'me', now), { working: 0, waiting: 0, asking: 0 }) // only this chat: nothing to count
   assert.deepEqual(listing(all, 'me', now), [
-    { me: true, name: 'here', state: 'working', ago: MIN },
-    { me: false, name: 'api', state: 'asking', ago: 2 * MIN }, // since its call began to wait, not since its turn began
-    { me: false, name: 'vodmax', state: 'working', ago: 4 * MIN },
-    { me: false, name: 'notes', state: 'waiting', ago: 9 * MIN },
+    { id: 'me', me: true, name: 'here', label: '', state: 'working', ago: MIN },
+    { id: 'stuck', me: false, name: 'api', label: '', state: 'asking', ago: 2 * MIN }, // since its call began to wait, not since its turn began
+    { id: 'busy', me: false, name: 'vodmax', label: '', state: 'working', ago: 4 * MIN },
+    { id: 'idle', me: false, name: 'notes', label: '', state: 'waiting', ago: 9 * MIN },
   ])
   assert.doesNotMatch(JSON.stringify(listing(all, 'me', now)), /secret-client|home\/me/) // a folder's name, never its path
 
   // the news: the chat that may wait for an OK is told once, at once, before a turn that ended; then the turn; then nothing
   const me = { id: 'me', cwd: '/w/here', since: now - 20 * MIN, now }
   let r = finished(all, {}, me)
-  assert.deepEqual(r.peer, { here: false, name: 'api', ago: 2 * MIN, took: 0, ask: true })
+  assert.deepEqual(r.peer, { here: false, name: 'api', dir: 'api', ago: 2 * MIN, took: 0, ask: true })
   r = finished(all, r.seen, { ...me, told: r.told })
-  assert.deepEqual(r.peer, { here: false, name: 'notes', ago: 9 * MIN, took: 3 * MIN, ask: false })
+  assert.deepEqual(r.peer, { here: false, name: 'notes', dir: 'notes', ago: 9 * MIN, took: 3 * MIN, ask: false })
   r = finished(all, r.seen, { ...me, told: r.told })
   assert.equal(r.peer, null)
   // the same chat stops on another call later: told again, once
@@ -348,6 +349,37 @@ test('a mark tells its last turn: a closed one keeps when it was and whether it 
     assert.deepEqual(sight({ at: NOW, rows: [{ id: 'a', cwd: '/x', st: 'waiting', wait: 'rm -rf', since: NOW + 9e9 }, { id: 'b', cwd: '/x', st: 'nope' }, 4] }), { at: NOW, rows: [{ id: 'a', cwd: '/x', st: 'waiting', wait: '', since: NOW }] })
   })
 
+  test('names: the name the person gave a chat is kept, cleaned and cut; the one Claude Code made is not a name', () => {
+    // Claude Code's own: the folder, a hyphen and two hex digits. Anything else is the person's
+    for (const [name, cwd] of [['workspace-5a', '/home/me/workspace'], ['gin-00', '/w/gin'], ['my app-ff', '/w/my app'], ['api-0c', 'C:\\work\\api'], ['-1a', '/']]) assert.equal(chatName(name, cwd), '', name)
+    for (const [name, cwd] of [['release notes', '/w/gin'], ['gin', '/w/gin'], ['gin-1A', '/w/gin'], ['gin-1ab', '/w/gin'], ['gin-zz', '/w/gin'], ['other-5a', '/w/gin'], ['修复登录', '/w/gin']]) assert.equal(chatName(name, cwd), name, name)
+    for (const bad of [undefined, null, 7, {}, ['x'], '', '   ', '\x1b[2J', 'x'.repeat(1025)]) assert.equal(chatName(bad, '/w/gin'), '')
+    // hostile: escape sequences, control and invisible characters, line breaks and turns of direction go; a long one is cut with an ellipsis
+    assert.equal(chatName('\x1b[31mred\x1b[0m\x07 \u202eeman\u200b\n\r\ttwo\x00', '/w/gin'), 'red eman two')
+    assert.equal(chatName('\x1b]8;;http://evil\x07click\x1b]8;;\x07', '/w/gin'), 'click')
+    const long = chatName('n'.repeat(500), '/w/gin'), wide = chatName('名'.repeat(500), '/w/gin')
+    assert.deepEqual([long, cols(wide) <= NAME_COLS, wide.endsWith('…')], [`${'n'.repeat(NAME_COLS - 1)}…`, true, true])
+    assert.deepEqual([clip('abc', 3), clip('abcd', 3), clip('é'.repeat(9), 4), clip(7, 4)], ['abc', 'ab…', 'ééé…', ''])
+    // the look keeps a name only where there is one, and the store's copy is cleaned again
+    const look = seen(out([row({ sessionId: 'a' }), row({ sessionId: 'b', name: 'release notes' }), row({ sessionId: 'c', name: '\x1b[2Jwipe\n' }), row({ sessionId: 'd', name: { toString: () => 'x' } }), row({ sessionId: '__proto__', name: 'polluted' })]), null, NOW)
+    assert.deepEqual(look?.rows.map(r => [r.id, r.name]), [['a', undefined], ['b', 'release notes'], ['c', 'wipe'], ['d', undefined]])
+    assert.deepEqual(namesOf(look), { b: 'release notes', c: 'wipe' })
+    assert.deepEqual(namesOf(sight({ at: NOW, rows: [{ id: 'a', cwd: '/w/gin', st: 'busy', since: NOW, name: `\x1b[1m${'y'.repeat(99)}` }, { id: 'b', cwd: '/w/gin', st: 'busy', since: NOW, name: 'gin-1a' }, { id: 'c', cwd: '/w/gin', st: 'busy', since: NOW, name: 9 }] })), { a: `${'y'.repeat(NAME_COLS - 1)}…` })
+    assert.deepEqual([namesOf(null), {}.polluted], [{}, undefined])
+    // the list and the news say the name; the folder stays beside it, and is what the small model is told
+    const all = marks({ me: { cwd: '/w/x', at: NOW, done: false, beat: NOW }, b: { cwd: '/w/gin', at: NOW - 3 * MIN, done: true, took: 5 * MIN, beat: NOW }, a: { cwd: '/w/api', at: NOW - MIN, done: false, beat: NOW, asking: NOW - MIN } })
+    assert.deepEqual(listing(all, 'me', NOW, namesOf(look)).map(c => [c.id, c.name, c.label]), [['me', 'x', ''], ['a', 'api', ''], ['b', 'gin', 'release notes']])
+    assert.deepEqual(listing(all, 'me', NOW, { toString: 'x' }).map(c => c.label), ['', '', '']) // only a chat's own id finds a name
+    const me = { id: 'me', cwd: '/w/x', since: NOW - H, now: NOW, names: { b: 'release notes' } }
+    const ask = finished(all, {}, me), done = finished(all, ask.seen, { ...me, told: ask.told })
+    assert.deepEqual([ask.peer?.name, ask.peer?.dir, done.peer?.name, done.peer?.dir], ['api', 'api', 'release notes', 'gin'])
+    // the bubble: a named chat is told by its name, in each language
+    const s0 = run([{ t: NOW, type: 'sessionStart' }, { t: NOW + 1, type: 'peer', here: false, name: 'release notes', named: true, ago: 3 * MIN }])
+    assert.equal(bubble(view(s0, NOW + 2)).say, 'your chat “release notes” finished its job 3 min ago')
+    const s1 = run([{ t: NOW, type: 'sessionStart' }, { t: NOW + 1, type: 'peer', here: true, name: 'release notes', named: true, ask: true }])
+    assert.equal(bubble(view(s1, NOW + 2)).say, 'your chat “release notes” may be waiting for your OK')
+  })
+
   test('watch: a session keeps the moment it was first seen in its status, and a new status starts again', () => {
     const first = seen(out([row({ status: 'waiting', waitingFor: 'approve plan' })]), null, NOW)
     const same = seen(out([row({ status: 'waiting', waitingFor: 'approve plan' })]), first, NOW + 30_000)
@@ -373,6 +405,39 @@ test('a mark tells its last turn: a closed one keeps when it was and whether it 
     assert.equal(watched(all, look, 'me', NOW + RULES.chatDeadMs + 1), all)
     assert.equal(watched(all, { ...look, at: NOW + 9e6 }, 'me', NOW), all)
     assert.equal(watched(all, null, 'me', NOW), all)
+  })
+
+  test('watch: a chat that closed is not brought back by an old row, and a mark whose session left the live list waits for nobody', () => {
+    // this chat ended a turn, a look saw it, then /clear closed its mark: the row of the old id shows no life after that
+    const seenBusy = seen(out([row({ sessionId: 'old' }), row({ sessionId: 'peer', cwd: '/w/p' })]), null, NOW)
+    const look = /** @type {NonNullable<ReturnType<typeof seen>>} */ (seen(out([row({ sessionId: 'old', status: 'idle' }), row({ sessionId: 'peer', cwd: '/w/p' })]), seenBusy, NOW + 30_000))
+    const closed = marks({ old: { cwd: '/w/x', at: NOW + 40_000, done: true, beat: NOW + 40_000, closed: true, left: NOW + 20_000 } })
+    const none = { working: 1, waiting: 0, asking: 0 }
+    for (const at of [look.at, NOW + 60_000]) { // the look from before the close, and a later one whose list still holds the old id
+      const merged = watched(closed, { ...look, at }, 'new', NOW + 61_000)
+      assert.deepEqual(counts(merged, 'new', NOW + 61_000), none)
+      assert.deepEqual(listing(merged, 'new', NOW + 61_000).map(c => `${c.name} ${c.state}`), ['p working'])
+    }
+    // the same session at work again after it closed (resumed without Hatchling): that is life, and it is listed
+    const back = /** @type {NonNullable<ReturnType<typeof seen>>} */ (seen(out([row({ sessionId: 'old' })]), look, NOW + 90_000))
+    assert.equal(listing(watched(closed, back, 'new', NOW + 91_000), 'new', NOW + 91_000)[0]?.state, 'working')
+    // the ids this process had before a /clear are never another chat, with a look or with none, whatever their mark says
+    const mine = marks({ old: { cwd: '/w/x', at: NOW, done: true, beat: NOW + 60_000 } })
+    assert.deepEqual(watched(mine, back, 'new', NOW + 91_000, ['old']), {})
+    assert.deepEqual(watched(mine, null, 'new', NOW + 61_000, ['old']), {})
+    assert.equal(counts(watched(mine, null, 'new', NOW + 61_000), 'new', NOW + 61_000).waiting, 1)
+
+    // a mark that still says "waiting", of a session the live list no longer holds: not counted, not listed
+    const t = NOW + 60_000, live = /** @type {NonNullable<ReturnType<typeof seen>>} */ (seen(out([row({ sessionId: 'me' }), row({ sessionId: 'here', status: 'idle' })]), null, t))
+    const all = marks({ here: { cwd: '/w/h', at: NOW, done: true, beat: t }, gone: { cwd: '/w/g', at: NOW, done: true, beat: t }, cut: { cwd: '/w/c', at: NOW, done: false, beat: t }, fresh: { cwd: '/w/f', at: t + 500, done: true, beat: t + 500 }, me: { cwd: '/w/m', at: NOW, done: true, beat: t } })
+    const merged = watched(all, live, 'me', t + 1000)
+    assert.deepEqual(counts(merged, 'me', t + 1000), { working: 0, waiting: 2, asking: 0 })
+    assert.deepEqual(listing(merged, 'me', t + 1000).map(c => c.name).sort(), ['f', 'h', 'm']) // a chat that did something since the look is not judged by it; never this one
+    assert.deepEqual(merged.gone, { ...all.gone, closed: true })
+    // with no list (an app, a failure), or one that is not whole, the marks alone, as before
+    assert.deepEqual(counts(watched(all, null, 'me', t + 1000), 'me', t + 1000), { working: 1, waiting: 3, asking: 0 })
+    const full = { at: t, rows: Array.from({ length: WATCH.rows }, (_, i) => ({ id: `s${i}`, cwd: '/w/z', st: 'idle', wait: '', since: t })) }
+    assert.deepEqual(counts(watched(all, full, 'me', t + 1000), 'me', t + 1000), { working: 1, waiting: 3, asking: 0 })
   })
 
   const H = 3_600_000, LOOK = WATCH.everyMs

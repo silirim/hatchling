@@ -123,7 +123,7 @@ export const TALK = {
   greet: (t, lang, stat) => ({ say: greet(t, lang, stat), ...(t.buddy ? { fix: text(lang, 'greet.buddy') } : null), ...(t.greet === 'resume' ? { ask: '/resume', label: text(lang, 'btn.resume') } : t.buddy ? { ask: '/pet adopt', label: text(lang, 'btn.adopt') } : null) }),
   // which chat (its folder) and since when; with the comments on the small model says the same fact in the pet's character (`said`)
   // `ask`: that chat may be waiting for the person's OK on a tool call
-  peer: (t, lang) => ({ say: t.said || text(lang, `peer.${t.ask ? 'ask.' : ''}${!t.name ? 'away' : t.here ? 'here' : 'in'}`, { name: t.name ?? '', ago: ago(t.ago ?? 0, lang) }) }),
+  peer: (t, lang) => ({ say: t.said || text(lang, `peer.${t.ask ? 'ask.' : ''}${!t.name ? 'away' : t.named ? 'named' : t.here ? 'here' : 'in'}`, { name: t.name ?? '', ago: ago(t.ago ?? 0, lang) }) }),
   recap: (t, lang) => ({ say: recap(t, lang) }),
   // never worded as a saving: no run measured one
   tidy: (_, lang) => ({ say: text(lang, 'tidy.say'), fix: text(lang, 'tidy.fix'), ask: OUTLINE, label: text(lang, 'btn.outline') }),

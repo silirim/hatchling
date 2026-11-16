@@ -22,7 +22,7 @@ import { tidy } from './width.js'
  *   | { type: 'buy', t: number, id: string }
  *   | { type: 'animal', t: number, id: string, free?: boolean }
  *   | { type: 'greet', t: number, kind: GreetKind, name?: string, ago?: number, done?: boolean, buddy?: boolean }
- *   | { type: 'peer', t: number, here: boolean, name?: string, ago?: number, said?: string, ask?: boolean }
+ *   | { type: 'peer', t: number, here: boolean, name?: string, named?: boolean, ago?: number, said?: string, ask?: boolean }
  *   | { type: 'voice', t: number, text: string, why?: string }} PetEvent
  * @typedef {'resume' | 'back' | 'first' | 'seen' | 'new'} GreetKind
  * @typedef {'recap' | 'tidy' | 'voice' | 'peer' | 'greet' | 'coffee' | 'silly'} TalkKind
@@ -30,7 +30,7 @@ import { tidy } from './width.js'
  * line, `n` to the coffee break (turns), the nonsense (0..1, which word) and the welcome back (coins given), `fails`, `rereads` and `rebuilds` to the recap of a turn,
  * `text` and `why` to a line of the voice (written by a model when the person turned the voice on; the adapter hands it in already cleaned):
  * the talk itself when its kind is `voice`, the line shown under a recap or an outline offer when it came in the same turn.
- * @typedef {{ kind: TalkKind, at: number, until?: number, greet?: GreetKind, name?: string, ago?: number, done?: boolean, here?: boolean, n?: number, fails?: Record<string, number>, rereads?: number, rebuilds?: number, text?: string, why?: string, said?: string, buddy?: boolean, ask?: boolean }} Talk
+ * @typedef {{ kind: TalkKind, at: number, until?: number, greet?: GreetKind, name?: string, named?: boolean, ago?: number, done?: boolean, here?: boolean, n?: number, fails?: Record<string, number>, rereads?: number, rebuilds?: number, text?: string, why?: string, said?: string, buddy?: boolean, ask?: boolean }} Talk
  * @typedef {'stomach' | 'dizzy' | 'loop' | 'bloated' | 'heavy' | 'cold'} IssueKind
  * @typedef {'lean' | 'evolve'} CheerKind
  * @typedef {ReturnType<typeof initialState>} State
@@ -523,7 +523,7 @@ export function reduce(prev, e) {
       // the fixed line is said at once; the model's, when it comes, takes its place while that news is still on screen
       if (e.said) { const on = ss.talk && (ss.talk.until === undefined || e.t < ss.talk.until) ? ss.talk : null; if (on?.kind === 'peer' && on.name === e.name) ss.talk = { ...on, said: e.said } }
       // a chat that may be waiting for an OK is told at once: it is stuck until the person goes there
-      else if ((e.ask || e.t - ss.peerAt >= RULES.peerGapMs) && say('peer', { here: e.here, name: e.name, ago: e.ago ?? 0, ...(e.ask && { ask: true }) })) ss.peerAt = e.t
+      else if ((e.ask || e.t - ss.peerAt >= RULES.peerGapMs) && say('peer', { here: e.here, name: e.name, ago: e.ago ?? 0, ...(e.ask && { ask: true }), ...(e.named && { named: true }) })) ss.peerAt = e.t
       break
 
     case 'read': {
