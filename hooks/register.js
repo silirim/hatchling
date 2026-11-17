@@ -20,7 +20,7 @@ import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats
 import { text, put, list as listOf, voicedAs, asLang, fromLocale, LANGS } from '../engine/lang/index.js'
 import { cols, pad, wrap, tidy } from '../engine/width.js'
 import { pick } from '../engine/pick.js'
-import { whole as routineOf, touch as routineTouch, next as routineNext, answer as routineAnswer, setUntil, usual as routineUsual, stage as warnStage, back as backKind, switched as routineSwitched, cleared as routineCleared, hhmm, minutes as minutesOf, LIMITS as ROUTINE } from '../engine/routine.js'
+import { whole as routineOf, touch as routineTouch, next as routineNext, answer as routineAnswer, setUntil, usual as routineUsual, stage as warnStage, minsLeft, back as backKind, switched as routineSwitched, cleared as routineCleared, hhmm, minutes as minutesOf, LIMITS as ROUTINE } from '../engine/routine.js'
 import zoo from '../sprites/zoo.js'
 import { REG, install, coatOf, dressed, portrait, LIMITS as SKIN_LIMITS } from '../engine/skins.js'
 import { shareLines, picture, png, svg, sharePath } from '../engine/share.js'
@@ -434,7 +434,7 @@ async function company(/** @type {any} */ $) {
   else if (!a.back && backKind(seen, now)) await update($, anim, x => ({ ...x, back: seen, sleep: false }))
   // a question that is up here and no longer in the store: answered in another chat, or its 30 minutes passed
   if (a.ask && a.askKind && (r.q?.kind !== a.askKind || now - r.q.at >= ROUTINE.questionMs || r.q.at > now)) await update($, anim, x => ({ ...x, ...NO_ASK }))
-  const w = warnStage(r.until, now), key = `${r.until}:${w}`, line = w ? voiced(p, `until.${w}`, { time: hhmm(r.until) }) : ''
+  const w = warnStage(r.until, now), key = `${r.until}:${w}`, line = w ? voiced(p, `until.${w}`, { time: hhmm(r.until), min: String(minsLeft(r.until, now)) }) : ''
   if (w && warned !== key) { warned = key; await hold($, line, '', RULES.warnShowMs) }
   const here = personAt > 0 && now - personAt <= RULES.peerActiveMs, held = (await heldAnim($)).noteLeft > 0 && !(w && warned === key)
   const free = here && !held && !a.ask && p.voiceAsked && !turnAt && !(await typing($))

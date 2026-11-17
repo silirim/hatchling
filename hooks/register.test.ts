@@ -4525,15 +4525,15 @@ test('the finish time is warned about 30 and 10 minutes before and at the time: 
   await k.to(dayAt(17, 17, 29))
   expect([/18:00/.test(await k.said()), k.toasts]).toEqual([false, []])
   await k.to(dayAt(17, 17, 30) + 11_000)
-  expect(oneOf('until.w30', { time: '18:00' })).toContain(await k.said())
-  expect([k.toasts.length, oneOf('until.w30', { time: '18:00' }).includes(k.toasts[0]!), k.disk.routine.done.includes('w30')]).toEqual([1, true, true])
+  expect(oneOf('until.w30', { time: '18:00', min: '30' })).toContain(await k.said())
+  expect([k.toasts.length, oneOf('until.w30', { time: '18:00', min: '30' }).includes(k.toasts[0]!), k.disk.routine.done.includes('w30')]).toEqual([1, true, true])
   await k.pass(RULES.warnShowMs + 1_000)
   expect(await k.said()).not.toMatch(/18:00/) // for a minute, then it goes
   // ten minutes before, another chat saw it first and marked it: this band shows it too, and makes no second toast
   await k.to(dayAt(17, 17, 49))
   k.disk.routine = { ...k.disk.routine, done: [...k.disk.routine.done, 'w10'] }
   await k.to(dayAt(17, 17, 50) + 11_000)
-  expect(oneOf('until.w10', { time: '18:00' })).toContain(await k.said())
+  expect(oneOf('until.w10', { time: '18:00', min: '10' })).toContain(await k.said())
   expect(k.toasts.length).toBe(1)
   // at the time
   await k.to(dayAt(17, 18) + 11_000)

@@ -119,6 +119,12 @@ export function stage(until, now) {
   return m === undefined ? '' : `w${m}`
 }
 
+/** The whole minutes left to a finish time, rounded up, 1 at least: what a warning says, which is not 30 or 10 when the time was set that near. @param {number} until @param {number} now */
+export const minsLeft = (until, now) => Math.max(1, Math.ceil((until - now) / MIN))
+
+/** The reply to a finish time just set, naming only the warnings still to come: until.set (30 and 10 minutes before, and at the time), until.set.10, until.set.0. @param {number} until @param {number} now */
+const setReply = (until, now) => { const m = (until - now) / MIN; return m > 30 ? 'until.set' : m > 10 ? 'until.set.10' : 'until.set.0' }
+
 /**
  * What the pet does now, at most one thing: `warn` a warning about the finish time (`w30`, `w10`, `w0`), `ask` a question to put
  * up, `say` a line of its own (`coffee.no`, `coffee.yes`, `lunch.no`). `busy` is a turn running, or anything else that holds the
@@ -184,7 +190,7 @@ export function answer(was, choice, now) {
   if (!q) return { r: r0, ok: false, opts: [], reply: 'answer.none', time: 0 }
   if (!q.opts.includes(c)) return { r: r0, ok: false, opts: q.opts, reply: 'answer.what', time: 0 }
   const r = { ...r0, q: null }, d = /** @type {Day} */ (r.days[r.day] ?? { start: now, end: now }), day = (/** @type {Partial<Day>} */ more) => ({ ...r.days, [r.day]: { ...d, ...more } })
-  const until = (/** @type {number} */ t) => ({ r: { ...r, until: t, days: day({ finish: t }), done: r.done.filter(x => !/^w\d/.test(x)) }, ok: true, opts: [], reply: 'until.set', time: t })
+  const until = (/** @type {number} */ t) => ({ r: { ...r, until: t, days: day({ finish: t }), done: r.done.filter(x => !/^w\d/.test(x)) }, ok: true, opts: [], reply: setReply(t, now), time: t })
   if (q.kind === 'usual') {
     if (c === 'yes' && q.time) return until(q.time)
     const again = { kind: /** @type {const} */ ('finish'), at: now, opts: hours(now) }
@@ -197,7 +203,7 @@ export function answer(was, choice, now) {
 
 /**
  * /pet until: `18`, `18:30`, `18.30`, `1830` or `18h30` sets today's finish time, the next time the clock shows it, at most
- * LIMITS.untilAheadMs ahead; `off` drops it. Either way the day's question about it is not asked. `reply`: until.set, until.off,
+ * LIMITS.untilAheadMs ahead; `off` drops it. Either way the day's question about it is not asked. `reply`: until.set (or until.set.10, until.set.0: only the warnings still to come), until.off,
  * until.past (a time too far ahead: it reads as one already gone), until.usage.
  * @param {Routine} was @param {string} typed @param {number} now @returns {{ r: Routine, ok: boolean, reply: string, time: number }}
  */
@@ -212,7 +218,7 @@ export function setUntil(was, typed, now) {
   let t = new Date(at.getFullYear(), at.getMonth(), at.getDate(), hh % 24, mm).getTime()
   if (t <= now) t = new Date(at.getFullYear(), at.getMonth(), at.getDate() + 1, hh % 24, mm).getTime()
   if (t - now > LIMITS.untilAheadMs) return { r, ok: false, reply: 'until.past', time: t }
-  return { r: { ...r, q, until: t, done: taken, days: { ...r.days, [r.day]: { ...d, finish: t } } }, ok: true, reply: 'until.set', time: t }
+  return { r: { ...r, q, until: t, done: taken, days: { ...r.days, [r.day]: { ...d, finish: t } } }, ok: true, reply: setReply(t, now), time: t }
 }
 
 /** The routine with questions on or off; off takes the question that is up away. @param {Routine} r @param {boolean} off @returns {Routine} */

@@ -1,7 +1,8 @@
 // @ts-check
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { LIMITS, empty, whole, touch, next, answer, setUntil, usual, stage, back, switched, cleared, dayKey, minutes, clock, hhmm } from './routine.js'
+import { LANGS, list, put } from './lang/index.js'
+import { LIMITS, empty, whole, touch, next, answer, setUntil, usual, stage, minsLeft, back, switched, cleared, dayKey, minutes, clock, hhmm } from './routine.js'
 
 const MIN = 60_000, H = 60 * MIN
 // by the clock of the machine the tests run on, as the routine reads it: Tuesday 17 November 2026 is day 17
@@ -245,4 +246,27 @@ test('the welcome back: by how long the person was away and the hour it is', () 
   assert.equal(back(at(20, 18), at(23, 9)), 'weekend') // Friday evening to Monday morning
   assert.equal(back(at(20, 18), at(21, 10)), 'morning') // Saturday morning after Friday: no weekend away
   assert.equal(back(at(19, 18), at(24, 15)), 'weekend')
+})
+
+test('a finish time set near: the warning says the minutes really left, rounded up, in every language; the reply names only the warnings still to come', () => {
+  // 18:46 set at 18:35: the first warning is due at once, and it is 11 minutes, not 30
+  const set = setUntil(begun(17, 18, 18), '18:46', at(17, 18, 35))
+  assert.deepEqual([set.reply, next(set.r, at(17, 18, 35)).warn, minsLeft(set.r.until, at(17, 18, 35))], ['until.set.10', 'w30', 11])
+  assert.deepEqual([minsLeft(at(17, 18), at(17, 17, 30)), minsLeft(at(17, 18), at(17, 17, 30) + 11_000), minsLeft(at(17, 18), at(17, 17, 49) + 1_000), minsLeft(at(17, 18), at(17, 17, 50)), minsLeft(at(17, 18), at(17, 17, 59) + 59_000), minsLeft(at(17, 18), at(17, 18))], [30, 30, 11, 10, 1, 1])
+  // the reply: 30 and 10 and the time, 10 and the time, the time alone
+  const reply = (/** @type {string} */ typed) => setUntil(begun(17, 17), typed, at(17, 17, 20)).reply
+  assert.deepEqual(['18', '17:51', '17:50', '17:31', '17:30', '17:21'].map(reply), ['until.set', 'until.set', 'until.set.10', 'until.set.10', 'until.set.0', 'until.set.0'])
+  for (const [lang, table] of Object.entries(LANGS)) {
+    for (const key of ['until.w30', 'until.w10']) {
+      const lines = list(lang, key)
+      assert.equal(lines.length, 6, `${lang} ${key}`)
+      for (const l of lines) {
+        assert.ok(l.includes('{min}') && l.includes('{time}') && !/\d/.test(l), `${lang} ${key}: ${l}`) // no minutes written in the line itself
+        assert.match(put(l, { time: '18:46', min: 11 }), /11.*18:46|18:46.*11/, `${lang} ${key}`)
+      }
+    }
+    assert.match(String(table['until.set']), /30.*10/, lang)
+    assert.ok(/10/.test(String(table['until.set.10'])) && !/30/.test(String(table['until.set.10'])), lang)
+    assert.ok(!/\b(30|10)\b/.test(String(table['until.set.0']).replace('{time}', '')), lang)
+  }
 })
