@@ -11,7 +11,9 @@ const at = (e) => ({ t: (t += 1000), ...e })
 const usage = (input, cacheRead, cacheWrite, contextPct) => at({ type: 'usage', input, cacheRead, cacheWrite, contextPct })
 // a turn of a long chat without lean: a note, like the others
 const DAY = 86_400_000
-const heavyTurn = () => [usage(100, RULES.heavyTokens, 0), at({ type: 'turnEnd' })]
+// a chat is long by what it grew: a small first request, then one bigger by the growth
+const LONG = RULES.heavyGrowth + 1000
+const heavyTurn = () => [small(), usage(100, LONG, 0), at({ type: 'turnEnd' })]
 const small = () => usage(100, 1000, 0)
 
 test('re-reading an unchanged file makes it dizzy; a changed one does not', () => {
@@ -48,8 +50,8 @@ test('the view gives the weight of the chat: what the last request re-read, the 
   assert.equal(view(s, t).context, 0) // nothing to show yet
   s = run([usage(100, 40_000, 900)], s)
   assert.deepEqual([view(s, t).context, view(s, t).long], [41_000, false])
-  s = run([usage(100, RULES.heavyTokens - 100, 0)], s) // each request replaces it
-  assert.deepEqual([view(s, t).context, view(s, t).long], [RULES.heavyTokens, true])
+  s = run([usage(100, 41_000 + RULES.heavyGrowth - 100, 0)], s) // each request replaces it
+  assert.deepEqual([view(s, t).context, view(s, t).long], [41_000 + RULES.heavyGrowth, true]) // long: grown by the threshold since the first request
   assert.equal(view(run([at({ type: 'compact' })], s), t).context, 0)
   assert.equal(view(run([at({ type: 'sessionEnd' }), at({ type: 'sessionStart' })], s), t).context, 0) // as after /clear
   assert.equal('hit' in view(s, t), false)
@@ -269,32 +271,57 @@ test('the loop bubble names the program only, never arguments or VAR=value', () 
   assert.equal(say, 'curl failed 3 times in a row')
 })
 
+test('a chat is long by what it grew, not by where it started: a new chat at 80k is not long and gets no note and no outline offer; a compaction starts the count again', () => {
+  const end = () => at({ type: 'turnEnd' }), BIG = 80_000
+  // the desktop app, many MCP servers and skills: the first request already re-reads 80k, and nothing was said yet
+  let s = run([at({ type: 'sessionStart' }), usage(0, BIG, 0), end(), usage(0, BIG + 5000, 0), end()])
+  assert.deepEqual([view(s, t).long, view(s, t).issue, s.session.talk?.kind === 'tidy', s.session.base], [false, null, false, BIG])
+  s = run([usage(0, BIG + RULES.heavyGrowth - 1, 0), end()], s) // one token under the growth
+  assert.deepEqual([view(s, t).long, view(s, t).issue], [false, null])
+  s = run([usage(0, BIG + RULES.heavyGrowth, 0), end()], s)
+  assert.deepEqual([view(s, t).long, view(s, t).issue?.kind, s.session.talk?.kind], [true, 'heavy', 'tidy'])
+  // after a compaction the first request is the new start, however big
+  s = run([at({ type: 'compact' }), usage(0, 90_000, 0), end()], s)
+  assert.deepEqual([view(s, t).long, view(s, t).issue, s.session.base], [false, null, 90_000])
+  s = run([usage(0, 90_000 + RULES.heavyGrowth, 0), end()], s)
+  assert.equal(view(s, t).long, true)
+  // a new chat (/clear) too; and a chat whose start was never seen (a state kept from before this rule) starts from the first request seen
+  s = run([at({ type: 'sessionEnd' }), at({ type: 'sessionStart' }), usage(0, 200_000, 0), end()], s)
+  assert.deepEqual([view(s, t).long, s.session.base], [false, 200_000])
+  const old = run([at({ type: 'sessionStart' })]); delete (/** @type {any} */ (old.session)).base
+  assert.equal(view(run([usage(0, 150_000, 0), end()], old), t).long, false)
+  // the pause over the cache life in a big chat that has not grown: no advice to compact, there is nothing to compact
+  let c = run([at({ type: 'sessionStart' }), at({ type: 'lean', on: true }), usage(0, RULES.coldTokens + 20_000, 0), end()])
+  t += RULES.coldAfterMs + 1000
+  assert.equal(view(run([at({ type: 'prompt' })], c), t).issue, null)
+})
+
 test('a long chat without lean is a note at every turn until lean is on, then the pet cheers', () => {
   t += RULES.cheerGapMs
   let s = run([at({ type: 'sessionStart' }), ...heavyTurn(), ...heavyTurn()])
   const v = view(s, t)
   assert.deepEqual([v.mood, v.issue?.kind, bubble(v).ask, bubble(v).fix], ['bloated', 'heavy', '/pet briefox on', 'A note only. In our bench "Be brief." cost less on a long task.'])
-  s = run([at({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0, lean: true }), at({ type: 'turnEnd' })], s)
+  s = run([at({ type: 'usage', input: 100, cacheRead: LONG, cacheWrite: 0, lean: true }), at({ type: 'turnEnd' })], s)
   assert.deepEqual([view(s, t).issue, s.cheer?.kind], [null, 'lean'])
   assert.equal(run([at({ type: 'sessionStart' }), ...heavyTurn(), at({ type: 'lean', on: true })]).cheer?.kind, 'lean') // the command is answered at once
   // a short chat gets no note, lean or not; a compaction ends a long one
   assert.equal(view(run([at({ type: 'sessionStart' }), small(), at({ type: 'turnEnd' })]), t).issue, null)
-  assert.equal(view(run([at({ type: 'sessionStart' }), usage(100, RULES.heavyTokens, 0), at({ type: 'compact' }), at({ type: 'turnEnd' })]), t).issue, null)
+  assert.equal(view(run([at({ type: 'sessionStart' }), usage(100, LONG, 0), at({ type: 'compact' }), at({ type: 'turnEnd' })]), t).issue, null)
 })
 
 test('calm bubbles say the real state of the chat', () => {
-  const long = usage(100, RULES.heavyTokens, 0)
+  const long = usage(100, LONG, 0)
   const say = (events) => bubble(view(run([at({ type: 'sessionStart' }), ...events]), t)).say
   const turns = (n) => Array.from({ length: n }, () => at({ type: 'turnEnd' }))
   assert.deepEqual([0, 1, 2, 3].map(n => say([small(), ...turns(n)])), [...CALM.short, CALM.short[0]]) // they rotate with the turn
   // the outline offered at the first long turn is gone once the next prompt has been up a while
   const seen = () => { t += RULES.talkShowMs; return at({ type: 'prompt' }) }
-  assert.deepEqual([0, 1, 2].map(n => say([at({ type: 'lean', on: true }), long, ...turns(n), seen()])), CALM.long)
+  assert.deepEqual([0, 1, 2].map(n => say([at({ type: 'lean', on: true }), small(), long, ...turns(n), seen()])), CALM.long)
   for (const line of CALM.short) assert.match(line, /short|small/)
   for (const line of CALM.long) assert.match(line, /long/)
   // long with lean off: the heavy message, already before the turn ends
-  const early = bubble(view(run([at({ type: 'sessionStart' }), long]), t))
-  assert.deepEqual([early.say, early.ask], ['long chat, briefox off: over 60k tokens re-read per request', '/pet briefox on'])
+  const early = bubble(view(run([at({ type: 'sessionStart' }), small(), long]), t))
+  assert.deepEqual([early.say, early.ask], [`long chat, briefox off: ${Math.round((LONG + 100) / 1000)}k tokens re-read per request`, '/pet briefox on'])
 })
 
 test('every line is short and sober: one line, no exclamation mark', () => {
@@ -318,7 +345,7 @@ test('lean chosen while the style still waits: no note, no cheer, the bubble say
   let v = view(s, t), b = bubble(v)
   assert.deepEqual([v.issue, v.cheer, v.lean, v.wait], [null, null, false, true]) // the heavy issue goes, and nothing is celebrated
   assert.deepEqual([b.say, b.fix, b.ask], ['long chat, briefox chosen', '"Be brief." starts at the next compaction or chat.', ''])
-  s = run([at({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0, lean: false, wait: true }), at({ type: 'turnEnd' })], s)
+  s = run([at({ type: 'usage', input: 100, cacheRead: LONG, cacheWrite: 0, lean: false, wait: true }), at({ type: 'turnEnd' })], s)
   assert.deepEqual([view(s, t).issue, s.cheer], [null, null]) // no note while it waits
   // the compaction lets the style in: now the pet cheers
   s = run([at({ type: 'compact' }), at({ type: 'lean', on: true })], s)
@@ -341,7 +368,7 @@ test('every guide the bubbles link to exists in docs/fix', () => {
 })
 
 test('a prompt after a pause over the cache life, in a chat of 100k or more, gets the advice to restart small; under 100k nothing', () => {
-  const pause = (tokens, ms, more = {}) => { const s = run([at({ type: 'sessionStart' }), at({ type: 'lean', on: true }), usage(100, tokens, 0), at({ type: 'turnEnd' })]); t += ms; return run([at({ type: 'prompt', ...more })], s) }
+  const pause = (tokens, ms, more = {}) => { const s = run([at({ type: 'sessionStart' }), at({ type: 'lean', on: true }), small(), usage(100, tokens, 0), at({ type: 'turnEnd' })]); t += ms; return run([at({ type: 'prompt', ...more })], s) }
   const big = pause(RULES.coldTokens, RULES.coldAfterMs)
   const b = bubble(view(big, t))
   assert.deepEqual([view(big, t).issue?.kind, view(big, t).mood], ['cold', 'stomach']) // advice only

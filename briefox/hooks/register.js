@@ -8,9 +8,12 @@ import { BENCH as SHOWN, ID, TEXT } from '../text.js'
 export function register(/** @type {import('claude-code').On} */ on) {
   const BENCH = `${SHOWN}. Every run: bench/RESULTS.md in the repository.`
   // switching re-sends the whole conversation once: in a long chat that costs more than the sentence saves for a long while,
-  // so a switch waits for a moment when the cache is rebuilt anyway (a new chat, a compaction) or the chat is still small
-  const SWITCH_UNDER = 30_000 // context tokens
+  // so a switch waits for a moment when the cache is rebuilt anyway (a new chat, a compaction) or the chat has grown little.
+  // Grown, not big: the first request of a chat already carries the system prompt and the tools, 60k and more in the desktop app or
+  // with many MCP servers, and that is no conversation. 15k: the 30k of context of the rule before, less the 17k a bench chat started at.
+  const SWITCH_UNDER = 15_000 // tokens the context grew by since the chat's first request, or the first after a compaction
   let ctxTokens = 0 // what the last request of the main thread was answered over
+  let baseTokens = 0 // the same for the first request of the chat or after a compaction; 0: not seen yet
   let afterCompact = false
   /** @type {boolean | undefined} */ let live // what the system prompt carries now
   /** @type {import('claude-code').PromptComposeInput | undefined} */ let asked // the last prompt composed, to ask again what the other plugins add
@@ -22,7 +25,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
    */
   const wanted = (bench, off) => !!bench || off !== true
   /** Whether the next request carries the sentence: the choice when a switch is cheap, else what it carries now. */
-  const coming = (/** @type {boolean} */ want) => live === undefined || ctxTokens < SWITCH_UNDER || afterCompact ? want : live
+  const coming = (/** @type {boolean} */ want) => live === undefined || ctxTokens - baseTokens < SWITCH_UNDER || afterCompact ? want : live
 
   on('session.start', async ($, e, next) => {
     // where no command can be registered (a process with no session bound yet) the sentence still goes in: it needs no command
@@ -42,18 +45,18 @@ export function register(/** @type {import('claude-code').On} */ on) {
   on('turn.step', async function* (_, e, next) {
     const r = yield* next(e)
     const u = r?.usage
-    if (u && /** @type {any} */ (e).agentId === undefined) { ctxTokens = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens; afterCompact = false }
+    if (u && /** @type {any} */ (e).agentId === undefined) { ctxTokens = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens; if (!baseTokens) baseTokens = ctxTokens; afterCompact = false }
     return r
   })
 
   on('session.compact', async (_, e, next) => {
     const r = await next(e)
-    if (e.agentId === undefined && !r.skip) { ctxTokens = 0; afterCompact = true }
+    if (e.agentId === undefined && !r.skip) { ctxTokens = baseTokens = 0; afterCompact = true }
     return r
   })
 
   on('session.end', (_, e, next) => {
-    if (e.reason === 'clear') { ctxTokens = 0; live = undefined } // the next chat sends everything again anyway
+    if (e.reason === 'clear') { ctxTokens = baseTokens = 0; live = undefined } // the next chat sends everything again anyway
     return next(e)
   })
 

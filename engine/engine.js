@@ -43,12 +43,18 @@ import { tidy } from './width.js'
 // `wait` is the style chosen but not in the system prompt yet.
 // What grows is affection: it comes with ordinary use and with cuddles, and nothing the person does or does not do takes it away.
 export const RULES = {
-  heavyTokens: 60_000,     // context re-read by every request from which a chat counts as long: between the bench's short tasks (about 26k, no saving shown) and its long one (about 96k, saving shown)
+  // A chat is long by how much it grew, not by where it started: the first request of a chat (after a compaction, the first one after
+  // it) already carries the system prompt and the tool definitions, 60k and more in the desktop app or with many MCP servers and skills,
+  // and that is no conversation. Its context is the baseline (`session.base`); long is context - baseline >= heavyGrowth.
+  // The figure: the bench started at about 17k, its short tasks ended at about 26k (grown by 9k, no saving shown) and its long one at
+  // about 96k (grown by 79k, saving shown); the rule before this one was 60k of context, which on that baseline was a growth of 43k.
+  // 40k keeps the line where it was for a chat that starts small. Chosen, not measured.
+  heavyGrowth: 40_000,
   loopFails: 3,            // same command failing this many times with no file edit in between = loop
   cacheBreakMinTokens: 2000,
   cacheBreakShare: 0.5,    // cache writes over half of the request's input = rebuilt prefix
   cacheTtlMs: 5 * 60_000,  // a break after a pause this long is the cache expiring: shown as a note
-  // A prompt sent after a pause over coldAfterMs, in a chat of coldTokens or more, gets one piece of advice: the cache is gone, a smaller
+  // A prompt sent after a pause over coldAfterMs, in a long chat (heavyGrowth) of coldTokens or more, gets one piece of advice: the cache is gone, a smaller
   // start costs less. Nothing is done for the person. shortcut: 1 hour is an assumption (the documented cache life is 1 hour on a
   // subscription, 5 minutes with an API key, and the mod cannot tell which): with a 5 minute cache the advice comes late or not at all
   coldAfterMs: 60 * 60_000,
@@ -137,6 +143,8 @@ export const RULES = {
   waitCountMs: 2 * 3_600_000, // a chat whose turn ended counts as waiting for the person for this long, then no more: the count is never stuck
   workDays: 8,             // days of work counters kept for /pet diary: today and the week before
   remindShowMs: 20_000,    // how long a reminder holds the bubble
+  warnShowMs: 60_000,      // how long a warning about the finish time holds the bubble, in each open chat (engine/routine.js)
+  bornShowMs: 20_000,      // how long a newborn says who it is: its name, its animal, its five statistics, its character
   remindStartMs: 15_000,   // a chat that opens shows the reminders this long after its greeting
   diaryMax: 40,            // lines kept; the oldest go
   diaryLongMs: 3 * 3_600_000, // a day with this much time at work is a long one
@@ -347,6 +355,7 @@ function freshSession() {
     expectRebuild: true, // first request and the one after a compaction write the cache by design
     contextPct: 0,
     context: 0,   // tokens the last request re-read: the size of the chat
+    base: 0,      // what the first request of the chat re-read, or the first after a compaction: where the chat started. 0: not known yet
     lean: false,  // the style is in effect, as the adapter says
     leanWait: false, // it is chosen, but waits for the next compaction or chat
     /** @type {Talk | null} */ talk: null,
@@ -395,13 +404,20 @@ export function program(cmd) {
   return /^[\w.+-]{1,24}$/.test(name) && !(name in {}) ? name : '' // nor a name every object has: it would be read as a field of one
 }
 
+/**
+ * Whether a chat is long: whether what a request re-reads grew by RULES.heavyGrowth since the chat's first request, or since the first
+ * after a compaction. A chat whose start was not seen (resumed, or a reload) starts from the first request seen: not long until it grows.
+ * @param {{ context: number, base?: number }} ss
+ */
+export const isLong = (ss) => !!ss.base && ss.context - ss.base >= RULES.heavyGrowth
+
 /** Whether nothing holds the bubble: no note or cheer, and no long chat without lean.
  * @param {State} s @param {number} now */
 function calm(s, now) {
   const ss = s.session
   if (s.issues.some(i => i.untilTurn > s.turn || now < i.until)) return false
   if (s.cheer && (s.cheer.until === undefined || now < s.cheer.until)) return false
-  return ss.lean || ss.context < RULES.heavyTokens
+  return ss.lean || !isLong(ss)
 }
 
 /**
@@ -481,7 +497,7 @@ export function reduce(prev, e) {
       ss.fails = {}
       ss.rereads = ss.rebuilds = 0
       // the cache has expired in the pause: this prompt sends the whole chat again, and so would the next after another pause
-      if (e.turn !== false && ss.lastUsageAt && e.t - ss.lastUsageAt > RULES.coldAfterMs && ss.context >= RULES.coldTokens) issue('cold', String(Math.round(ss.context / 1000)))
+      if (e.turn !== false && ss.lastUsageAt && e.t - ss.lastUsageAt > RULES.coldAfterMs && ss.context >= RULES.coldTokens && isLong(ss)) issue('cold', String(Math.round(ss.context / 1000)))
       break
 
     case 'greet': { // one line when the chat opens; the adapter chose it from the marks other chats left
@@ -566,6 +582,7 @@ export function reduce(prev, e) {
       s.life.cacheRead += e.cacheRead
       if (e.contextPct !== undefined) ss.contextPct = e.contextPct
       ss.context = total
+      if (!ss.base) ss.base = total
       if (e.lean !== undefined) lean(e.lean, e.wait)
       const broke = !ss.expectRebuild && e.cacheWrite >= RULES.cacheBreakMinTokens && e.cacheWrite / (total || 1) > RULES.cacheBreakShare
       ss.expectRebuild = false
@@ -591,13 +608,15 @@ export function reduce(prev, e) {
       ss.expectRebuild = true
       ss.contextPct = 0
       ss.context = 0
+      ss.base = 0 // the first request after it is the new start
+      if (ss.talk?.kind === 'tidy') ss.talk = null // the offer of an outline was for the chat as it was
       s.issues = s.issues.filter(i => i.kind !== 'bloated' && i.kind !== 'dizzy' && i.kind !== 'heavy' && i.kind !== 'cold')
       break
     }
 
     case 'turnEnd': {
       s.turn++
-      if (ss.context >= RULES.heavyTokens && !ss.lean && !ss.leanWait) issue('heavy', String(Math.round(ss.context / 1000)))
+      if (isLong(ss) && !ss.lean && !ss.leanWait) issue('heavy', String(Math.round(ss.context / 1000)))
       if (s.queued && e.t - s.lastCheerAt >= RULES.cheerGapMs) {
         const q = s.queued
         s.queued = null
@@ -614,7 +633,7 @@ export function reduce(prev, e) {
       ss.sitAt = e.t
       const failed = Object.values(ss.fails).reduce((a, b) => a + b, 0)
       if (ss.turnAt && e.t - ss.turnAt >= RULES.recapTurnMs && failed + ss.rereads + ss.rebuilds >= RULES.recapMinWrong) say('recap', { fails: ss.fails, rereads: ss.rereads, rebuilds: ss.rebuilds })
-      else if (ss.context >= RULES.heavyTokens && ss.turns >= ss.tidyNext) { if (say('tidy')) ss.tidyNext = ss.turns + RULES.tidyAgainTurns }
+      else if (isLong(ss) && ss.turns >= ss.tidyNext) { if (say('tidy')) ss.tidyNext = ss.turns + RULES.tidyAgainTurns }
       else if (!calm(s, e.t)) {} // chatter never talks over a warning
       else if (ss.sit >= RULES.coffeeTurns && (!ss.coffeeAt || e.t - ss.coffeeAt >= RULES.coffeeGapMs)) { if (say('coffee', { n: ss.sit })) { ss.coffeeAt = e.t; ss.sit = 0 } }
       else if (e.roll !== undefined && e.roll < RULES.sillyChance && ss.turns >= ss.sillyNext && say('silly', { n: e.roll / RULES.sillyChance })) ss.sillyNext = ss.turns + RULES.sillyMinTurns
@@ -656,7 +675,7 @@ export function view(s, now) {
   const animate = !cheer || now - cheer.at < RULES.cheerShowMs
   const said = s.session.talk
   const talk = said && (said.until === undefined || now < said.until) ? said : null
-  return { talk, calm: calm(s, now), mood, happy, hearts: hearts(s.affection), coins: s.coins, issue, cheer, animate, context: s.session.context, long: s.session.context >= RULES.heavyTokens, lean: s.session.lean, wait: !!s.session.leanWait, turn: s.turn, variant: s.variant, owned: s.owned, animals: s.animals, closet: closetOf(s.owned, stage(s)) }
+  return { talk, calm: calm(s, now), mood, happy, hearts: hearts(s.affection), coins: s.coins, issue, cheer, animate, context: s.session.context, long: isLong(s.session), lean: s.session.lean, wait: !!s.session.leanWait, turn: s.turn, variant: s.variant, owned: s.owned, animals: s.animals, closet: closetOf(s.owned, stage(s)) }
 }
 
 /**

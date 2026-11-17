@@ -126,3 +126,22 @@ test('the path typed after /pet import: spaces, quotes, ~, and yes after it', ()
   assert.deepEqual(asked('   '), { path: '', yes: false, typed: '' })
   assert.equal(asked('yes').path, 'yes')
 })
+
+test('the routine the pet learned is in the file: the days and the choice of off, nothing of today\'s questions; a file without it reads as before', async () => {
+  const { touch, setUntil, empty, next } = await import('./routine.js')
+  const at = (/** @type {number} */ d, /** @type {number} */ h, m = 0) => new Date(2026, 10, d, h, m).getTime()
+  let r = setUntil(touch(empty(), at(16, 9)), '18', at(16, 9, 5)).r
+  r = next(touch(r, at(17, 9)), at(17, 9, 10)).r // a question is up
+  const m = pack({ pet: PET, prefs: PREFS, diary: DIARY, routine: r, now: T })
+  assert.deepEqual(Object.keys(m), ['hatchling', 'format', 'exported', 'pet', 'prefs', 'diary', 'routine'])
+  assert.deepEqual(m.routine, { off: false, days: r.days })
+  assert.deepEqual(parse(JSON.stringify(m)).errors, [])
+  assert.deepEqual(parse(JSON.stringify(good())).errors, []) // none in it
+  const fault = (/** @type {(m: any) => void} */ change) => { const x = JSON.parse(JSON.stringify(m)); change(x); return parse(JSON.stringify(x)).errors.join('\n') }
+  assert.match(fault(x => { x.routine = 'usual' }), /^routine: must be an object/)
+  assert.match(fault(x => { x.routine.q = { kind: 'finish', at: 5, opts: ['17', '18'] } }), /^routine\.q: /)
+  assert.match(fault(x => { x.routine.days['2026-11-16'].note = 'x' }), /^routine\.days: /)
+  assert.match(fault(x => { x.routine.days.someday = { start: 5, end: 6 } }), /^routine\.days: /)
+  assert.match(fault(x => { x.routine.off = 'no' }), /^routine\.off: /)
+})
+

@@ -175,6 +175,6 @@ function state(v, lang, tone) {
   if (v.cheer) return { say: /** @type {(value?: number, lang?: string, stat?: string) => string} */ (CHEERS[v.cheer.kind])(v.cheer.value ?? 0, lang, tone), fix: null, link: null, ask: '' }
   // lean is chosen and the style is not in the system prompt yet: no fix to press, the person did their part
   if (v.long && v.wait) return { say: text(lang, 'wait.say'), fix: text(lang, 'wait.fix'), link: DOCS + 'long-chat.md', ask: '' }
-  if (v.long && !v.lean) return { say: noteSay('heavy', undefined, {}, lang), fix: text(lang, 'heavy.fix'), ...LEAN_FIX } // before the turn ends too: the same advice
+  if (v.long && !v.lean) return { say: noteSay('heavy', v.context ? String(Math.round(v.context / 1000)) : undefined, {}, lang), fix: text(lang, 'heavy.fix'), ...LEAN_FIX } // before the turn ends too: the same advice
   return { say: voicedAs(lang, `calm.${v.long ? 'long' : 'short'}.${v.turn % 3}`, at(tone)), fix: null, link: null, ask: '' }
 }

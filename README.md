@@ -66,6 +66,7 @@ The sentence alone:
 
 - It tells you which chats wait for you, those without Hatchling too.
 - It keeps your reminders.
+- It keeps you company through the day: [how](docs/pet.md#company-through-the-day).
 - It reports your day: chats, folders, turns, files changed.
 - An egg hatches into one of seven animals; the seventh is rare, and not shown.
 - It grows with use and never loses anything.
@@ -149,10 +150,10 @@ Every run: [bench/RESULTS.md](bench/RESULTS.md). On your project: [bench/README.
 
 ## What stays on your machine
 
-- **Kept locally** (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, your reminders (never exported or sent to the comments model; their command answers are chat lines), and each chat's full folder path and the times of its last turn (30 chats, 30 days), and your live sessions' folders, statuses and given names. Never a prompt, a file, a command or the content of a chat, except, if you turn titles on, each open chat's title line. briefox keeps only its switch.
+- **Kept locally** (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, your reminders and routine answers (never sent to the comments model; only the routine is exported; command answers are chat lines), each chat's full folder path and last-turn times (30 chats, 30 days), your live sessions' folders, statuses and given names. Never a prompt, a file, a command or the content of a chat, except each open chat's title line with titles on. briefox keeps only its switch.
 - **Nothing is sent anywhere**, and no model is asked.
 - **The one exception is comments, off by default.** A small model, on your tokens (about 650 in, 75 out; at most 40 a day), gets the pet's character and language, your name if told, why it speaks, tool names (MCP servers' too) and counts, failed programs' names, how many files changed, the assistant's last 600 characters, its last two lines, three diary lines with folder names, another finished chat's folder name and times and, with `/pet say`, your first 300 characters. A pause or resume sends a recap: up to 16,000 characters of the last turn's text, 300 of your last prompt.
-- `/pet adopt` reads `~/.claude.json` when you run it. `/pet share` saves a picture in `~/.claude/hatchling-share/`. `/pet export` saves the pet there as a file.
+- `/pet adopt` reads `~/.claude.json` when you run it. `/pet share` saves a picture in `~/.claude/hatchling-share/`. `/pet export` saves the pet there.
 - Complete: [docs/privacy.md](docs/privacy.md).
 
 ## Development

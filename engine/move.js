@@ -1,6 +1,7 @@
 // @ts-check
 // The pet moved to another computer: /pet export writes it as one JSON file, /pet import reads such a file (docs/pet.md).
-// In the file: the shared pet (engine.js `shared`), the choices that make it this pet and the person's (PREFS), and the diary.
+// In the file: the shared pet (engine.js `shared`), the choices that make it this pet and the person's (PREFS), the diary, and the
+// routine it learned (engine/routine.js `memory`: the answers of the last days), which is its memory of the person.
 // Not in it: the marks of the chats, the pet's last lines, the day's count of comments, anything of a chat.
 // The file comes from outside, like a skin pack: it is checked whole before any of it is used, and with one fault nothing of it is.
 // Every text in it must be as the cleaning of the pack loader leaves it (width.js `tidy`, and the cleaners built on it).
@@ -8,6 +9,7 @@
 
 import { shared, stage, OWNABLE, WEARABLE, RULES, PLAIN } from './engine.js'
 import { whole as diaryOf, dated } from './diary.js'
+import { memory as routineOf } from './routine.js'
 import { REG } from './skins.js'
 import { tidy } from './width.js'
 import { cleanName, cleanCall, asStats } from './persona.js'
@@ -51,14 +53,14 @@ const same = (a, b) => a === b || (typeof a === 'object' && typeof b === 'object
 const differs = (/** @type {any} */ a, /** @type {any} */ b) => Object.keys({ ...a, ...b }).find(k => !same(a[k], b[k])) ?? ''
 
 /** The choices of a file. @typedef {{ species: string, born: string, seed: number, name: string, stats: number[], personality: string, hatched: number, cuddles: number, cuddled: number, wear: string, lang: string, style: boolean, hidden: boolean, model: string, voice: boolean, voiceAsked: boolean, asked: boolean, chats: boolean, callme: string }} Prefs */
-/** What a file holds. @typedef {{ hatchling: 'pet', format: number, exported: number, pet: import('./engine.js').Shared, prefs: Prefs, diary: import('./diary.js').Diary }} Move */
+/** What a file holds. @typedef {{ hatchling: 'pet', format: number, exported: number, pet: import('./engine.js').Shared, prefs: Prefs, diary: import('./diary.js').Diary, routine?: ReturnType<typeof routineOf> }} Move */
 
 /**
  * The file's content for a pet. Made whole on the way: a choice kept by an earlier version in a shape this one would refuse
  * (a moment that is no number, a thing worn that is not there any more) is written as this version keeps it.
- * @param {{ pet: unknown, prefs: Record<string, unknown>, diary: unknown, now: number }} from @returns {Move}
+ * @param {{ pet: unknown, prefs: Record<string, unknown>, diary: unknown, routine?: unknown, now: number }} from @returns {Move}
  */
-export function pack({ pet, prefs, diary, now }) {
+export function pack({ pet, prefs, diary, routine, now }) {
   const d = diaryOf(diary)
   return {
     hatchling: 'pet', format: FORMAT, exported: now,
@@ -69,6 +71,7 @@ export function pack({ pet, prefs, diary, now }) {
       wear: things(prefs.wear).filter(wearable).join(' ').slice(0, LIMITS.text),
     }),
     diary: { ...d, done: d.done.filter(x => DONE.test(x)), toldKind: DONE.test(d.toldKind) ? d.toldKind : '' },
+    ...(routine !== undefined && { routine: routineOf(routine) }), // a file of before the routine has none, and is read all the same
   }
 }
 
@@ -104,7 +107,7 @@ export function validate(raw) {
   walk(file, 'file', 0)
   if (!sound) return errors
 
-  for (const k of Object.keys(file)) if (![mark, 'format', 'exported', 'pet', 'prefs', 'diary'].includes(k)) err('file', `unknown field ${quote(k)}`)
+  for (const k of Object.keys(file)) if (![mark, 'format', 'exported', 'pet', 'prefs', 'diary', 'routine'].includes(k)) err('file', `unknown field ${quote(k)}`)
   if (!time(file.exported) || !file.exported) err('exported', 'must be a moment')
 
   if (!isObj(file.prefs)) err('prefs', 'must be an object')
@@ -134,6 +137,10 @@ export function validate(raw) {
     const d = file.diary, k = differs(diaryOf(d), d)
     if (k) err(`diary.${k}`, 'missing, unknown, not of the right kind, or out of range') // as the store keeps a diary
     else if (!d.done.every((/** @type {string} */ x) => DONE.test(x)) || (d.toldKind && !DONE.test(d.toldKind))) err('diary.done', 'not the name of a milestone')
+  }
+  if (file.routine !== undefined) {
+    if (!isObj(file.routine)) err('routine', 'must be an object')
+    else { const k = differs(routineOf(file.routine), file.routine); if (k) err(`routine.${k}`, 'missing, unknown, not of the right kind, or out of range') } // as the store keeps the days of a routine
   }
   return errors.length > LIMITS.errors ? [...errors.slice(0, LIMITS.errors), `and ${errors.length - LIMITS.errors} more`] : errors
 }

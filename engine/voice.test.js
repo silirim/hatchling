@@ -62,9 +62,10 @@ test('a line during a long turn: the prompt says the turn is still running, how 
 
 test('the outline offer and the recap do not silence the comment of the same turn: it is the last line under theirs, whichever came first', () => {
   const at = (/** @type {any} */ e, /** @type {any} */ s, dt = 0) => reduce(s, { ...e, t: T + dt })
-  const long = (/** @type {boolean} */ lean) => ({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0, lean })
+  const begun = () => at({ type: 'usage', input: 100, cacheRead: 1000, cacheWrite: 0 }, at({ type: 'sessionStart' }, initialState(1))) // a chat that starts small: long is what it grows
+  const long = (/** @type {boolean} */ lean) => ({ type: 'usage', input: 100, cacheRead: RULES.heavyGrowth + 1000, cacheWrite: 0, lean })
   // lean on, so the chat is calm: the offer is the bubble, with its dim line, and the comment comes after and sits under them
-  let s = at({ type: 'turnEnd' }, at(long(true), at({ type: 'prompt' }, at({ type: 'lean', on: true }, at({ type: 'sessionStart' }, initialState(1))))))
+  let s = at({ type: 'turnEnd' }, at(long(true), at({ type: 'prompt' }, at({ type: 'lean', on: true }, begun()))))
   assert.equal(s.session.talk?.kind, 'tidy')
   assert.equal(bubble(view(s, T)).aside, '')
   s = at({ type: 'voice', text: 'Long road, good pace.', why: 'turn' }, s, 2000)
@@ -72,24 +73,24 @@ test('the outline offer and the recap do not silence the comment of the same tur
   let b = bubble(view(s, T + 2000))
   assert.deepEqual([b.say, b.aside, b.more, !!b.ask], ['long chat: shall we put our thoughts in order?', 'Long road, good pace.', null, true])
   // without lean the long chat has its warning: the offer is the second line with its button, the comment the last
-  let w = at({ type: 'turnEnd' }, at(long(false), at({ type: 'prompt' }, at({ type: 'sessionStart' }, initialState(1)))))
+  let w = at({ type: 'turnEnd' }, at(long(false), at({ type: 'prompt' }, begun())))
   w = at({ type: 'voice', text: 'Heavy bag, steady legs.', why: 'turn' }, w, 2000)
   b = bubble(view(w, T + 2000))
   assert.equal(b.more?.say, 'long chat: shall we put our thoughts in order?')
   assert.equal(b.aside, 'Heavy bag, steady legs.')
   // a comment said during the turn is on screen when the offer comes: the offer takes the bubble and keeps it under itself
-  let m = at(long(true), at({ type: 'prompt' }, at({ type: 'lean', on: true }, at({ type: 'sessionStart' }, initialState(1)))))
+  let m = at(long(true), at({ type: 'prompt' }, at({ type: 'lean', on: true }, begun())))
   m = at({ type: 'turnEnd' }, at({ type: 'voice', text: 'Still going. So am I.', why: 'long' }, m, 5 * MIN), 12 * MIN)
   assert.equal(m.session.talk?.kind, 'tidy')
   assert.equal(bubble(view(m, T + 12 * MIN)).aside, 'Still going. So am I.')
   // under a recap too
-  let r = at({ type: 'prompt' }, at({ type: 'sessionStart' }, initialState(1)))
+  let r = at({ type: 'prompt' }, begun())
   r = at({ type: 'cmd', cmd: 'npm t', ok: false }, at({ type: 'cmd', cmd: 'npm x', ok: false }, r))
   r = at({ type: 'voice', text: 'Two slips. Noted.', why: 'fail' }, at({ type: 'turnEnd' }, r, RULES.recapTurnMs), RULES.recapTurnMs)
   assert.equal(r.session.talk?.kind, 'recap')
   assert.equal(bubble(view(r, T + RULES.recapTurnMs)).aside, 'Two slips. Noted.')
   // a comment alone has no line under it, and the next prompt takes offer and comment away together
-  assert.equal(bubble(view(at({ type: 'voice', text: 'Alone.', why: 'turn' }, at({ type: 'sessionStart' }, initialState(1))), T)).aside, '')
+  assert.equal(bubble(view(at({ type: 'voice', text: 'Alone.', why: 'turn' }, begun()), T)).aside, '')
   s = at({ type: 'prompt' }, s, MIN)
   assert.equal(bubble(view(s, T + MIN)).aside, '')
 })

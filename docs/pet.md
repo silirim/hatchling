@@ -21,7 +21,7 @@ As installed everything the pet says is fixed text on your screen: no model is a
 
 ## The shop
 
-`/pet shop` shows the catalogue, `/pet shop <item>` buys and puts on, `/pet wear <item>` puts on or takes off. Nothing sold changes what the pet does.
+`/pet shop` shows the catalogue, `/pet shop <item>` buys and puts on, `/pet wear <item>` puts on or takes off. Nothing sold changes what the pet does. `<item>` is the id, the first word of its row (`/pet shop shades`): a shown name buys nothing, and is answered with `Did you mean /pet shop shades?`.
 
 | Item | Stars | Item | Stars | Item | Stars |
 |---|---|---|---|---|---|
@@ -50,7 +50,7 @@ The pet notes where a session wastes tokens. A note is advice and costs nothing;
 
 | It notices | Guide |
 |---|---|
-| a long chat (about 60k tokens) without briefox | [long-chat.md](fix/long-chat.md) |
+| a long chat (grown by about 40k tokens since its first request) without briefox | [long-chat.md](fix/long-chat.md) |
 | a file read again unchanged | [rereads.md](fix/rereads.md) |
 | a command that failed three times in a row | [loops.md](fix/loops.md) |
 | a rebuilt or expired cache | [cache-break.md](fix/cache-break.md) |
@@ -58,7 +58,7 @@ The pet notes where a session wastes tokens. A note is advice and costs nothing;
 
 **After a long pause.** When you write after more than an hour away and the chat holds 100k tokens or more, the pet says the cache has expired and offers `/compact`. The hour is an assumption: the cache lasts 1 hour on a subscription and 5 minutes with an API key, and the pet cannot tell which you have. It never compacts by itself.
 
-**Briefox.** `/pet briefox on|off` switches the one sentence of [briefox](../README.md#briefox), `Be brief.`; off by default in the pet. In a chat over 30k tokens the switch waits for the next compaction or chat. With both plugins installed the sentence is sent once, and stays while either has it on. A choice made with `/pet lean` in an earlier version holds, and `/pet lean` is still answered.
+**Briefox.** `/pet briefox on|off` switches the one sentence of [briefox](../README.md#briefox), `Be brief.`; off by default in the pet. In a chat that grew by over 15k tokens since its first request the switch waits for the next compaction or chat; a chat that only starts big (the desktop app, many MCP servers) switches at once. With both plugins installed the sentence is sent once, and stays while either has it on. A choice made with `/pet lean` in an earlier version holds, and `/pet lean` is still answered.
 
 ## What else it says
 
@@ -68,6 +68,19 @@ The pet notes where a session wastes tokens. A note is advice and costs nothing;
 - **`coffee break?`** after 20 turns in one sitting, and rarely a word of nonsense.
 
 Lines come at least 3 minutes apart, and a warning comes first.
+
+## Company through the day
+
+Fixed lines in your language, worded by the pet's character. No model is asked, comments on or off.
+
+- **When it hatches** it says who it is for 20 seconds: its name, its animal, its five statistics and its character. A toast says the name too.
+- **Welcome back.** After an hour in which you did nothing in any chat, a welcome is in the bubble and stays until you do something (a prompt, a button, a `/pet` command). It is worded by how long you were away and the hour: after lunch, the next morning, after a weekend. With comments on, the recap is the first line and the welcome the one under it; reminders that fell due are said after your first prompt.
+- **Questions with buttons.** A question holds the bubble with 2 to 4 buttons. Answer with a click or with `/pet yes`, `/pet no`, `/pet answer <choice>`. One at a time, none while a turn runs, at most 3 a day, at least 5 minutes apart; one nobody answers goes after 30 minutes. A prompt does not answer it.
+- **What time do you finish today?** Asked once a day, 10 minutes after the first use: three whole hours from 17:00 (or the next ones still ahead) and `later`. `/pet until 18:30` sets any time, `/pet until off` drops it, `/pet until` says it. The pet warns 30 and 10 minutes before and at the time: in the band of every open chat for a minute, with one toast for all of them. After three days with a finish time it asks `18:00 as usual today?` instead; `no` brings the hours.
+- **Coffee.** Before 11:00 it asks whether you had your coffee. `no`: one reminder two hours later. `yes`: one line three hours later. On a day with no coffee question it may ask about lunch between 13:00 and 16:00 instead (`no`: one reminder an hour later). One such question a day.
+- **What it learns.** For each of the last 30 days: when the day started and ended, coffee yes or no and when you said so, the finish time. From three days on: your usual start, finish and coffee, used only to word a question (`as usual?`) and the morning's welcome. `/pet routine` shows it, `/pet routine off` stops every question (a finish time you set is still warned about), `/pet routine on` brings them back, `/pet routine clear` forgets.
+
+A day runs from 04:00 to 04:00 by your machine's clock, so work past midnight belongs to the day it began in. Times are shown on the 24-hour clock. Nothing of this happens in a headless run.
 
 ## Which chat needs me
 
@@ -105,6 +118,7 @@ The first greeting of a day says yesterday in one dim line under it (`yesterday:
 - At most 20, of 200 characters each, with control and escape characters taken out.
 - **When the pet says them**, in its bubble for 20 seconds: a little after a chat opens, at your first prompt after 30 minutes away, and when a timed one falls due (in a chat you used in the last 30 minutes; otherwise at your return). It shows the first, and how many more. A reminder stays until you remove it.
 - Reminders stay on this machine: never sent to the comments model, comments on or off, not on the picture of `/pet share`, not in the file of `/pet export`.
+- The routine's answers stay on this machine too, and are never sent to the comments model nor put on the picture of `/pet share`. They are in the file of `/pet export`: they are the pet's memory of you, and move with it.
 - When you set or list them, the answer is a line of this chat, as with any command, so this chat's assistant can read it. The bubble is drawn locally and is not a chat line.
 
 ## The pet's own diary
@@ -152,6 +166,9 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet remind <text>` | keep a reminder; `in <20m\|2h\|1d> <text>` times it, `done <n\|all>` removes |
 | `/pet reminders` | list the reminders |
 | `/pet share` | a colour picture to attach to a post, 800×420: the pet with what it wears, its name, animal, stage, character and stars; nothing about your work. Saved as `hatchling-share/hatchling-<name>.png` in your Claude Code config folder (`~/.claude`), written over each time. Node writes the PNG; without Node on the PATH the same picture is saved as an SVG |
+| `/pet yes`, `/pet no`, `/pet answer <choice>` | answer the question in the bubble: [Company through the day](#company-through-the-day) |
+| `/pet until [18:30\|off]` | the time you finish today; the pet warns 30 and 10 minutes before, and at the time |
+| `/pet routine [off\|on\|clear]` | what the pet learned of your days; stop its questions, bring them back, forget |
 | `/pet export` | save the pet to a file, for another computer: [above](#moving-to-another-computer) |
 | `/pet import <path> [yes]` | bring in a pet saved with `/pet export`; asks first, and saves the pet that was there |
 | `/pet lang <en\|es\|pt\|zh>` | the pet's language |

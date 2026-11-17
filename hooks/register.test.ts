@@ -5,6 +5,7 @@ import { BUILTIN, REG, marksFor } from '../engine/skins.js'
 import { open as diaryOpened, whole as diaryOf, bandOf, dated } from '../engine/diary.js'
 import { whole as workOf, opened as workOpened, turned as workTurned } from '../engine/work.js'
 import { picture, TEXT_X } from '../engine/share.js'
+import { list as wordings } from '../engine/lang/index.js'
 
 // One pet in a hundred is born golden, and a golden one has a `skin` button and another card: every test here runs with the roll
 // left out (HATCHLING_PLAIN, read by the mod when a pet is born), over whatever the test itself answers for the environment.
@@ -24,6 +25,8 @@ const elsewhere = (disk: Record<string, any>, patch: Record<string, unknown>) =>
 /** A store that lost every preference. */
 const forget = (disk: Record<string, any>) => { for (const key of Object.keys(disk)) if (key === 'prefs' || key.startsWith('pref.')) delete disk[key] }
 const KNOWN = ['asked', 'born', 'callme', 'chats', 'cuddled', 'cuddles', 'hatched', 'hidden', 'lang', 'missing', 'model', 'name', 'personality', 'seed', 'species', 'stats', 'style', 'voice', 'voiceAsked', 'wear'] // the preferences of this version
+/** The context of each request in a chat that starts small and is `big` from its second request on: a chat is long by what it grew. */
+const grows = (big: number) => { let n = 0; return () => n++ ? big : 1_000 }
 const BAND = { plugin: 'hatchling', component: 'AbovePrompt', props: { hasSurvey: false } } as any // the other props are the engine's
 
 test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
@@ -52,7 +55,7 @@ test('the band draws the pet and a re-read makes it dizzy', async ($, on) => {
   on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 5, isLink: false } }))
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  await clock.advance(9_000) // the store was empty: the pet hatches first, for 8 s
+  await clock.advance(29_500) // the store was empty: the pet hatches first, for 8 s, and says who it is for 20
   await $.command.run({ command: 'pet', args: 'voice off' } as any) // the old name of /pet comments still answers; then it asks about the voice: answered here, tested further down
 
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -262,7 +265,7 @@ test('two chats on one store: a change keeps what the other chat chose meanwhile
   expect(prefsOf(disk)).toMatchObject({ hidden: false, style: true, lang: 'pt', species: 'bunny' })
 })
 
-test('over 30k the style waits: lean is the style alone, the note goes while it waits, the cheer comes when the style is in', async ($, on) => {
+test('in a chat that grew past 15k the style waits: lean is the style alone, the note goes while it waits, the cheer comes when the style is in', async ($, on) => {
   mock.clock(on)
   mock.store(on, { prefs: { species: 'penguin', born: 'penguin', trait: 'dry', voiceAsked: true } }) // born with the old traits: dry is the wit
   on('config.list', () => ({ value: [] }))
@@ -273,7 +276,8 @@ test('over 30k the style waits: lean is the style alone, the note goes while it 
   on('fs.list', () => ({ value: [] }))
   on('prompt.compose', () => ({ sections: [] }) as any)
   on('session.compact', () => ({ messages: [{ role: 'user', text: 'summary', toolUses: [], toolResults: [] }] }) as any)
-  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  let tokens = 1_000; const ctx = () => tokens // what each request is answered over
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: ctx(), cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
   on('turn.complete', () => ({ text: '' }) as any)
 
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
@@ -283,10 +287,12 @@ test('over 30k the style waits: lean is the style alone, the note goes while it 
   const cmd = async (args: string) => JSON.stringify(await $.command.run({ command: 'pet', args } as any))
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; // the chat's first request, small: long is what a chat grows by
+  tokens = 70_000
   expect(await turn()).toBe(false)
   expect(await band()).toMatch(/long chat, briefox off: 70k/)
 
-  // lean chosen: over 30k the style waits. No cheer, the bubble says so, the note is gone
+  // lean chosen: the chat grew by more than 15k, so the style waits. No cheer, the bubble says so, the note is gone
   const chosen = await cmd('briefox on')
   expect(chosen).toMatch(/Briefox chosen: this chat is already long, so \\"Be brief\.\\" starts at the next compaction or the next chat\..*In our bench \\"Be brief\.\\" made a long task cost 12\.7% less, on one project; short tasks were not measured\. Every run: bench\/RESULTS\.md in the repository\./)
   expect(chosen).not.toMatch(/about 14|!|diet/i)
@@ -302,15 +308,67 @@ test('over 30k the style waits: lean is the style alone, the note goes while it 
   expect(await turn()).toBe(true)
   expect(await cmd('')).toMatch(/briefox on: \\"Be brief\.\\" in the system prompt\. In our bench/)
 
+  // the first request after the compaction was the new start: the chat is long again once it has grown from there
+  tokens = 115_000
+  expect(await turn()).toBe(true)
   // turned off in a long chat, the style stays in the prompt until a cheap moment, but lean is off for the pet at once
   await cmd('briefox off')
   expect(await turn()).toBe(true)
-  expect(await band()).toMatch(/long chat, briefox off: 70k/)
+  expect(await band()).toMatch(/long chat, briefox off: 115k/)
   expect(await band()).not.toMatch(/health|\d\/100/)
   // chosen again, by its other name, then /clear: the new chat carries it from its first request
   await cmd('lean on')
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
   expect(await styled()).toBe(true)
+})
+
+test('a new chat that starts at 80k is not long: no note, no outline offer, and /pet briefox on applies at once; grown by 40k it is long; a compaction starts the count again', async ($, on) => {
+  mock.clock(on)
+  mock.store(on, { prefs: { species: 'penguin', born: 'penguin', voiceAsked: true } })
+  on('config.list', () => ({ value: [] }))
+  on('command.register', () => ({ value: { command: 'pet' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('env.get', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [] }))
+  on('prompt.compose', () => ({ sections: [] }) as any)
+  on('session.compact', () => ({ messages: [{ role: 'user', text: 'summary', toolUses: [], toolResults: [] }] }) as any)
+  let tokens = 80_000 // the desktop app, or many MCP servers and skills: the system prompt and the tools alone
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 0, cache_read_input_tokens: tokens, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  on('turn.complete', () => ({ text: '' }) as any)
+  const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
+  const styled = async () => (await $.prompt.compose(ask)).sections.some((s: any) => s.id === 'briefox')
+  const turn = async () => { const has = await styled(); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any); return has }
+  const band = async () => { const b = await $.ui.mount({ ...BAND, surface: 'desktop' }); const text = (await b.findAll({ type: 'Text' })).map((x: any) => x.text).join('  '); await b.unmount(); return text }
+  const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 3; i++) { expect(await turn()).toBe(false); expect(await band()).not.toMatch(/long chat|thoughts in order|briefox off/) }
+  // the switch is cheap: nothing of a conversation to send again
+  expect(await cmd('briefox on')).toMatch(/^Briefox on: every request carries one sentence/)
+  expect(await turn()).toBe(true)
+  expect(await cmd('briefox off')).not.toMatch(/already long|next compaction/)
+  expect(await turn()).toBe(false)
+  // one token under the growth: still not long
+  tokens = 80_000 + RULES.heavyGrowth - 1
+  await turn()
+  expect(await band()).not.toMatch(/long chat|thoughts in order/)
+  // grown by the threshold: long, with the note; and now a switch waits
+  tokens = 80_000 + RULES.heavyGrowth
+  await turn()
+  expect(await band()).toMatch(/long chat, briefox off: 120k tokens/)
+  expect(await cmd('briefox on')).toMatch(/^Briefox chosen: this chat is already long/)
+  expect(await turn()).toBe(false)
+  // a compaction: the style gets in, and the first request after it is the new start, however big
+  await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'old', toolUses: [], toolResults: [] }] } as any)
+  tokens = 90_000
+  expect(await turn()).toBe(true)
+  await cmd('briefox off')
+  expect(await turn()).toBe(false) // at once: not long
+  expect(await band()).not.toMatch(/long chat|thoughts in order/)
+  tokens = 90_000 + RULES.heavyGrowth
+  await turn()
+  expect(await band()).toMatch(/long chat, briefox off: 130k tokens/)
 })
 
 test('the companion: a greeting from the marks, a mark of its own with nothing of the chat in it, news of another chat, the outline', async ($, on) => {
@@ -337,7 +395,8 @@ test('the companion: a greeting from the marks, a mark of its own with nothing o
   on('prompt.submit', (_, e) => ({ text: e.text }) as any)
   on('prompt.compose', () => ({ sections: [] }) as any)
   on('tool.call', () => ({ result: { stdout: '', stderr: 'boom', interrupted: false }, isError: true }) as any)
-  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 60_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  const ctx = grows(60_000)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: ctx(), cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
   on('turn.complete', () => ({ text: '' }) as any)
   const band = async () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -552,7 +611,16 @@ test('a pet is born with a name and a character of its own: on the card and in t
   await ui.unmount()
   await k.clock.advance(2_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  // hatched: before anything else it asks whether it may speak, once, and says what a yes comes to
+  // hatched: at once it says who it is, for 20 seconds: its name, its animal, its five statistics by name and its character
+  { const said = (await ui.findAll({ type: 'Text' })).map(x => x.text)
+    expect(said.some(t => /^I am [A-Z][a-z]+, a [a-z]+$/.test(t))).toBe(true)
+    expect(said.some(t => /^WIT \d+ · CURIOSITY \d+ · CALM \d+ · RIGOR \d+ · WARMTH \d+ · [A-Z].+\.$/.test(t.replace(/\n/g, ' ')))).toBe(true)
+    expect(k.toasts.at(-1)).toMatch(/^[A-Z][a-z]+ has hatched: \/pet shows its card\.$/) // and in a toast, for a band with no room for the bubble
+    expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin', 'pet']) } // the question's buttons wait under the line
+  await ui.unmount()
+  await k.clock.advance(20_000)
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  // then it asks whether it may speak, once, and says what a yes comes to
   expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account: about 650 tokens in\nand 75 out a line (measured in November\n2026), at most 40 lines a day. It gets a\nshort summary of the turn. A recap after a\npause: about 1,300 to 2,000 in and 570 to\n750 out. Details: /pet comments')
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
   expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
@@ -657,7 +725,8 @@ test('with the briefox plugin the sentence is on whatever /pet briefox says: the
   // what the other plugin does to the prompt: its section, under the id the two plugins share, while its own /briefox is on
   let plugin = true
   on('prompt.compose', () => ({ sections: plugin ? [{ id: 'intro', text: 'core', scope: 'shared' }, { id: 'briefox', text: 'Be brief.', scope: 'session' }] : [{ id: 'intro', text: 'core', scope: 'shared' }] }) as any)
-  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 70_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  const ctx = grows(70_000)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: ctx(), cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
   on('turn.complete', () => ({ text: '' }) as any)
 
   const ask = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any
@@ -667,6 +736,7 @@ test('with the briefox plugin the sentence is on whatever /pet briefox says: the
   const cmd = async (args: string) => ((await $.command.run({ command: 'pet', args } as any)) as any).text as string
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; // the chat's first request, small: long is what a chat grows by
   expect(await turn()).toBe(1) // the plugin's section, and the pet adds none: /pet lean was never given
   // a long chat, 70k: with the style in, no note
   expect(await band()).not.toMatch(/briefox off|briefox chosen/)
@@ -845,7 +915,8 @@ test('a prompt after a pause over an hour in a chat of 100k: the pet says the ca
   on('prompt.compose', () => ({ sections: [] }) as any)
   let compacted = 0
   on('session.compact', () => { compacted++; return { messages: [{ role: 'user', text: 'summary', toolUses: [], toolResults: [] }] } as any })
-  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: 120_000, cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
+  const ctx = grows(120_000)
+  on('turn.step', async function* () { return { answer: '', toolUses: [], usage: { input_tokens: 10, cache_read_input_tokens: ctx(), cache_creation_input_tokens: 0, output_tokens: 1 } } as any })
   on('turn.complete', () => ({ text: '' }) as any)
   const say = (text: string, command?: any) => $.prompt.submit({ text, ...(command && { command }), wait: false, origin: 'user' } as any)
   const turn = async () => { await $.prompt.compose({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: [], tools: [], outputStyle: null, traits: [] } as any); for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; await $.turn.complete({ answer: '' } as any) }
@@ -853,6 +924,7 @@ test('a prompt after a pause over an hour in a chat of 100k: the pet says the ca
 
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await clock.advance(1000) // the mock clock starts at 0, which the engine reads as "no request yet"
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; // the chat's first request, small: long is what a chat grows by
   await say('go'); await turn()
   expect(await texts()).not.toMatch(/cache expired/)
 
@@ -1269,6 +1341,64 @@ test('under the bench no pack is read, and a pet whose animal is of a pack keeps
 })
 
 
+test('only an id buys, puts on or switches: a shown name, in any language, is answered in one line with the id it could be and nothing is done; an unknown word with the closest ids', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [91, 45, 12, 70, 38], asked: true, lang: 'en' })
+  k.disk.pet = { coins: 500, affection: 3, days: 2, owned: [], animals: [] }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const had = () => [k.disk.pet.coins, k.disk.pet.owned, k.disk.pet.animals, prefsOf(k.disk).wear, prefsOf(k.disk).species]
+  const before = JSON.stringify(had())
+  // the defect: the row reads `shades  sunglasses`, and the name got the whole catalogue back. Now one line, and nothing is bought
+  expect(await cardOf($, 'shop sunglasses')).toBe('Did you mean /pet shop shades?')
+  expect(await cardOf($, 'shop A Coffee Mug')).toBe('Did you mean /pet shop mug?')
+  expect(await cardOf($, 'buy gafas de sol')).toBe('Did you mean /pet shop shades?') // a name of another language too
+  expect(await cardOf($, 'shop 墨镜')).toBe('Did you mean /pet shop shades?')
+  expect(await cardOf($, 'shop skate')).toBe('Did you mean /pet shop skateboard?') // a beginning
+  expect(await cardOf($, 'shop hat')).toBe('Did you mean /pet shop partyhat, /pet shop santa, /pet shop wizard?') // several: each id
+  expect(await cardOf($, 'shop the dog')).toBe('Did you mean /pet shop dog?')
+  expect(await cardOf($, 'shop zorro')).toBe('Did you mean /pet shop fox?')
+  expect(await cardOf($, 'shop sunglases')).toBe('Nothing called sunglases in the shop. Closest: shades.')
+  expect(await cardOf($, 'shop baloon')).toBe('Nothing called baloon in the shop. Closest: balloon.')
+  expect(await cardOf($, 'shop yacht')).toBe('Nothing called yacht in the shop. /pet shop lists everything.')
+  expect(await cardOf($, 'wear sunglasses')).toBe('Did you mean /pet wear shades?')
+  expect(await cardOf($, 'animal perro')).toBe('Did you mean /pet animal dog?')
+  expect(JSON.stringify(had())).toBe(before) // nothing bought, put on or switched by a name
+  // the id acts, capitals aside, and as the first word of a row read off the shop
+  expect(await cardOf($, 'shop shades')).toMatch(/^Bought sunglasses for 10 stars, 490 left\./)
+  expect(await cardOf($, 'shop Mug')).toMatch(/^Bought a coffee mug for 12 stars/)
+  expect(await cardOf($, 'shop scarf a red scarf')).toMatch(/^Bought a red scarf /)
+  expect(await cardOf($, 'shop wizard')).toMatch(/^Bought a wizard's hat /)
+  expect(k.disk.pet.owned).toEqual(['shades', 'mug', 'scarf', 'wizard'])
+  // wearing: the same, and the suggestion is among the things the pet has first
+  const worn = prefsOf(k.disk).wear
+  expect(await cardOf($, 'wear Sunglasses')).toBe('Did you mean /pet wear shades?')
+  expect(await cardOf($, 'wear coffee mug')).toBe('Did you mean /pet wear mug?')
+  expect(await cardOf($, 'wear off red scarf')).toBe('Did you mean /pet wear off scarf?')
+  expect(await cardOf($, 'wear hat')).toBe('Did you mean /pet wear wizard?') // the one hat owned
+  expect(await cardOf($, 'wear a golden coat')).toBe('Did you mean /pet wear golden?')
+  expect(await cardOf($, 'wear yacht')).toMatch(/^Not yours yet: yacht\. You have: /)
+  expect(prefsOf(k.disk).wear).toBe(worn)
+  expect(await cardOf($, 'wear SHADES')).toMatch(/^sunglasses comes off\./)
+  expect(await cardOf($, 'wear off mug')).toMatch(/^a coffee mug comes off\./)
+  // the animals
+  expect(await cardOf($, 'animal do')).toBe('Did you mean /pet animal dog?')
+  expect(await cardOf($, 'animal foxx')).toBe('No animal called foxx. Closest: fox.')
+  expect(await cardOf($, 'animal c')).toMatch(/^No animal called c\.\nPick one of: /)
+  expect(prefsOf(k.disk).species).toBe('fox')
+  expect(await cardOf($, 'animal Fox')).toBe('Hatchling is now a fox.')
+  // the other languages: the question in the language, the id as it is
+  await cardOf($, 'lang es')
+  expect(await cardOf($, 'shop lampara')).toBe('¿Querías decir /pet shop lamp?')
+  expect(await cardOf($, 'shop gorro')).toBe('¿Querías decir /pet shop partyhat, /pet shop santa?')
+  expect(await cardOf($, 'shop')).toMatch(/\n  escribe     nombre\n/)
+  expect(await cardOf($, 'shop')).toMatch(/\n\/pet shop balloon compra un globo: escribe la primera palabra de su fila, el id\. /)
+  await cardOf($, 'lang zh')
+  expect(await cardOf($, 'shop 气球')).toBe('你是想输入 /pet shop balloon 吗？')
+  expect(await cardOf($, 'shop 游艇')).toBe('商店里没有叫 游艇 的东西。/pet shop 可以看全部。')
+  await cardOf($, 'lang pt')
+  expect(await cardOf($, 'shop oculos redondos')).toBe('Você quis dizer /pet shop glasses?')
+  expect(k.disk.pet.owned).toEqual(['shades', 'mug', 'scarf', 'wizard'])
+})
+
 test('the shop: stars buy things to wear, the catalogue says what is owned, and what is worn is drawn on every stage and under a note', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   k.disk.pet = { coins: 25, affection: 25, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: [] }
@@ -1288,10 +1418,11 @@ test('the shop: stars buy things to wear, the catalogue says what is owned, and 
 
   // too dear, unknown, not owned: said plainly, nothing taken
   expect(await cardOf($, 'buy sombrero')).toMatch(/^a sombrero costs 70 stars and you have 25\. Stars come with use: /)
-  expect(await cardOf($, 'buy yacht')).toMatch(/^Nothing called yacht in the shop\.\n\nHATCHLING SHOP/)
-  expect(await cardOf($, 'shop yacht')).toMatch(/^Nothing called yacht in the shop\.\n\nHATCHLING SHOP/) // /pet shop <item> buys, /pet buy is its other name
+  expect(await cardOf($, 'buy yacht')).toBe('Nothing called yacht in the shop. /pet shop lists everything.') // one line: not the catalogue again
+  expect(await cardOf($, 'shop yacht')).toBe('Nothing called yacht in the shop. /pet shop lists everything.') // /pet shop <item> buys, /pet buy is its other name
   expect(await cardOf($, 'buy')).toMatch(/^Pick one: \/pet shop <item>\.\n\nHATCHLING SHOP/)
-  expect(shop).toMatch(/^\/pet shop <item> buys one\./m)
+  expect(shop).toMatch(/^\/pet shop shades buys sunglasses: type the first word of its row, the id\. \/pet wear <item>/m) // a real example
+  expect(shop).toMatch(/\n\n  id to type  name\n  shades +sunglasses +10  face\n/) // the word to type heads its column
   expect(shop).not.toMatch(/\/pet buy/) // the help names one way only
   expect(await cardOf($, 'wear mug')).toMatch(/^Not yours yet: mug\. You have: nothing yet\./)
   expect(k.disk.pet.coins).toBe(25)
@@ -1941,7 +2072,7 @@ test('a newborn takes the language of the system when it is one of ours, LC_ALL 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('un huevo. algo se mueve dentro')
   await ui.unmount()
-  await k.clock.advance(9_000)
+  await k.clock.advance(29_500) // hatched, and it said who it is
   const asked = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await asked.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/^\S+  ★ 0 · ¿Puedo comentar tu trabajo\?/)
   expect((await asked.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['acariciar', 'comentarios sí', 'en silencio'])
@@ -1995,7 +2126,7 @@ test('the card, the shop and the short replies are in the language; command name
   const col = (r: string) => { const upTo = r.slice(0, r.search(/\d+(?=  \S+( +(已拥有.*|12 月出售))?$)/)); return [...upTo].reduce((n, ch) => n + (/[⺀-鿿＀-｠]/.test(ch) ? 2 : 1), 0) + /\d+/.exec(r.slice(upTo.length))![0].length }
   expect(new Set(rows.map(col)).size).toBe(1)
   expect(shop).toMatch(/\n  mug +咖啡杯 +\d+  配饰  已拥有，穿戴中\n/)
-  expect(shop).toMatch(/\n\nMiro 现在的装扮：配饰 咖啡杯。\n\n\/pet shop <item> 购买。\/pet wear <item> 戴上，已经戴着就取下；\/pet wear none 全部取下。每个部位一件。/)
+  expect(shop).toMatch(/\n\nMiro 现在的装扮：配饰 咖啡杯。\n\n\/pet shop shades 购买墨镜：输入该行的第一个词，即 id。\/pet wear <item> 戴上，已经戴着就取下；\/pet wear none 全部取下。每个部位一件。/)
   expect(await cardOf($, 'buy shades')).toMatch(/^花 \d+ 颗星买了墨镜，还剩 \d+ 颗星。Miro 已经戴上（脸部）：\/pet wear shades 可以取下。$/)
   expect(await cardOf($, 'skin')).toMatch(/^Miro 的装扮\n  脸部  墨镜\n  配饰  咖啡杯\n  动物  狐狸\n\/pet wear <item> 戴上/)
   expect(await cardOf($, 'wear shades') + await cardOf($, 'wear shades')).toMatch(/Miro 现在的装扮：脸部 墨镜，配饰 咖啡杯。$/) // one colon, not two in a row
@@ -2011,7 +2142,7 @@ test('the card, the shop and the short replies are in the language; command name
   // Spanish, on the same pet
   await cardOf($, 'lang es')
   expect(await cardOf($)).toMatch(/^Miro, Hatchling: perro, cría .*\ncarácter: Lo dice seco y corto, y se sobresalta con cada línea roja\.\n  INGENIO    █████████░  91  punto fuerte\n(.*\n)+una caricia, la última ahora mismo\n/)
-  expect(await cardOf($, 'shop')).toMatch(/^TIENDA DE HATCHLING · tienes \d+ estrellas\n\n  shades      gafas de sol +\d+  cara       tuyo\n  mug         una taza de café +\d+  accesorio  tuyo\n/)
+  expect(await cardOf($, 'shop')).toMatch(/^TIENDA DE HATCHLING · tienes \d+ estrellas\n\n  escribe     nombre\n  shades      gafas de sol +\d+  cara       tuyo\n  mug         una taza de café +\d+  accesorio  tuyo\n/)
 })
 
 test('the bubble in Chinese: wrapped and bordered by width on screen, two columns a character, and the keys translated', async ($, on) => {
@@ -2328,8 +2459,9 @@ test('comments during a long turn: nothing between turns, nothing over the cap o
 
 test('the outline offer keeps the comment of the turn under it; a cuddle passes in front of both for 5 seconds, with the comment about it when one comes, and then they are back', async ($, on) => {
   const k = voiceKit($, on, { voice: true, style: true }) // lean on: a long chat is calm, and the offer is the bubble
-  k.v.context = 70_000
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; // the chat's first request, small: long is what a chat grows by
+  k.v.context = 70_000
   await k.clock.advance(4 * 60_000) // past the greeting: the offer waits 3 minutes after another line
   k.v.reply = { isAnswered: true, text: 'Long road, good pace.', usage: USAGE }
   await k.turn(async () => { for await (const _ of $.turn.step({ model: 'claude-opus-5-5' } as any)) ; })
@@ -2805,13 +2937,13 @@ test('E22: commands: capitals do not matter, a word that is no command says so i
   expect(await first('animal dog')).toMatch(/^The dog is not yours yet: 100 stars unlock it/)
   expect(await first('animal unicorn')).toBe('No animal called unicorn.')
   expect(await first('wear unicorn')).toMatch(/unicorn/)
-  expect(await first('shop unicorn')).toBe('Nothing called unicorn in the shop.')
+  expect(await first('shop unicorn')).toBe('Nothing called unicorn in the shop. /pet shop lists everything.')
   expect(await cardOf($, 'say')).toBe('Write something after it: /pet say <text>.')
   expect(await cardOf($, 'wear')).toMatch(/A coat is a colour: \/pet wear plain takes it off, \/pet wear golden puts the golden one on\.$/)
   // /pet help: every command it lists exists, and every command there is is listed
   const help = await cardOf($, 'help')
   const listed = [...new Set(help.split('\n').slice(1).map(l => l.trim().split(/\s+/)[1] ?? ''))].map(v => v.startsWith('<') || v.startsWith('[') ? '' : v)
-  expect(listed).toEqual(['the', 'pet', 'say', 'remind', 'reminders', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'alerts', 'briefox', 'comments', 'model', 'lang', 'share', 'export', 'import', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
+  expect(listed).toEqual(['the', 'pet', 'say', 'remind', 'reminders', 'yes', 'until', 'routine', 'name', 'call', 'shop', 'skin', 'wear', 'animal', 'skins', 'chats', 'alerts', 'briefox', 'comments', 'model', 'lang', 'share', 'export', 'import', 'diary', 'adopt', 'hide', 'show', 'demo', 'where', 'help'].map(v => v === 'the' ? 'the' : v))
   expect(help).toMatch(/\/pet wear plain\|golden/); expect(help).toMatch(/\/pet diary clear/)
   for (const verb of listed.filter(v => v && v !== 'the')) expect([verb, (await cardOf($, verb === 'say' ? 'say hi' : verb)).startsWith('No /pet ')]).toEqual([verb, false])
   for (const lang of ['es', 'pt', 'zh']) { await cardOf($, `lang ${lang}`); const h = await cardOf($, 'help'); expect([lang, h.split('\n').length, h === help]).toEqual([lang, help.split('\n').length, false]) }
@@ -3800,7 +3932,7 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   expect(m.ran).toEqual([['/usr/bin/node', expect.stringMatching(/\/engine\/move-save\.js$/), file]])
   expect(k.writes).toEqual([])
   const text = m.files[file]!, out = JSON.parse(text)
-  expect(Object.keys(out)).toEqual(['hatchling', 'format', 'exported', 'pet', 'prefs', 'diary'])
+  expect(Object.keys(out)).toEqual(['hatchling', 'format', 'exported', 'pet', 'prefs', 'diary', 'routine'])
   expect([out.hatchling, out.format]).toEqual(['pet', 1])
   expect(out.pet).toMatchObject(MOVED_PET)
   expect(out.prefs).toMatchObject({ ...MOVED, voiceAsked: true })
@@ -3822,13 +3954,14 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   m.files['/home/me/my pets/miro.json'] = text
   m.ran.length = 0
   // the first call only tells: the pet of the file, the pet here that it would replace, and how to say yes
-  const before = JSON.stringify(k.disk), asked = await cardOf($, 'import ~/my pets/miro.json')
+  const kept = () => JSON.stringify({ ...k.disk, routine: undefined }) // the routine notes that the person was here, as with any command: nothing else may change
+  const before = kept(), asked = await cardOf($, 'import ~/my pets/miro.json')
   expect(asked.split('\n')).toEqual([
     `In the file: Miro, Hatchling the penguin, adult, 123 stars, affection 456 over 9 days of use. Saved on ${MOVE_DAY}.`,
     expect.stringMatching(new RegExp(`^Here now: ${local}, Hatchling the \\w+, baby, \\d+ stars?, affection \\d+ over \\d+ days? of use\\. It would be replaced, after a copy of it is saved\\.$`)),
     'To do it: /pet import ~/my pets/miro.json yes',
   ])
-  expect([JSON.stringify(k.disk), m.ran, k.writes]).toEqual([before, [], []])
+  expect([kept(), m.ran, k.writes]).toEqual([before, [], []])
   // with yes: the pet here is saved first, and its path said; then the pet of the file is the pet
   const done = await cardOf($, 'import ~/my pets/miro.json yes')
   const backup = m.ran[0]![2]!
@@ -3845,10 +3978,12 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   // what is this computer's own stays: the marks of its chats, the lines the pet said here and the day's count
   expect(k.disk['chat.there']).toEqual({ cwd: '/w/elsewhere', at: EARLY - 2000, done: true })
   expect(k.disk.voice).toMatchObject({ today: 1, last: ['a line of this machine'] })
-  expect(Object.keys(k.disk).filter(key => !/^(pet|diary|work|voice|pref\.\w+|chat\.\w+)$/.test(key))).toEqual([])
+  expect(Object.keys(k.disk).filter(key => !/^(pet|diary|work|voice|routine|pref\.\w+|chat\.\w+)$/.test(key))).toEqual([])
   // and exported again from here it is the same file, but for the moment it was written
   await cardOf($, 'export')
-  expect({ ...JSON.parse(m.files[file]!), exported: 0 }).toEqual({ ...out, exported: 0 })
+  const again = JSON.parse(m.files[file]!)
+  expect({ ...again, exported: 0, routine: 0 }).toEqual({ ...out, exported: 0, routine: 0 })
+  expect([again.routine.off, Object.keys(again.routine.days)]).toEqual([out.routine.off, Object.keys(out.routine.days)]) // the routine moved in with it; its day lasts until now, the commands since counted
 })
 
 test('/pet import over a newborn whose question about the comments is up: the choice that moves in stands, and the question goes at once', async ($, on) => {
@@ -3861,7 +3996,7 @@ test('/pet import over a newborn whose question about the comments is up: the ch
   for (const key of Object.keys(k.disk)) delete k.disk[key] // another computer: a pet hatches there, and asks
   k.state = {}
   await $.session.start(START)
-  await k.clock.advance(9_000)
+  await k.clock.advance(29_500) // hatched, and it said who it is
   let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
   await ui.unmount()
@@ -4038,7 +4173,7 @@ test('reminders: a timed one that falls due while the question about the comment
   const k = voiceKit($, on, { voice: false })
   forget(k.disk) // a newborn: it hatches, then asks
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  await k.clock.advance(9_000)
+  await k.clock.advance(29_500) // hatched, and it said who it is
   const buttons = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const b = (await ui.findAll({ type: 'Button' })).map((x: any) => x.text); await ui.unmount(); return b }
   expect(await buttons()).toEqual(['pet', 'comments on', 'stay quiet'])
   expect(await cardOf($, 'remind in 1m check the build')).toBe('Reminder 1 kept, in 1 min: check the build')
@@ -4252,3 +4387,214 @@ for (const [what, bench, isInteractive] of [['under the bench', '/tmp/bench', tr
   expect(ran).toEqual([])
   expect(k.disk.agents).toBeUndefined()
 })
+
+// The routine (engine/routine.js): the day's questions, the finish time, the welcome back. The hours are the machine's own, as the mod reads them.
+const dayAt = (day: number, h: number, m = 0) => new Date(2026, 10, day, h, m).getTime() // Tuesday 17 November 2026 is day 17
+function dayKit($: any, on: any, now: number, prefs: object = {}) {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [91, 45, 12, 70, 38], asked: true, lang: 'en', ...prefs }, now)
+  on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
+  on('turn.complete', () => ({ text: '' }) as any)
+  on('model.complete', () => { throw new Error('no model is asked for the routine') })
+  const pass = async (ms: number) => { for (let left = ms; left > 0; left -= 5 * 60_000) await k.clock.advance(Math.min(left, 5 * 60_000)) } // in steps: one advance holds only so many ticks
+  const to = (t: number) => pass(t - k.clock.now())
+  const buttons = async (surface = 'terminal') => { const ui = await $.ui.mount({ ...BAND, surface }); const b = (await ui.findAll({ type: 'Button' })).map((x: any) => x.text as string); await ui.unmount(); return b }
+  const press = async (key: string) => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key }); await ui.unmount() }
+  const said = async () => (await bubbleOf($)).join(' | ')
+  return Object.assign(k, { pass, to, buttons, press, said })
+}
+const oneOf = (key: string, fill: Record<string, string> = {}) => wordings('en', key).map(l => l.replace(/\{(\w+)\}/g, (all, name) => fill[name] ?? all))
+
+test('the day\'s questions: the finish time ten minutes after the first use, never during a turn, answered by a button; then the coffee, answered by /pet no; each asked once', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = dayKit($, on, dayAt(17, 9))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(k.disk.routine).toMatchObject({ day: '2026-11-17', asked: 0, q: null, days: { '2026-11-17': { start: dayAt(17, 9) } } }) // who opens a chat is here: the day has started
+  // a turn runs when its ten minutes are over: nothing is asked meanwhile
+  await k.pass(60_000)
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await k.to(dayAt(17, 9, 12))
+  expect([/finish/.test(await k.said()), k.disk.routine.asked]).toEqual([false, 0])
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  await k.pass(11_000)
+  expect(await k.said()).toBe('what time do you finish today?')
+  expect(await k.buttons()).toEqual(['pet', '17:00', '18:00', '19:00', 'later'])
+  expect(k.disk.routine).toMatchObject({ asked: 1, q: { kind: 'finish', opts: ['17', '18', '19', 'later'] } })
+  // where there are no buttons the row says how to answer
+  { const ui = await $.ui.mount({ ...BAND, surface: 'vscode' }); expect((await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join(' ')).toMatch(/what time do you finish today\? Answer with \/pet answer <17\|18\|19\|later>\.$/); await ui.unmount() }
+  // a prompt does not answer it nor send it away: it waits its 30 minutes
+  await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any)
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  expect(await k.said()).toBe('what time do you finish today?')
+  expect(await cardOf($, 'answer maybe')).toBe('This question takes one of: 17, 18, 19, later.')
+  await k.press('answer-18')
+  expect(await k.said()).toBe('Until 18:00, then. I will say it 30 and 10 minutes before, and at the time. /pet until off drops it.') // what it says back, for a while
+  expect(k.disk.routine).toMatchObject({ until: dayAt(17, 18), q: null, days: { '2026-11-17': { finish: dayAt(17, 18) } } })
+  expect(await cardOf($, 'until')).toBe('Today you finish at 18:00. /pet until off drops it.')
+  expect(await cardOf($, 'yes')).toBe('No question is open.')
+  // the coffee: not right after, and once
+  await k.pass(4 * 60_000)
+  expect(await k.said()).not.toMatch(/coffee/)
+  await k.pass(90_000)
+  expect(await k.said()).toBe('had your coffee yet?')
+  expect(await k.buttons()).toEqual(['pet', 'yes', 'no'])
+  expect(await cardOf($, 'no')).toBe('Noted. I will remind you once, in a while.')
+  expect(await k.said()).not.toMatch(/coffee/)
+  expect(k.disk.routine).toMatchObject({ asked: 2, q: null, days: { '2026-11-17': { coffee: false } } })
+  // several chats open: a question that is up here and was answered in another chat goes at the next look
+  k.disk.routine = { ...k.disk.routine, done: k.disk.routine.done.filter((x: string) => x !== 'small'), asked: 1, qAt: 0, days: { '2026-11-17': { start: dayAt(17, 9), end: k.clock.now(), finish: dayAt(17, 18) } } }
+  await k.pass(11_000)
+  expect(await k.said()).toBe('had your coffee yet?')
+  k.disk.routine = { ...k.disk.routine, q: null, days: { '2026-11-17': { ...k.disk.routine.days['2026-11-17'], coffee: true, coffeeAt: k.clock.now() } } } // /pet yes, typed there
+  await k.pass(11_000)
+  expect([/coffee/.test(await k.said()), await k.buttons()]).toEqual([false, ['skin', 'pet']])
+  // nothing else is asked that day, and no model was asked for any of it (the kit's would throw)
+  for (let i = 0; i < 4; i++) { await k.pass(20 * 60_000); await cardOf($, 'pet'); expect(k.disk.routine.asked).toBe(2) }
+})
+
+test('a question nobody answers goes after 30 minutes; /pet routine off stops the questions, shows what was learned, and clear forgets; nothing is asked without a person or under the bench', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = dayKit($, on, dayAt(17, 9))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.pass(10 * 60_000 + 11_000)
+  expect(await k.said()).toBe('what time do you finish today?')
+  await k.pass(29 * 60_000)
+  expect(await k.said()).toBe('what time do you finish today?')
+  await k.pass(70_000)
+  expect([/finish/.test(await k.said()), await k.buttons(), k.disk.routine.q]).toEqual([false, ['skin', 'pet'], null]) // gone, quietly
+  expect(await cardOf($, 'answer 18')).toBe('No question is open.')
+  // /pet until says the time all the same; and what was learned is shown
+  expect(await cardOf($, 'until 18:30')).toBe('Until 18:30, then. I will say it 30 and 10 minutes before, and at the time. /pet until off drops it.')
+  expect(await cardOf($, 'until 25')).toBe('A time on the 24-hour clock: /pet until 18:30, or /pet until off.')
+  expect(await cardOf($, 'routine')).toBe([
+    'What Miro has learned of your days (1 kept, 30 at most)',
+    '  today: started at 09:00',
+    '  today: you finish at 18:30',
+    'Questions on: 1 of 3 asked today. /pet routine off stops them; /pet routine clear forgets everything.',
+    'Kept on this machine: never sent to the comments model, not on the picture of /pet share. It is in the file of /pet export. This answer is a line of the chat.',
+  ].join('\n'))
+  expect(await cardOf($, 'until off')).toBe('No finish time today.')
+  // off: the coffee question, due now, never comes
+  expect(await cardOf($, 'routine off')).toMatch(/^Questions off: the pet asks nothing about your day\./)
+  for (let i = 0; i < 3; i++) { await k.pass(10 * 60_000); await cardOf($, 'pet') }
+  expect([k.disk.routine.asked, k.disk.routine.off, await k.buttons()]).toEqual([1, true, ['skin', 'pet']])
+  expect(await cardOf($, 'routine')).toMatch(/\nQuestions off\. \/pet routine on brings them back/)
+  expect(await cardOf($, 'routine on')).toBe('Questions on: at most 3 a day, one at a time.')
+  expect(await cardOf($, 'routine clear')).toBe("Forgotten: the days, the usual times and today's answers.")
+  expect([Object.keys(k.disk.routine.days), k.disk.routine.until]).toEqual([['2026-11-17'], 0]) // today begins again, from this command
+  expect(await cardOf($, 'routine maybe')).toBe('/pet routine shows what was learned; /pet routine off, /pet routine on, /pet routine clear.')
+})
+
+test('no routine without a person at the prompt: nothing is kept and nothing is asked', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = dayKit($, on, dayAt(17, 9))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: false })
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  await k.pass(15 * 60_000)
+  expect(k.disk.routine).toBeUndefined()
+  expect(await k.buttons()).not.toContain('17:00')
+})
+
+test('no routine under the bench: the person\'s store is not touched and nothing is asked', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = dayKit($, on, dayAt(17, 9))
+  k.env.HATCHLING_BENCH = '/out/run'
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  await k.pass(15 * 60_000)
+  expect(k.disk.routine).toBeUndefined()
+})
+
+test('after three answered days the usual time is proposed with yes and no; no brings the hours, the same question going on; in another language the words are its own', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = dayKit($, on, dayAt(17, 9), { lang: 'es' })
+  k.disk.routine = { days: Object.fromEntries([14, 15, 16].map(d => [`2026-11-${d}`, { start: dayAt(d, 9), end: dayAt(d, 18, 5), finish: dayAt(d, 18, 30), coffee: true, coffeeAt: dayAt(d, 9, 20) }])) }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.pass(10 * 60_000 + 11_000)
+  expect(await k.said()).toBe('¿hoy a las 18:30, como siempre?')
+  expect(await k.buttons()).toEqual(['acariciar', 'sí', 'no'])
+  await k.press('answer-no')
+  expect(await k.said()).toBe('¿a qué hora terminas hoy?')
+  expect(await k.buttons()).toEqual(['acariciar', '17:00', '18:00', '19:00', 'más tarde'])
+  expect(k.disk.routine.asked).toBe(1)
+  expect(await cardOf($, 'answer later')).toBe('Más tarde, entonces. /pet until 20:30 cuando lo sepas.')
+  expect(k.disk.routine.until).toBe(0)
+  expect(await cardOf($, 'routine')).toMatch(/^Lo que Miro ha aprendido de tus días \(4 guardados, 30 como máximo\)\n  inicio habitual: 09:00\n  fin habitual: 18:30\n  café: normalmente sí\n  hoy: empezaste a las 09:00\n/)
+})
+
+test('the finish time is warned about 30 and 10 minutes before and at the time: in the band of every open chat, with one toast for all of them', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = dayKit($, on, dayAt(17, 17))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(await cardOf($, 'until 18')).toMatch(/^Until 18:00, then\./)
+  await k.to(dayAt(17, 17, 29))
+  expect([/18:00/.test(await k.said()), k.toasts]).toEqual([false, []])
+  await k.to(dayAt(17, 17, 30) + 11_000)
+  expect(oneOf('until.w30', { time: '18:00' })).toContain(await k.said())
+  expect([k.toasts.length, oneOf('until.w30', { time: '18:00' }).includes(k.toasts[0]!), k.disk.routine.done.includes('w30')]).toEqual([1, true, true])
+  await k.pass(RULES.warnShowMs + 1_000)
+  expect(await k.said()).not.toMatch(/18:00/) // for a minute, then it goes
+  // ten minutes before, another chat saw it first and marked it: this band shows it too, and makes no second toast
+  await k.to(dayAt(17, 17, 49))
+  k.disk.routine = { ...k.disk.routine, done: [...k.disk.routine.done, 'w10'] }
+  await k.to(dayAt(17, 17, 50) + 11_000)
+  expect(oneOf('until.w10', { time: '18:00' })).toContain(await k.said())
+  expect(k.toasts.length).toBe(1)
+  // at the time
+  await k.to(dayAt(17, 18) + 11_000)
+  expect(oneOf('until.w0', { time: '18:00' })).toContain(await k.said())
+  expect(k.toasts.length).toBe(2)
+  await k.to(dayAt(17, 18, 20))
+  expect([/18:00/.test(await k.said()), k.toasts.length]).toEqual([false, 2]) // each once
+})
+
+test('the welcome back: after an hour with nothing done the line is in the bubble and stays until the person does something; done in another chat, it goes; then the coffee reminder is said', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = dayKit($, on, dayAt(17, 9))
+  k.disk.routine = { day: '2026-11-17', done: ['finish', 'small'], days: { '2026-11-17': { start: dayAt(17, 8), end: dayAt(17, 8, 59), coffee: false, coffeeAt: dayAt(17, 8, 30) } } } // asked and answered already: no coffee yet
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.to(dayAt(17, 9, 59))
+  expect(wordings('en', 'back.hour')).not.toContain(await k.said())
+  await k.to(dayAt(17, 10) + 11_000)
+  expect(wordings('en', 'back.hour')).toContain(await k.said()) // an hour: it is there for when they sit down
+  await k.to(dayAt(17, 10, 40))
+  expect(wordings('en', 'back.hour')).toContain(await k.said()) // and stays, asleep or not; the coffee reminder, due since 10:30, waits for the person
+  expect(k.disk.routine.done).not.toContain('again')
+  await k.to(dayAt(17, 12, 30))
+  expect(wordings('en', 'back.long')).toContain(await k.said()) // worded as of now: three hours and more
+  // the person presses a button: the welcome goes, and now the reminder about the coffee is said
+  await k.press('pet')
+  expect([...wordings('en', 'back.long'), ...wordings('en', 'back.hour')]).not.toContain(await k.said())
+  await k.pass(RULES.cuddleShowMs + 11_000)
+  expect(wordings('en', 'cup.no')).toContain(await k.said())
+  expect(k.disk.routine.done).toContain('again')
+  await k.pass(RULES.remindShowMs + 60_000)
+  expect(wordings('en', 'cup.no')).not.toContain(await k.said()) // once
+  // away again; back in another chat: this one's welcome goes
+  await k.to(dayAt(17, 14))
+  const lunch = await k.said()
+  expect(wordings('en', 'back.lunch')).toContain(lunch) // left at half past twelve, back at two
+  k.disk.routine = { ...k.disk.routine, seen: k.clock.now() }
+  await k.pass(11_000)
+  expect(await k.said()).not.toBe(lunch)
+})
+
+test('back after a pause with the comments on: the recap comes first and the welcome is the line under it, both kept until the person does something; then the reminder that fell due is said', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await cardOf($, 'routine off') // the day's questions are not this test's
+  await cardOf($, 'remind in 70m call the plumber')
+  await k.turn()
+  k.v.reply = { isAnswered: true, text: LINE, usage: USAGE }
+  for (let i = 0; i < 7; i++) { await k.clock.advance(5 * 60_000); await k.settle() }
+  expect((await bubbleOf($)).join(' | ')).toBe(`35 min ago: ${LINE}`)
+  for (let i = 0; i < 6; i++) { await k.clock.advance(5 * 60_000); await k.settle() }
+  const both = await bubbleOf($)
+  expect(both[0]).toBe(`65 min ago: ${LINE}`)
+  expect(['hour', 'lunch', 'long', 'morning'].flatMap(kind => wordings('en', `back.${kind}`))).toContain(both[1]) // whichever the hour of the machine makes it
+  expect(k.v.calls.every((c: any) => !/routine|finish|coffee/.test(JSON.stringify(c)))).toBe(true) // nothing of the routine goes to the model
+  // the reminder fell due while the person was away: it waits for them, as ever, and the two lines stay
+  await k.clock.advance(5 * 60_000 + 11_000)
+  expect(await bubbleOf($)).toEqual([`70 min ago: ${LINE}`, both[1]])
+  // the person is back and sends a prompt: the recap and the welcome had their time, and now the reminder is said. None was lost
+  await k.turn()
+  expect((await bubbleOf($)).join(' | ')).not.toContain(LINE)
+  expect(await bubbleOf($)).not.toContain(both[1])
+  await k.clock.advance(11_000)
+  expect((await bubbleOf($)).join(' | ')).toMatch(/^remember: call the plumber/)
+})
+

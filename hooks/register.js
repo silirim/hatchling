@@ -17,8 +17,10 @@ import { whole as workOf, opened as workOpened, turned as workTurned, said as wo
 import { whole as remindersOf, asked as remindAsked, add as remindAdd, done as remindDone, ready as remindReady, due as remindDue, LIMITS as REMIND } from '../engine/remind.js'
 import { bubble, cuddle as cuddleLine, called, ago, since, BENCH, BRIEF, BRIEF_ID, DOCS } from '../engine/catalog.js'
 import { born as bornAs, newSeed, cleanName, asTrait, traitsOf, statsOf, asStats, extremes, speaker, personalityOf, bar, buddy, roll as rollOf, STATS, NAME_MAX, cleanCall, CALL_MAX } from '../engine/persona.js'
-import { text, put, list as listOf, voicedAs, asLang, fromLocale } from '../engine/lang/index.js'
+import { text, put, list as listOf, voicedAs, asLang, fromLocale, LANGS } from '../engine/lang/index.js'
 import { cols, pad, wrap, tidy } from '../engine/width.js'
+import { pick } from '../engine/pick.js'
+import { whole as routineOf, touch as routineTouch, next as routineNext, answer as routineAnswer, setUntil, usual as routineUsual, stage as warnStage, back as backKind, switched as routineSwitched, cleared as routineCleared, hhmm, minutes as minutesOf, LIMITS as ROUTINE } from '../engine/routine.js'
 import zoo from '../sprites/zoo.js'
 import { REG, install, coatOf, dressed, portrait, LIMITS as SKIN_LIMITS } from '../engine/skins.js'
 import { shareLines, picture, png, svg, sharePath } from '../engine/share.js'
@@ -29,9 +31,13 @@ const pet = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'pet' }), nul
 // `idle` is the small gesture a calm pet is making and `idleN` its frame; `spark` the sparkles lit next to a golden coat, a bit each spot; `hush` counts the phrases that left the bubble, only to draw again.
 // `sig` and `sigAt` are the phrase last shown and when it came up: kept here so that a reload of the mod does not show again a phrase that had its time
 // `note` is a line the pet says for a while by itself, over any other line (its answer to /pet say, the line of a cuddle), `noteFix` the dim line under it, `noteLeft` the ticks it stays: then the bubble is what it was
+// `ask` is a question that holds the bubble with its buttons until it is answered: the one about the comments when `askKind` is '',
+// else one of the routine (engine/routine.js), `askKind` its kind and `askOpts` the answers it takes, with a comma between them.
+// `back` is when the person last did something before a pause of an hour or more: the welcome back holds the bubble until they do something again
 // `recap` is where the work got to, as the small model said it after a pause, and `recapAt` when that work was left: the line holds
 // the bubble until the next prompt, with its time word made anew at each drawing. Here and nowhere else: never in the store
-const ANIM0 = { n: 0, rare: -1, demo: '', sleep: false, egg: 0, love: 0, ask: '', note: '', noteFix: '', noteLeft: 0, skin: 0, idle: '', idleN: 0, spark: 0, hush: 0, sig: '', sigAt: 0, recap: '', recapAt: 0 }
+const ANIM0 = { n: 0, rare: -1, demo: '', sleep: false, egg: 0, love: 0, ask: '', askKind: '', askOpts: '', back: 0, note: '', noteFix: '', noteLeft: 0, skin: 0, idle: '', idleN: 0, spark: 0, hush: 0, sig: '', sigAt: 0, recap: '', recapAt: 0 }
+const NO_ASK = { ask: '', askKind: '', askOpts: '' }
 const anim = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'anim' }), ANIM0)
 const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: false, voiceAsked: false, lang: '', missing: '', chats: true, callme: '', model: '' }
 const prefs = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'prefs' }), PREFS0)
@@ -62,6 +68,17 @@ const count1 = (/** @type {string} */ lang, /** @type {string} */ key, /** @type
 /** What comes from a skin pack is told with the pack's name after it. */
 const animalName = (/** @type {string} */ lang, /** @type {string} */ id) => { const sp = isAnimal(id) ? REG.species[id] : null; return sp?.pack ? `${sp.names[lang] ?? sp.names.en} (${sp.pack})` : text(lang, `animal.${id}`, {}, id) }
 const itemName = (/** @type {string} */ lang, /** @type {{ id: string, name: string, pack?: string, names?: Record<string, string> }} */ i) => i.pack ? `${i.names?.[lang] ?? i.name} (${i.pack})` : text(lang, `item.${i.id}`, {}, i.name)
+// Only an id acts: it is unique, and two things may one day be shown under the same name. A typed word that is not an id but is a shown
+// name, in any of the languages, is answered with the ids it could be, and nothing is bought, put on or switched (engine/pick.js).
+const TONGUES = Object.keys(LANGS)
+/** Things and animals with every name they are shown under, for that answer. */
+const asThings = (/** @type {{ id: string, name: string, pack?: string, names?: Record<string, string> }[]} */ items) => items.map(i => ({ id: i.id, names: i.pack ? [...Object.values(i.names ?? {}), i.name] : [...TONGUES.map(l => text(l, `item.${i.id}`, {}, i.name)), i.name] }))
+const asAnimals = (/** @type {string[]} */ ids) => ids.map(id => { const sp = REG.species[id]; return { id, names: sp?.pack ? Object.values(sp.names ?? {}).map(String) : TONGUES.map(l => text(l, `animal.${id}`, {}, id)) } })
+/** Two sentences in one line: a space between them, none after a Chinese full stop. */
+const after = (/** @type {string} */ a, /** @type {string} */ b) => `${a}${/[。！？]$/.test(a) ? '' : ' '}${b}`
+/** The one-line answer to a word that is no id: the commands it may have meant, or the closest ids, or `none`. Nothing is done. */
+const meantLine = (/** @type {string} */ lang, /** @type {string} */ verb, /** @type {{ meant: string[], near: string[] }} */ got, /** @type {string} */ none) =>
+  got.meant.length ? text(lang, 'pick.meant', { list: got.meant.map(id => `/pet ${verb} ${id}`).join(', ') }) : got.near.length ? after(none, text(lang, 'pick.near', { list: got.near.join(', ') })) : none
 /** The animals of the installed skin packs: the person's at once, for nothing. */
 const packAnimals = () => Object.keys(REG.species).filter(id => REG.species[id].pack)
 /** An animal's name as it is typed, with its pack after it when it has one. */
@@ -72,11 +89,14 @@ const partOf = (/** @type {string} */ id) => WEARABLE.find(i => i.id === id)?.sl
 const STYLE_BENCH = `${BENCH}. Every run: bench/RESULTS.md in the repository.`
 
 // the environment switches are for headless runs, where no command can be typed
-const STYLE_SWITCH_UNDER = 30_000 // context tokens under which switching the style mid-chat is cheap
+// Growth of the context under which switching the style mid-chat is cheap: what the chat added since its first request (or the first
+// after a compaction), not its size, which in the desktop app or with many MCP servers is 60k and more before a word is said.
+// 15k: the 30k of context of the rule before this one, less the 17k a chat of the bench started at.
+const STYLE_SWITCH_UNDER = 15_000
 /** @type {boolean | undefined} */ let styleLive // what the system prompt carries now; follows the preference only when the switch is cheap
 const styleOn = async (/** @type {any} */ $) => (await getPrefs($)).style || (await $.env.get('HATCHLING_STYLE').catch(() => undefined)) === '1'
-/** Whether the next request carries the style: the choice when a switch is cheap (no request yet, a small chat, right after a compaction), else what it carries now. */
-const styleNext = (/** @type {boolean} */ want) => styleLive === undefined || ctxTokens < STYLE_SWITCH_UNDER || afterCompact ? want : styleLive
+/** Whether the next request carries the style: the choice when a switch is cheap (no request yet, a chat that has grown little, right after a compaction), else what it carries now. */
+const styleNext = (/** @type {boolean} */ want) => styleLive === undefined || ctxTokens - baseTokens < STYLE_SWITCH_UNDER || afterCompact ? want : styleLive
 // The briefox plugin (briefox/ in this repository) sends the same section under the same id, on as installed. With it the sentence is
 // in the system prompt whatever /pet briefox says, and the pet must not call that `briefox off`. Asked of the prompt itself, not of the
 // other plugin's store: $.prompt.compose goes through every other plugin's hook, above this one or below, and not through this one.
@@ -336,6 +356,138 @@ async function remind(/** @type {any} */ $) {
   if (!first) return
   await hold($, text(p.lang, 'remind.say', { text: tidy(first.text, 80) }), open.length > 1 ? text(p.lang, 'remind.more', { n: open.length - 1 }) : text(p.lang, 'remind.how', { n: first.n }), RULES.remindShowMs)
 }
+// The routine (engine/routine.js): the pet keeps company through the day with fixed lines, the comments on or off. It asks a few
+// closed questions (what time do you finish, had your coffee, had lunch), each with its buttons and /pet yes, /pet no, /pet answer;
+// warns before the finish time; greets the person who is back after an hour or more; and keeps the answers of the last 30 days in
+// the store under `routine`, one copy for all the chats. Zero tokens: nothing of it is sent to a model, and no line is asked of one.
+let personAt = 0 // when the person last did something in this chat: a prompt, a button, a /pet command (not the agent's work)
+let warned = '' // the warning about the finish time this chat showed last: the time and the stage
+/** @type {number | undefined} */ let usualStart // the minute of the day the person usually starts, once the days say so: for the morning's greeting
+const routineGet = async (/** @type {any} */ $) => { const none = {}, raw = await storeGet($, 'routine').catch(() => none); return raw === none ? null : routineOf(raw) }
+const routineSet = (/** @type {any} */ $, /** @type {unknown} */ r) => storeSet($, 'routine', r).then(() => true, () => false)
+/** The line of the pet's character among the six ways a key is said. */
+const voiced = (/** @type {{ lang: string, stats: number[] }} */ p, /** @type {string} */ key, /** @type {Record<string, string | number>} */ fill = {}) => put(voicedAs(p.lang, key, STATS.indexOf(speaker(p.stats, cur?.turn ?? 0))), fill)
+/**
+ * The person did something here: a prompt, a button, a /pet command, a chat opened. The welcome back goes, and the day of the
+ * routine has started if it had not and lasts until now. Never without a person, nor under the bench.
+ */
+async function touched(/** @type {any} */ $) {
+  const now = personAt = await $.clock.now()
+  if ((await heldAnim($)).back) await update($, anim, a => ({ ...a, back: 0 }))
+  if (!social || await bench($)) return
+  const r = await routineGet($)
+  if (r) await routineSet($, routineTouch(r, now))
+}
+/** A question of the routine goes up: its words in the language, its kind and the answers its buttons give. */
+async function putQuestion(/** @type {any} */ $, /** @type {import('../engine/routine.js').Question} */ q) {
+  const L = (await getPrefs($)).lang
+  await update($, anim, a => ({ ...a, ask: text(L, `ask.${q.kind}`, { time: q.time ? hhmm(q.time) : '' }), askKind: q.kind, askOpts: q.opts.join(','), sleep: false }))
+}
+/** What a button of a question shows for an answer: yes, no, later, or an hour as the clock shows it. */
+const answerLabel = (/** @type {string} */ lang, /** @type {string} */ opt) => /^\d+$/.test(opt) ? `${opt.padStart(2, '0')}:00` : text(lang, `btn.${opt}`, {}, opt)
+/**
+ * An answer, from a button or from /pet yes, /pet no, /pet answer <choice>: to the question about the comments when that is the
+ * one up, else to the one of the routine, which may have been asked in another chat. The line to say back; `again` when the
+ * answer brought the next part of the same question, which is up now.
+ */
+async function answerQ(/** @type {any} */ $, /** @type {string} */ choice) {
+  const a = await heldAnim($), L = (await getPrefs($)).lang, now = await $.clock.now()
+  if (a.ask && !a.askKind) {
+    if (choice !== 'yes' && choice !== 'no') return { line: text(L, 'answer.what', { list: 'yes, no' }), again: false }
+    await setVoice($, choice === 'yes')
+    return { line: text(L, choice === 'yes' ? 'toast.comments.on' : 'toast.comments.off'), again: false }
+  }
+  const r = await routineGet($)
+  if (!r) return { line: text(L, 'routine.unkept'), again: false }
+  const res = routineAnswer(r, choice, now)
+  if (!res.ok) {
+    if (a.ask && !res.opts.length) await update($, anim, x => ({ ...x, ...NO_ASK })) // its time passed, or it was answered elsewhere
+    return { line: text(L, res.reply, { list: res.opts.join(', ') }), again: false }
+  }
+  if (!(await routineSet($, res.r))) return { line: text(L, 'routine.unkept'), again: false }
+  if (res.ask) { await putQuestion($, res.ask); return { line: `${text(L, `ask.${res.ask.kind}`)} ${text(L, 'ask.how', { list: res.ask.opts.join('|') })}`, again: true } }
+  if (a.ask) await update($, anim, x => ({ ...x, ...NO_ASK }))
+  if (res.time) warned = ''
+  return { line: text(L, res.reply, { time: res.time ? hhmm(res.time) : '' }), again: false }
+}
+/** A button of a question: the answer, and what the pet says back held in the bubble for a while. */
+async function pressAnswer(/** @type {any} */ $, /** @type {string} */ choice) {
+  const r = await answerQ($, choice)
+  if (!r.again) await hold($, r.line, '', RULES.sayShowMs)
+}
+/**
+ * Looked at every PEER_TICKS. The welcome back: once the person has done nothing in any chat for an hour the line goes in the
+ * bubble and stays until they do something, here; done elsewhere, it goes. A warning about the finish time is shown in every open
+ * chat's band, and said once: the chat that sees it first marks it in the store and makes the toast. A question, or a line that
+ * follows an answer, comes only in a chat the person used lately, with no turn running, nothing typed and nothing else held in
+ * the bubble; never over the question about the comments, nor before it was asked.
+ */
+async function company(/** @type {any} */ $) {
+  if (!social || await bench($)) return
+  const a = await heldAnim($), p = await getPrefs($), now = await $.clock.now()
+  if (p.hidden || a.egg > 0 || a.demo) return
+  const r = await routineGet($)
+  if (!r) return
+  { const u = routineUsual(r, now); usualStart = u.days >= ROUTINE.usualDays ? u.start : undefined } // a habit from three days on
+  const seen = Math.max(r.seen, personAt)
+  if (a.back && r.seen > a.back && r.seen > personAt) await update($, anim, x => ({ ...x, back: 0 })) // back, in another chat
+  else if (!a.back && backKind(seen, now)) await update($, anim, x => ({ ...x, back: seen, sleep: false }))
+  // a question that is up here and no longer in the store: answered in another chat, or its 30 minutes passed
+  if (a.ask && a.askKind && (r.q?.kind !== a.askKind || now - r.q.at >= ROUTINE.questionMs || r.q.at > now)) await update($, anim, x => ({ ...x, ...NO_ASK }))
+  const w = warnStage(r.until, now), key = `${r.until}:${w}`, line = w ? voiced(p, `until.${w}`, { time: hhmm(r.until) }) : ''
+  if (w && warned !== key) { warned = key; await hold($, line, '', RULES.warnShowMs) }
+  const here = personAt > 0 && now - personAt <= RULES.peerActiveMs, held = (await heldAnim($)).noteLeft > 0 && !(w && warned === key)
+  const free = here && !held && !a.ask && p.voiceAsked && !turnAt && !(await typing($))
+  const res = routineNext(r, now, { busy: !free, lines: here && !held })
+  if (res.changed && !(await routineSet($, res.r))) return // nothing is asked that could not be kept
+  if (res.warn) await $.ui.toast(line).catch(() => {})
+  if (res.ask) await putQuestion($, res.ask)
+  if (res.say) await hold($, voiced(p, res.say === 'lunch.no' ? 'lunch.no' : res.say === 'coffee.no' ? 'cup.no' : 'cup.yes'), '', RULES.remindShowMs)
+}
+/** /pet until: today's finish time, said, set or dropped. The answer is a line of the chat. */
+async function untilCmd(/** @type {any} */ $, /** @type {string} */ typed) {
+  const L = (await getPrefs($)).lang, now = await $.clock.now(), r = await routineGet($)
+  if (!r) return text(L, 'routine.unkept')
+  if (!typed.trim()) return r.until && now < r.until + ROUTINE.warnLateMs ? text(L, 'until.now', { time: hhmm(r.until) }) : text(L, 'until.none')
+  const res = setUntil(routineTouch(r, now), typed, now)
+  if (!res.ok) return text(L, res.reply, { time: res.time ? hhmm(res.time) : '' })
+  if (!(await routineSet($, res.r))) return text(L, 'routine.unkept')
+  const a = await heldAnim($)
+  if (a.ask && (a.askKind === 'finish' || a.askKind === 'usual')) await update($, anim, x => ({ ...x, ...NO_ASK })) // the question about it is answered
+  warned = ''
+  return text(L, res.reply, { time: res.time ? hhmm(res.time) : '' })
+}
+/** /pet routine: what the pet learned, in a few lines; off and on switch its questions; clear forgets. The answer is a line of the chat. */
+async function routineCmd(/** @type {any} */ $, /** @type {string | undefined} */ arg) {
+  const p = await getPrefs($), L = p.lang, now = await $.clock.now(), r = await routineGet($)
+  if (!r) return text(L, 'routine.unkept')
+  if (arg === 'off' || arg === 'on' || arg === 'clear') {
+    if (!(await routineSet($, arg === 'clear' ? routineTouch(routineCleared(r), now) : routineSwitched(r, arg === 'off')))) return text(L, 'routine.unkept')
+    if (arg !== 'on' && (await heldAnim($)).askKind) await update($, anim, x => ({ ...x, ...NO_ASK }))
+    if (arg === 'clear') { warned = ''; usualStart = undefined }
+    return text(L, arg === 'clear' ? 'routine.cleared' : `routine.${arg}`, { max: ROUTINE.questionsDay })
+  }
+  if (arg) return text(L, 'routine.usage')
+  const u = routineUsual(r, now), habit = (/** @type {number} */ n) => n >= ROUTINE.usualDays, today = r.days[r.day], // what is usual: from the days before today, three at least
+    clockOf = (/** @type {number} */ m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  return [
+    text(L, 'routine.title', { name: p.name, n: Object.keys(r.days).length }),
+    ...(u.start !== undefined && habit(u.days) ? [`  ${text(L, 'routine.start', { time: clockOf(u.start) })}`] : []),
+    ...(u.finish !== undefined && habit(u.finishDays) ? [`  ${text(L, 'routine.finish', { time: clockOf(u.finish) })}`] : []),
+    ...(u.coffee !== undefined && habit(u.coffeeDays) ? [`  ${text(L, u.coffee ? 'routine.coffee.yes' : 'routine.coffee.no')}`] : []),
+    ...(today ? [`  ${text(L, 'routine.today', { time: hhmm(today.start) })}`] : []),
+    ...(r.until ? [`  ${text(L, 'routine.today.until', { time: hhmm(r.until) })}`] : []),
+    text(L, r.off ? 'routine.questions.off' : 'routine.questions.on', { n: r.asked, max: ROUTINE.questionsDay }),
+    text(L, 'routine.note'),
+  ].join('\n')
+}
+/** Hatched: who it is, at once, in the bubble for a while (its name, its animal, the five statistics by name, its character), and in a toast where the bubble has no room. */
+async function born(/** @type {any} */ $) {
+  const p = await getPrefs($), L = p.lang
+  if (p.hidden || !asStats(p.stats)) return
+  await hold($, text(L, 'born.say', { name: p.name, animal: animalName(L, p.species) }), `${STATS.map((st, i) => `${text(L, `stat.${st}`)} ${p.stats[i]}`).join(' · ')} · ${personalityOf(p.stats, L)}`, RULES.bornShowMs)
+  await $.ui.toast(text(L, 'born.toast', { name: p.name })).catch(() => {})
+}
 /** A chat opens: the diary counts it, and gives the memory to say now, in the pet's language and character, or '' when there is none or `tell` is false. */
 async function diaryOpen(/** @type {any} */ $, /** @type {number} */ now, /** @type {boolean} */ tell) {
   const was = await diaryGet($)
@@ -553,7 +705,7 @@ async function askVoice(/** @type {any} */ $) {
 /** The answer, from a button of the question or from /pet comments on|off: kept in the preferences, and the question goes. */
 async function setVoice(/** @type {any} */ $, /** @type {boolean} */ on) {
   await setPrefs($, { voice: on, voiceAsked: true })
-  if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' }))
+  if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ...NO_ASK }))
 }
 async function answerVoice(/** @type {any} */ $, /** @type {boolean} */ on) {
   await setVoice($, on)
@@ -660,6 +812,7 @@ async function recapResume(/** @type {any} */ $, /** @type {boolean} */ fresh) {
 let light = false
 let windowTokens = 0 // the model's context window; known after the first turn
 let ctxTokens = 0 // what the last request of the main thread was answered over
+let baseTokens = 0 // the same for the first request of the chat, or the first after a compaction: where the chat started. 0: not seen yet
 let afterCompact = false
 let costUsd = /** @type {number | undefined} */ (undefined) // what the session cost so far, as /cost
 let ticks = 0
@@ -1051,7 +1204,7 @@ async function moveOut(/** @type {any} */ $, /** @type {boolean} */ backup) {
   await share($, true).catch(() => {})
   const { raw, lost, ...p } = await storedPrefs($), diary = await storeGet($, 'diary').catch(() => none)
   if (lost || diary === none) return null
-  const now = await $.clock.now(), body = JSON.stringify(movePack({ pet: cur, prefs: p, diary, now }), null, 2)
+  const now = await $.clock.now(), body = JSON.stringify(movePack({ pet: cur, prefs: p, diary, routine: await storeGet($, 'routine').catch(() => undefined) ?? {}, now }), null, 2) // with what it learned of the person's days: its memory of them
   if (moveParse(body).errors.length) return null // a file this version would not read back is not written
   const file = movePath(dir, p.name, now, backup), ran = (/** @type {{ exitCode: number }} */ r) => r.exitCode === 0
   const node = await nodePath($)
@@ -1070,12 +1223,13 @@ async function moveIn(/** @type {any} */ $, /** @type {import('../engine/move.js
   const set = (/** @type {string} */ key, /** @type {unknown} */ value) => storeSet($, key, value).then(() => true, () => false)
   if (!(await set('pet', m.pet))) return false // nothing was changed
   const wrote = [await set('diary', m.diary)]
+  if (m.routine) wrote.push(await set('routine', routineOf(m.routine))) // what it learned of the person's days moves in with it; a file of before the routine leaves what is here
   for (const name of Object.keys(PREFS0)) wrote.push(await set(prefKey(name), name === 'missing' ? '' : /** @type {Record<string, unknown>} */ (m.prefs)[name]))
   cur = adopt(cur, m.pet, m.pet)
   await update($, pet, () => cur)
   const { raw, lost, ...p } = await storedPrefs($)
   if (!lost) await update($, prefs, () => p)
-  if (!lost && p.voiceAsked && (await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' })) // the question about the comments was answered where the pet comes from: the choice that moved in stands
+  if (!lost && p.voiceAsked && (await heldAnim($)).ask) await update($, anim, a => ({ ...a, ...NO_ASK })) // the question about the comments was answered where the pet comes from: the choice that moved in stands
   await founding($)
   await feedLean($)
   return wrote.every(Boolean)
@@ -1126,7 +1280,7 @@ async function tick(/** @type {any} */ $) {
   const hatching = await heldAnim($)
   if (hatching.egg > 0 && !hatching.demo && !demoQueue.length) {
     await update($, anim, a => ({ ...a, n: a.n + 1, egg: a.egg - 1 }))
-    if (hatching.egg === 1) await askVoice($).catch(() => {}) // hatched: now it asks whether it may speak
+    if (hatching.egg === 1) { await born($).catch(() => {}); await askVoice($).catch(() => {}) } // hatched: it says who it is, and then asks whether it may speak (the question waits under the line)
     return
   }
   if (farewell && !hatching.noteLeft) { // its pack is gone: it is the animal it was born as again, and says so once, with no blame
@@ -1137,7 +1291,7 @@ async function tick(/** @type {any} */ $) {
   if (hatching.love > 0) await update($, anim, a => ({ ...a, love: a.love - 1 }))
   if (hatching.skin > 0) await update($, anim, a => ({ ...a, skin: Math.max(0, a.skin - 1) }))
   if (hatching.noteLeft > 0) await update($, anim, a => ({ ...a, noteLeft: a.noteLeft - 1, ...(a.noteLeft === 1 ? { note: '', noteFix: '' } : null) }))
-  if (ticks % PEER_TICKS === 0) { watch($).catch(() => {}); await peers($).catch(() => {}); await remind($).catch(() => {}); await pullPrefs($).catch(() => {}); await share($, false).catch(() => {}); midTurn($).catch(() => {}) } // the comment is not awaited: the drawing goes on
+  if (ticks % PEER_TICKS === 0) { watch($).catch(() => {}); await peers($).catch(() => {}); await remind($).catch(() => {}); await company($).catch(() => {}); await pullPrefs($).catch(() => {}); await share($, false).catch(() => {}); midTurn($).catch(() => {}) } // the comment is not awaited: the drawing goes on
   const shown = (await heldAnim($)).demo
   if (demoQueue.length || shown) {
     // each mood gets its whole 5 s, counted from when it comes up; the egg goes through its phases in that time, as at a birth
@@ -1204,6 +1358,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await keepAnimal($).catch(() => {})
     await prune($).catch(() => {})
     if (fresh) await greet($).catch(() => {}) // a reload is not an opening
+    if (fresh) { warned = ''; await touched($).catch(() => {}) } // who opens a chat is here: the day of the routine starts
     if (fresh && social) remindAt = (await $.clock.now()) + RULES.remindStartMs // the reminders, once the greeting had its time
     else openedAt = await $.clock.now()
     if (fresh && newborn && social) await update($, anim, a => ({ ...a, egg: EGG_TICKS })) // the first start ever: it hatches before the greeting
@@ -1231,6 +1386,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
   })
 
   on('prompt.submit', async ($, e, next) => {
+    await touched($).catch(() => {}) // the person is here: a prompt, or a command (/pet say is dropped below)
     // /pet say is for the pet alone: answered here and dropped, so neither what was written nor the answer becomes a row of the chat
     const toPet = e.command?.name === 'pet' ? /^say(?:\s+|$)([^]*)/i.exec(e.command.args.trim()) : null
     if (toPet) {
@@ -1243,7 +1399,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await pullPrefs($).catch(() => {}) // lean switched in another chat counts from this turn
     await feed($, { type: 'prompt', turn: !e.command }).catch(() => {}) // a slash command sends no request: no word on an expired cache
     if (!e.command) { await mark($, false); turnInfo = TURN0(); turnAt = await $.clock.now(); midAt = 0; turnSaid = ''; await recapDrop($).catch(() => {}) } // a slash command starts no turn
-    if (!e.command && (await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' })).catch(() => {}) // the question went unanswered: the voice stays off
+    if (!e.command) { const up = await heldAnim($); if (up.ask && !up.askKind) await update($, anim, a => ({ ...a, ...NO_ASK })).catch(() => {}) } // the question about the comments went unanswered: they stay off. One of the routine waits its 30 minutes
     return next(e)
   })
 
@@ -1286,6 +1442,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       if (u && /** @type {any} */ (e).agentId === undefined) {
         // fill from this request, as the status line computes it: session.measure only comes once a turn and is stale after a compaction
         const total = ctxTokens = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
+        if (!baseTokens) baseTokens = total
         afterCompact = false
         await feed($, { type: 'usage', input: u.input_tokens, cacheRead: u.cache_read_input_tokens, cacheWrite: u.cache_creation_input_tokens, contextPct: windowTokens ? 100 * total / windowTokens : undefined, ...await leanState($) })
       }
@@ -1301,7 +1458,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
 
   on('session.compact', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId === undefined && !r.skip) { ctxTokens = 0; afterCompact = true; await feed($, { type: 'compact' }).catch(() => {}); await feedLean($) }
+    if (e.agentId === undefined && !r.skip) { ctxTokens = baseTokens = 0; afterCompact = true; await feed($, { type: 'compact' }).catch(() => {}); await feedLean($) }
     return r
   })
 
@@ -1335,7 +1492,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     // closed, the mark still tells when the last turn was and whether it was cut
     const was = social && cwd ? myMark ?? await ownMark($).catch(() => undefined) : undefined, last = was ? leftOf(was) : null
     await mark($, true, { closed: true, ...(last && { left: last.at, ...(last.mid && { mid: /** @type {const} */ (true) }) }) }).catch(() => {}) // this chat is over: the others stop counting it at once (after /clear the next one has an id of its own)
-    if (e.reason === 'clear') { if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ask: '' })).catch(() => {}); ctxTokens = turnAt = 0; styleOther = undefined; turnSaid = ''; styleLive = undefined; if (chatId) formerIds = [...formerIds, chatId].slice(-16); chatId = ''; await feed($, { type: 'sessionStart' }).catch(() => {}); await feedLean($) }
+    if (e.reason === 'clear') { if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ...NO_ASK })).catch(() => {}); ctxTokens = baseTokens = turnAt = 0; styleOther = undefined; turnSaid = ''; styleLive = undefined; if (chatId) formerIds = [...formerIds, chatId].slice(-16); chatId = ''; await feed($, { type: 'sessionStart' }).catch(() => {}); await feedLean($) }
     await share($, true).catch(() => {})
     return next(e)
   })
@@ -1350,7 +1507,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await pullPrefs($).catch(() => {})
     await share($, false).catch(() => {}) // the card shows the shared pet as it is now
     // verbs and their arguments are read without regard to capitals; a name given to the pet and what is said to it keep theirs
-    const words = e.args.trim().split(/\s+/), [verb, arg, arg2] = words.map(w => w.toLowerCase())
+    await touched($).catch(() => {})
+    const words = e.args.trim().split(/\s+/), [verb, arg, arg2] = words.map(w => w.toLowerCase()), rest = words.slice(1).join(' ') // `rest`: a name as typed, of more words too
     // E20: no real pet to show or change while the store cannot be read and this chat holds none: said in a line, and nothing is done
     if (!(await heldPrefs($)) && (await storedPrefs($)).lost) return { text: text(undefined, 'store.lost') }
     const L0 = (await getPrefs($)).lang, modelNow = (await getPrefs($)).model || MODEL
@@ -1384,6 +1542,10 @@ export function register(/** @type {import('claude-code').On} */ on) {
       // the work report: today and yesterday, or the days asked for. From the day counters and the chat marks, and nothing else
       return { text: report(workOf(await storeGet($, 'work').catch(() => undefined)), await chats($), { id: await myId($), now: await $.clock.now(), span: arg }, L) }
     }
+    // the routine: an answer to the question that is up, today's finish time, what the pet learned. Answers like any other: lines of the chat
+    if (verb === 'yes' || verb === 'no' || verb === 'answer') return { text: (await answerQ($, verb === 'answer' ? arg ?? '' : verb)).line }
+    if (verb === 'until') return { text: await untilCmd($, rest) }
+    if (verb === 'routine') return { text: await routineCmd($, arg) }
     if (verb === 'remind' || verb === 'reminders') return { text: await reminders($, verb, e.args.trim().slice(verb.length)) } // a command's answer like any other: a line of the chat, which its assistant can read; only the bubble is drawn here and is no line
     if (verb === 'alerts') { // a desktop notification when another chat may be waiting for the person's OK: off until asked for
       const bad = onOff('alerts')
@@ -1487,10 +1649,13 @@ export function register(/** @type {import('claude-code').On} */ on) {
     }
     if (verb === 'animal') { // free among the animals the pet has: the one it was born as and the ones unlocked. Unlocking is the shop's
       const p = await getPrefs($), lang = p.lang, mine = zooOf(card(cur).animals, p), locked = RULES.animals.filter(id => !mine.includes(id))
-      if (mine.includes(arg ?? '')) {
+      // only the id switches; a shown name is answered with the id it could be
+      const got = pick(rest, asAnimals(Object.keys(REG.species))), arg = got.id || rest.toLowerCase()
+      if (mine.includes(arg)) {
         await setPrefs($, { species: arg, missing: '' })
-        return { text: text(lang, 'animal.now', { animal: animalName(lang, /** @type {string} */ (arg)) }) }
+        return { text: text(lang, 'animal.now', { animal: animalName(lang, arg) }) }
       }
+      if (!got.id && (got.meant.length || got.near.length)) return { text: meantLine(lang, 'animal', got, text(lang, 'animal.unknown', { arg: tidy(rest, 24) })) }
       if (arg && locked.includes(arg)) return { text: text(lang, 'animal.locked', { animal: animalName(lang, arg), id: arg, price: RULES.animalPrice, coins: card(cur).coins }) }
       // an animal there is, not sold: only a pet born as one is one. A name that is no animal is said too, then the ones to pick from
       const why = !arg ? [] : [text(lang, isAnimal(arg) ? 'animal.rare' : 'animal.unknown', { animal: animalName(lang, arg), arg: tidy(arg, 24) })]
@@ -1528,7 +1693,10 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const say = (/** @type {string} */ key, /** @type {Record<string, string | number>} */ fill = {}) => text(L, key, fill)
     const points = (/** @type {number} */ n) => count1(L, 'points', n)
     if (verb === 'shop' || verb === 'buy') {
-      const item = SOLD.find(i => i.id === arg), mine = zooOf(c.animals, who)
+      const mine = zooOf(c.animals, who)
+      // only the id buys; a shown name is answered with the id it could be, an unknown word with the closest ids: one line, never the catalogue again
+      const got = pick(rest, [...asThings([...SOLD, EGGSHELL]), ...asAnimals(RULES.animals)]), arg = got.id, item = SOLD.find(i => i.id === arg)
+      if (rest && !arg) return { text: meantLine(L, 'shop', got, after(say('shop.none', { arg: tidy(rest, 24) }), got.near.length ? '' : say('shop.see')).trim()) }
       // a thing sold in one month only: out of it the catalogue says the month where a thing owned says `yours`, and buying is refused with the reason
       const at = await $.clock.now(), monthOf = (/** @type {string} */ id) => sells(id, at) ? 0 : SHOP.find(i => i.id === id)?.month ?? 0
       if (arg && RULES.animals.includes(arg)) { // an animal: unlocked once, shown at once, and then its own for good
@@ -1556,12 +1724,14 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const sold = [...RULES.animals, ...mine.filter(id => !RULES.animals.includes(id) && !REG.species[id].pack)] // the six to unlock, and the pet's own rare one, which nobody can buy. What a skin pack brings is not the shop's
       // the columns are as wide as the widest name on screen: a Chinese name takes two columns a character
       const wide = Math.max(...OWNABLE.map(i => cols(itemName(L, i))), ...sold.map(id => cols(animalName(L, id)))) + 2
+      const eg = SHOP.find(i => !c.owned.includes(i.id) && !monthOf(i.id)) ?? /** @type {typeof SHOP[number]} */ (SHOP[0]) // the example of the help: a real thing, one still to buy
       const row = (/** @type {typeof SOLD[number]} */ i) => `  ${i.id.padEnd(12)}${pad(itemName(L, i), wide)}${String(i.price).padStart(3)}  ${pad(say(`part.${i.slot}`), place)}${c.owned.includes(i.id) ? say(wearing.includes(i.id) ? 'shop.worn' : 'shop.yours') : monthOf(i.id) ? say(`shop.month.${monthOf(i.id)}`) : ''}`.trimEnd()
       return { text: [
-        ...(arg ? [say('shop.none', { arg }), ''] : verb === 'buy' ? [say('shop.pick'), ''] : []),
+        ...(verb === 'buy' ? [say('shop.pick'), ''] : []),
         say('shop.title', { points: points(c.coins) }),
         ...(c.coins < 0 ? [say('shop.debt')] : []),
         '',
+        `  ${pad(say('shop.col.id'), 12)}${say('shop.col.name')}`, // the first word of a row is the one to type
         ...SHOP.map(row),
         '',
         ...COATS.map(row), // a coat is a colour, not a thing to wear: rows of their own
@@ -1573,7 +1743,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
         ...sold.map(id => `  ${id.padEnd(12)}${pad(animalName(L, id), wide)}${(RULES.animals.includes(id) ? String(RULES.animalPrice) : '–').padStart(3)}  ${pad(say('part.animal'), place)}${!mine.includes(id) ? '' : say(id === who.species ? 'shop.shown' : 'shop.yours')}`.trimEnd()),
         ...(c.closet.length ? ['', wearing.length ? say('wears.now', { name: who.name, list: wornLine(L, c.closet, who.wear) }) : say('wears.none', { name: who.name })] : []),
         '',
-        say('shop.help'),
+        say('shop.help', { id: eg.id, name: itemName(L, eg) }),
         say('shop.animals'),
         say('shop.points', { earn: earn(L) }),
       ].join('\n') }
@@ -1584,12 +1754,15 @@ export function register(/** @type {import('claude-code').On} */ on) {
       return { text: [say('skin.title', { name: who.name }), ...parts.map(part => { const item = WEARABLE.find(i => i.slot === part && worn.includes(i.id)); return `  ${pad(say(`part.${part}`), wide)}${part === 'animal' ? animalName(L, who.species) : item ? itemName(L, item) : bare(L, part)}` }), say('wear.help')].join('\n') }
     }
     if (verb === 'wear') {
-      const off = arg === 'off' && !!arg2, id = off ? arg2 : arg, item = WEARABLE.find(i => i.id === id), name = item ? itemName(L, item) : ''
+      // only the id puts on or takes off; a shown name is answered with the ids it could be, the things the pet has first
+      const off = arg === 'off' && !!arg2, typedName = words.slice(off ? 2 : 1).join(' '), own = pick(typedName, asThings(WEARABLE.filter(i => c.closet.includes(i.id)))), any = own.id || own.meant.length ? own : pick(typedName, asThings(WEARABLE))
+      const id = any.id || typedName.toLowerCase(), item = WEARABLE.find(i => i.id === id), name = item ? itemName(L, item) : ''
       const now = wornOf(c.closet, who.wear)
       const told = (/** @type {string} */ wear) => wornOf(c.closet, wear).length ? say('wears.now', { name: who.name, list: wornLine(L, c.closet, wear) }) : say('wears.none', { name: who.name })
       if (arg === 'none' || (arg === 'off' && !arg2)) { await setPrefs($, { wear: takeOff(c.closet, who.wear, 'none') }); return { text: say(now.includes(GOLDEN.id) ? 'wears.none.golden' : now.some(x => partOf(x) === GOLDEN.slot) ? 'wears.none.coat' : 'wears.none', { name: who.name }) } } // the coat is a colour: it stays, and the reply says so
       if (arg === PLAIN) { const coat = now.find(x => partOf(x) === GOLDEN.slot), wear = coat ? takeOff(c.closet, who.wear, coat) : who.wear; await setPrefs($, { wear }); return { text: told(wear) } } // the pet's own colour: what who has a coat on goes back to
-      if (!item || !c.closet.includes(item.id)) return { text: say('wear.not', { arg: id ?? '?', list: c.closet.join(', ') || say('nothing') }) }
+      if (!item && any.meant.length && arg !== 'none' && arg !== PLAIN) return { text: text(L, 'pick.meant', { list: any.meant.map(x => `/pet wear ${off ? 'off ' : ''}${x}`).join(', ') }) }
+      if (!item || !c.closet.includes(item.id)) return { text: say('wear.not', { arg: tidy(id, 24) || '?', list: c.closet.join(', ') || say('nothing') }) }
       if (off && !now.includes(item.id)) return { text: `${say('wear.notOn', { item: name })}\n${told(who.wear)}` }
       // the same thing asked a second time comes off
       const wear = now.includes(item.id) ? takeOff(c.closet, who.wear, item.id) : putOn(c.closet, who.wear, item.id)
@@ -1675,19 +1848,23 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const hatching = a.egg > 0
     const L = p.lang, who = { name: p.name, voice: speaker(p.stats, v.turn), lang: L, call: p.callme, callN: dayOf(await $.clock.now()) } // the dominant character, now and then the second: by the turn, so a line keeps its voice
     const quiet = (/** @type {string} */ say) => ({ say, fix: null, link: null, ask: '', label: '', more: null, aside: '' })
-    const asking = !hatching && !a.demo && !!a.ask // the question about the voice holds the bubble until it is answered; a cuddle's line passes over it for its seconds
+    const recapping = !hatching && !a.demo && !!a.recap // where the work got to: it holds the bubble until the next prompt, and when it was is said as of now
+    const asking = !hatching && !a.demo && !!a.ask && !(a.askKind && recapping) // a question (about the comments, or one of the routine) holds the bubble until it is answered; a cuddle's line passes over it for its seconds. One of the routine waits under the recap: where the work got to comes first
+    const opts = a.askKind ? a.askOpts.split(',').filter(Boolean) : []
     const mine = zooOf(v.animals, p) // the animals to pick from: with more than one the skin menu has a part for them
     const dressing = !hatching && !asking && !a.demo && a.skin > 0 && (v.closet.length > 0 || mine.length > 1) // the row of the parts is open: the bubble tells what is on, the buttons are the parts
-    const recapping = !hatching && !a.demo && !!a.recap // where the work got to: it holds the bubble until the next prompt, and when it was is said as of now
     const now = await $.clock.now()
+    // the welcome back, kept until the person does something: worded by how long they were away and the hour it is, as of now
+    const away = !hatching && !a.demo && a.back ? backKind(a.back, now) : '', welcome = away ? voicedAs(L, `back.${away}`, STATS.indexOf(who.voice)) : ''
+    const early = away === 'morning' && usualStart !== undefined && minutesOf(now) <= usualStart - 45 ? text(L, 'back.early') : null
     // under the greeting of the first chat of a day: yesterday in one line, dim
     const spoken = () => { const said = bubble(v, who); return ydayLine && now < ydayUntil && v.talk && !said.aside ? { ...said, aside: ydayLine } : said }
-    const b = hatching ? quiet(text(L, a.egg > EGG_CRACKS ? 'egg.whole' : 'egg.crack')) : dressing ? { ...quiet([...(v.closet.length ? [wornLine(L, v.closet, p.wear, true)] : []), ...(mine.length > 1 ? [text(L, 'wears.part', { slot: text(L, 'part.animal'), item: animalName(L, p.species) })] : [])].join(text(L, 'sep'))), fix: text(L, 'skin.pick') } : a.noteLeft > 0 && a.note && !a.demo ? { ...quiet(a.note), fix: a.noteFix || null } : asking ? quiet(a.ask) : recapping ? quiet(text(L, 'recap.say', { when: since(a.recapAt, await $.clock.now(), L), line: a.recap })) : (a.demo ? a.demo === 'sleep' : a.sleep) ? quiet(text(L, 'sleep')) : spoken()
+    const b = hatching ? quiet(text(L, a.egg > EGG_CRACKS ? 'egg.whole' : 'egg.crack')) : dressing ? { ...quiet([...(v.closet.length ? [wornLine(L, v.closet, p.wear, true)] : []), ...(mine.length > 1 ? [text(L, 'wears.part', { slot: text(L, 'part.animal'), item: animalName(L, p.species) })] : [])].join(text(L, 'sep'))), fix: text(L, 'skin.pick') } : a.noteLeft > 0 && a.note && !a.demo ? { ...quiet(a.note), fix: a.noteFix || null } : asking ? quiet(a.ask) : recapping ? { ...quiet(text(L, 'recap.say', { when: since(a.recapAt, await $.clock.now(), L), line: a.recap })), aside: welcome } : away ? { ...quiet(welcome), fix: early } : (a.demo ? a.demo === 'sleep' : a.sleep) ? quiet(text(L, 'sleep')) : spoken()
     // how long the phrase stays. What has its own time, or waits for an answer, is not timed here: the egg, the row of the parts, a
     // line held for its seconds, the demo, the question about the voice and a greeting that asks (both go at the next prompt).
     // The plain line of a calm chat is not news: it never opens the bubble.
     const question = v.calm && v.talk?.kind === 'greet' && v.talk.greet === 'resume'
-    const timed = !(hatching || dressing || asking || recapping || a.demo || (a.noteLeft > 0 && a.note) || question)
+    const timed = !(hatching || dressing || asking || recapping || away || a.demo || (a.noteLeft > 0 && a.note) || question)
     const asleep = a.demo ? a.demo === 'sleep' : a.sleep
     const small = timed && !asleep && v.calm && !v.talk && !(v.long && (v.wait || !v.lean))
     const sig = JSON.stringify([b.say, b.fix, b.more?.say, b.aside])
@@ -1703,7 +1880,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const bare = `${p.name}  ★ ${v.coins}`, head = `${bare}${board && p.chats ? `  ·  ${board}` : ''}`
     // one row of text: a surface with neither a cell grid nor a drawing of ours, and a terminal too narrow or too low for the drawing.
     // Where there are no buttons the question about the comments says how to answer it
-    const told = asking && !(a.noteLeft > 0 && a.note) ? `${b.say} ${text(L, 'comments.ask.how')}` : b.say
+    const told = asking && !(a.noteLeft > 0 && a.note) ? `${b.say} ${a.askKind ? text(L, 'ask.how', { list: opts.join('|') }) : text(L, 'comments.ask.how')}` : b.say
     const row = (/** @type {number} */ max) => { tally.last = 'row'; return Box({ children: [Text({ dimColor: true, children: [cut(open ? `${head}  ${told}` : head, max)] })] }) }
 
     const more = b.more
@@ -1714,7 +1891,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
     /** @typedef {{ key: string, label: string, drop: number, el: () => any }} Key */
     const buttons = (/** @type {boolean} */ bubbled) => {
       /** @type {Key[]} */ const keys = [], /** @type {Key[]} */ own = []
-      const adder = (/** @type {Key[]} */ list) => (/** @type {string} */ id, /** @type {string} */ label, /** @type {number} */ drop, /** @type {() => void} */ onPress, dim = false) => { list.push({ key: id, label, drop, el: () => Button({ key: id, label, plain: true, ...(dim ? { dimColor: true } : null), onPress }) }) }
+      // any button pressed is the person here: the welcome back goes, and the routine's day goes on
+      const adder = (/** @type {Key[]} */ list) => (/** @type {string} */ id, /** @type {string} */ label, /** @type {number} */ drop, /** @type {() => void} */ press, dim = false) => { const onPress = () => { touched($).catch(() => {}); press() }; list.push({ key: id, label, drop, el: () => Button({ key: id, label, plain: true, ...(dim ? { dimColor: true } : null), onPress }) }) }
       const key = adder(keys), ownKey = adder(own)
       const ask = bubbled ? b.ask : ''
       // a line that holds the bubble by itself (a cuddle's, an answer) covers the question for its seconds: the question's buttons wait with it
@@ -1724,7 +1902,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
         if (mine.length > 1) key('slot-animal', text(L, 'part.animal'), 0, () => { turnAnimal($).catch(() => {}) })
         key('skin-done', text(L, 'btn.done'), 0, () => { skin($, false).catch(() => {}) }, true)
       } else {
-        if (answering) { key('voice-on', text(L, 'btn.comments.on'), 0, () => { answerVoice($, true).catch(() => {}) }); key('voice-off', text(L, 'btn.comments.off'), 0, () => { answerVoice($, false).catch(() => {}) }) }
+        if (answering && a.askKind) for (const opt of opts) key(`answer-${opt}`, answerLabel(L, opt), 0, () => { pressAnswer($, opt).catch(() => {}) }) // a question of the routine: a button an answer
+        else if (answering) { key('voice-on', text(L, 'btn.comments.on'), 0, () => { answerVoice($, true).catch(() => {}) }); key('voice-off', text(L, 'btn.comments.off'), 0, () => { answerVoice($, false).catch(() => {}) }) }
         else if ((v.closet.length || mine.length > 1) && !hatching) ownKey('skin', text(L, 'btn.skin'), 2, () => { skin($).catch(() => {}) }, true)
         if (ask) key('fix', b.label, 0, () => { fix($, ask).catch(() => {}) })
         if (more?.ask && bubbled) key('more', more.label, 0, () => { fix($, more.ask).catch(() => {}) })

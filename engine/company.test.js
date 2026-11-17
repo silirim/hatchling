@@ -11,7 +11,7 @@ const at = (e, ms = 1000) => ({ t: (t += ms), ...e })
 const MIN = 60_000, H = 60 * MIN, DAY = 24 * H
 const start = () => run([at({ type: 'sessionStart' })])
 const small = () => at({ type: 'usage', input: 100, cacheRead: 1000, cacheWrite: 0 })
-const long = () => at({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0 })
+const long = () => at({ type: 'usage', input: 100, cacheRead: RULES.heavyGrowth + 1000, cacheWrite: 0 })
 const say = (s) => bubble(view(s, t)).say
 /** a turn: a prompt after `gap`, then its end */
 const turn = (gap = 1000, roll) => [at({ type: 'prompt' }, gap), at({ type: 'turnEnd', roll })]
@@ -80,7 +80,7 @@ test('one greeting, gone after the first prompt; a warning or a cheer holds the 
   s = run([at({ type: 'prompt' }, RULES.talkShowMs)], s)
   assert.equal(say(s), CALM.short[0])
   // a long chat without lean is a warning: the greeting is not seen, and nothing is added to the bubble
-  const long = run([at({ type: 'usage', input: 100, cacheRead: RULES.heavyTokens, cacheWrite: 0 }), at({ type: 'greet', kind: 'first' })], start())
+  const long = run([small(), at({ type: 'usage', input: 100, cacheRead: RULES.heavyGrowth + 1000, cacheWrite: 0 }), at({ type: 'greet', kind: 'first' })], start())
   assert.deepEqual([bubble(view(long, t)).ask, bubble(view(long, t)).more], ['/pet briefox on', null])
   const cheered = run([at({ type: 'turnEnd' }), at({ type: 'greet', kind: 'first' })], { ...start(), days: RULES.grownAt.days, affection: RULES.grownAt.affection - 1, day: dayOf(t) })
   assert.equal(say(cheered), 'grew a stage')
@@ -144,7 +144,7 @@ test('a long turn where things went wrong ends with a recap: programs by name, n
 
 test('a long chat gets the outline offer once, lean on or off, then again only after many turns', () => {
   // lean on: the offer is the bubble, its button fills the request
-  let s = run([at({ type: 'lean', on: true }), long(), ...turn()], start())
+  let s = run([at({ type: 'lean', on: true }), small(), long(), ...turn()], start())
   let b = bubble(view(s, t))
   assert.deepEqual([b.say, b.ask, b.label, b.link], ['long chat: shall we put our thoughts in order?', OUTLINE, 'outline', null])
   assert.doesNotMatch(b.say + b.fix + OUTLINE, /sav|cheap|cost|%|token/i) // not a saving: none was measured
@@ -157,7 +157,7 @@ test('a long chat gets the outline offer once, lean on or off, then again only a
   // a short chat gets none
   assert.equal(view(run([small(), ...turn()], start()), t).talk, null)
   // lean off: the heavy warning keeps the bubble and its button, the offer is a second line with its own
-  s = run([long(), ...turn()], start())
+  s = run([small(), long(), ...turn()], start())
   b = bubble(view(s, t))
   assert.deepEqual([b.ask, b.label, b.more], ['/pet briefox on', 'fix', { say: 'long chat: shall we put our thoughts in order?', ask: OUTLINE, label: 'outline' }])
 })
@@ -210,7 +210,7 @@ test('nonsense: rare, one or two words, never early, never twice close, never ov
 test('priorities and gaps: a line gives way only to one that ranks the same or higher, and chatter waits its gap', () => {
   assert.deepEqual(RULES.talkRank, ['recap', 'tidy', 'voice', 'peer', 'greet', 'coffee', 'silly'])
   // the outline offer is on screen: a peer's news ranks lower and is dropped, a recap takes over
-  let s = run([at({ type: 'lean', on: true }), long(), ...turn(), at({ type: 'peer', here: true })], start())
+  let s = run([at({ type: 'lean', on: true }), small(), long(), ...turn(), at({ type: 'peer', here: true })], start())
   assert.equal(view(s, t).talk.kind, 'tidy')
   s = run([at({ type: 'prompt' }), at({ type: 'cmd', cmd: 'npm t', ok: false }), at({ type: 'cmd', cmd: 'npm x', ok: false }), at({ type: 'turnEnd' }, RULES.recapTurnMs)], s)
   assert.equal(view(s, t).talk.kind, 'recap')

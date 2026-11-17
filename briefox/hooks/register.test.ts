@@ -65,6 +65,7 @@ test('in a long chat a switch waits for the next compaction or the next chat, an
   if (await absent($)) return
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(await k.styled()).toBe(true)
+  await k.turn() // the first request: where the chat starts
   ctx.tokens = 70_000
   await k.turn()
   expect(await k.briefox('off')).toBe('Briefox off: "Be brief." leaves the system prompt at the next compaction or in the next chat: this chat is already long, and switching now would re-send the whole conversation. /briefox on puts it back.')
@@ -72,10 +73,36 @@ test('in a long chat a switch waits for the next compaction or the next chat, an
   await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'old', toolUses: [], toolResults: [] }] } as any)
   expect(await k.styled()).toBe(false)
 
+  await k.turn() // the first request after the compaction is the new start: big, and not long
+  expect(await k.briefox('on')).toMatch(/^Briefox on: "Be brief\." is in the system prompt from your next prompt\./)
+  expect(await k.styled()).toBe(true)
+  expect(await k.briefox('off')).toMatch(/^Briefox off: "Be brief\." leaves the system prompt from your next prompt\./)
+  expect(await k.styled()).toBe(false)
+  ctx.tokens = 90_000
   await k.turn() // long again, now without the sentence
   expect(await k.briefox('on')).toMatch(/^Briefox on: "Be brief\." is in the system prompt at the next compaction or in the next chat: this chat is already long/)
   expect(await k.styled()).toBe(false)
   await $.session.end({ reason: 'clear', sessionId: 's0', resume: { id: 's0' } } as any)
+  expect(await k.styled()).toBe(true)
+})
+
+test('a chat that starts big is not long: with 80k in its first request a switch applies at once, and waits only once the chat has grown', async ($, on) => {
+  const ctx = world(on)
+  mock.store(on)
+  const k = kit($)
+  if (await absent($)) return
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  ctx.tokens = 80_000 // the desktop app, or many MCP servers and skills: system prompt and tools alone
+  await k.turn()
+  expect(await k.briefox('off')).toBe('Briefox off: "Be brief." leaves the system prompt from your next prompt. /briefox on puts it back.')
+  expect(await k.styled()).toBe(false)
+  ctx.tokens = 90_000 // grown by 10k: still cheap
+  await k.turn()
+  expect(await k.briefox('on')).toMatch(/^Briefox on: "Be brief\." is in the system prompt from your next prompt\./)
+  expect(await k.styled()).toBe(true)
+  ctx.tokens = 96_000 // grown by 16k
+  await k.turn()
+  expect(await k.briefox('off')).toMatch(/at the next compaction or in the next chat: this chat is already long/)
   expect(await k.styled()).toBe(true)
 })
 
