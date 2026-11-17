@@ -12,9 +12,7 @@
   <img src="https://img.shields.io/badge/pet-0%20tokens-4caf50?style=flat-square" alt="The pet: 0 tokens">
   <img src="https://img.shields.io/badge/animals-7-4caf50?style=flat-square" alt="7 animals">
   <img src="https://img.shields.io/badge/languages-4-4caf50?style=flat-square" alt="4 languages">
-  <!-- when the repository is public:
   <img src="https://img.shields.io/github/stars/silirim/hatchling?style=flat-square&color=4caf50" alt="GitHub stars">
-  -->
 </p>
 
 <p align="center">

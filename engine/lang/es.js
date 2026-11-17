@@ -350,7 +350,7 @@ export default {
   'chats.ask.toast': "Hatchling: el chat de {name} quizá espera tu permiso",
   'chats.ask.toast.named': "Hatchling: tu chat «{name}» quizá espera tu permiso",
   'chats.title': "Tus chats abiertos",
-  'chats.me': "este chat",
+  'chats.me': "aquí",
   'chats.state.working': "trabajando",
   'chats.state.waiting': "te espera",
   'chats.state.asking': "quizá espera tu permiso",

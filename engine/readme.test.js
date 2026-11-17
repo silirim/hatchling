@@ -15,22 +15,24 @@ const README = readFileSync(at('README.md'), 'utf8')
 const shown = README.replace(/<!--[\s\S]*?-->/g, '') // what GitHub renders: a comment is not shown
 // the animals of the pack the shop does not sell: worked out, so that the name is written in no test either
 const HIDDEN = Object.keys(zoo.pack.animals).filter(id => !RULES.animals.includes(id))
-const BADGES = 'https://img.shields.io/badge/' // static badges only: a dynamic one breaks while the repository is private
+const BADGES = 'https://img.shields.io/badge/' // static badges, and the one dynamic badge: the stars of the repository, public since launch
+const STARS = 'https://img.shields.io/github/stars/silirim/hatchling?'
 
 /** The words of the prose: comments, tags with their attributes (so alt texts and URLs) and the targets of links are dropped; what is left, code and tables included, is counted by its runs of letters and digits. @param {string} md */
 export const words = (md) => md.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<[^>]+>/g, ' ').replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').replace(/\]\([^)]*\)/g, '] ').split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w)).length
 
-test('every picture of the README has an alt text, and is a file of the repository or a static badge', () => {
+test('every picture of the README has an alt text, and is a file of the repository or a badge', () => {
   const tags = shown.match(/<img\b[^>]*>/g) ?? []
   assert.ok(tags.length >= 5, 'the page opens its sections with pictures')
   assert.equal(/!\[/.test(shown), false, 'pictures are <img> tags, so that each has a width and an alt')
   for (const tag of tags) {
     const src = /\ssrc="([^"]+)"/.exec(tag)?.[1] ?? ''
     assert.match(tag, /\salt="[^"]{3,}"/, tag)
-    if (src.startsWith(BADGES)) { assert.match(src, /style=flat-square/, src); continue }
+    if (src.startsWith(BADGES) || src.startsWith(STARS)) { assert.match(src, /style=flat-square/, src); continue }
     assert.match(src, /^assets\/[\w.-]+$/, `a relative path: ${src}`)
     assert.ok(existsSync(at(src)), `missing: ${src}`)
   }
+  assert.equal(tags.filter(t => t.includes(STARS)).length, 1, 'the stars badge is shown, once')
   for (const name of [...FILES, MASCOT, 'cover.png', 'hatch.gif', 'terminal.gif', 'results.svg']) assert.ok(shown.includes(`src="assets/${name}"`), name)
 })
 

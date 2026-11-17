@@ -220,9 +220,9 @@ export const SOLD = [...SHOP, ...COATS]
 /**
  * The founder's keepsake: half the shell the pet hatched from, worn as a hat. Not sold. A pet born on or before FOUNDER_UNTIL has it
  * (`birth`), and who has it keeps it for ever. The one place the date is written: a local date of the person's machine.
- * The rule: 30 days after the day the repository goes public. The value here is provisional until that day: the person sets it then.
+ * The rule: 30 days after the day the repository went public, 17 November 2026.
  */
-export const FOUNDER_UNTIL = '2027-01-31'
+export const FOUNDER_UNTIL = '2026-12-17'
 export const EGGSHELL = { id: 'eggshell', name: 'half an eggshell', slot: 'head', price: 0 }
 /** What a pet can own, in the order it is kept and told: the keepsake, then what is sold. */
 export const OWNABLE = [EGGSHELL, ...SOLD]
@@ -289,7 +289,7 @@ export function turnSlot(closet, wear, slot) {
 /** The day a moment falls in, by the clock of the person's machine. @param {number} t */
 export const dayOf = (t) => Math.floor((t - new Date(t).getTimezoneOffset() * 60_000) / 86_400_000)
 
-/** The date a moment falls on, by the clock of the person's machine: `2027-01-31`. @param {number} t */
+/** The date a moment falls on, by the clock of the person's machine: `2026-12-17`. @param {number} t */
 const dateOf = (t) => { const d = new Date(t); return [String(d.getFullYear()).padStart(4, '0'), d.getMonth() + 1, d.getDate()].map(n => String(n).padStart(2, '0')).join('-') }
 
 /** Whether a pet born at a moment is a founder's: born on or before FOUNDER_UNTIL, the whole of that day included. @param {number} born */

@@ -1405,11 +1405,12 @@ export function register(/** @type {import('claude-code').On} */ on) {
       if (!(await getPrefs($)).chats) return { text: text(L0, 'chats.off') }
       const now = await $.clock.now(), all = await known($, now), rows = listing(all, await myId($), now, namesOf(await looked($).catch(() => null)))
       const others = rows.filter(c => !c.me)
+      // the row of the chat the person is in says only "here": no state, no time (it is never counted among the ones that wait)
       // what a chat is called: the name the person gave it, else (with the titles on, and never for this chat) its title, else its folder alone
       const titlesOn = (await storeGet($, 'titles').catch(() => false)) === true
       const title = await titlesOf($, others.filter(c => !c.label).map(c => ({ id: c.id, cwd: all[c.id]?.cwd ?? '' })), now).catch(() => /** @type {Record<string, string>} */ ({}))
       const heads = rows.map(c => c.label || (Object.hasOwn(title, c.id) ? title[c.id] : '') || c.name), wide = Math.max(0, ...heads.map(h => cols(h ?? ''))) + 2
-      return { text: [text(L0, 'chats.title'), ...rows.map((c, i) => `  ${pad(heads[i] ?? '', wide)}${heads[i] !== c.name ? `${c.name}, ` : ''}${text(L0, `chats.state.${c.state}`)}, ${ago(c.ago, L0)}${c.me ? `  (${text(L0, 'chats.me')})` : ''}`), ...(others.length ? [] : [text(L0, 'chats.none')]), text(L0, titlesOn ? 'chats.help.titles' : 'chats.help')].join('\n') }
+      return { text: [text(L0, 'chats.title'), ...rows.map((c, i) => `  ${pad(heads[i] ?? '', wide)}${heads[i] !== c.name ? `${c.name}, ` : ''}${c.me ? text(L0, 'chats.me') : `${text(L0, `chats.state.${c.state}`)}, ${ago(c.ago, L0)}`}`), ...(others.length ? [] : [text(L0, 'chats.none')]), text(L0, titlesOn ? 'chats.help.titles' : 'chats.help')].join('\n') }
     }
     if (verb === 'skins') { // the folder is read anew: a pack just put there, or just mended, shows without a restart
       if (await bench($)) return { text: 'No skin packs: under the bench none is read.' }

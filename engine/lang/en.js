@@ -367,7 +367,7 @@ export default {
   'chats.ask.toast': "Hatchling: the chat in {name} may be waiting for your OK",
   'chats.ask.toast.named': "Hatchling: your chat “{name}” may be waiting for your OK",
   'chats.title': "Your open chats",
-  'chats.me': "this chat",
+  'chats.me': "here",
   'chats.state.working': "working",
   'chats.state.waiting': "waiting for you",
   'chats.state.asking': "may be waiting for your OK",

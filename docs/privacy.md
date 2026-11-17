@@ -22,7 +22,7 @@ Never the content of a file, the output or arguments of a command, a file path, 
 In Claude Code's plugin store (`~/.claude/plugins/store/`):
 
 - **The pet**: seed, name, character, affection, days of use, stars, what it owns, how many times you petted it and when last, token totals.
-- **Preferences**: lean, comments and their model, chats, language, what is worn.
+- **Preferences**: briefox, comments and their model, chats, language, what is worn.
 - **Your name, only if you typed it** after `/pet call me`: the pet never reads one from your account, the system user, git or a path. `/pet call me nobody` forgets it. It is not on the picture of `/pet share`, in the diary or in the marks of the chats.
 - **The diary**: at most 40 lines of times, counts and folder names. `/pet diary clear` empties it.
 - **The work counters**, for 8 days: for each day how many chats opened, the names of their folders (12 at most), how many turns ended and how many files they changed. `/pet diary clear` empties them too.
@@ -40,7 +40,7 @@ In `~/.claude/hatchling-share/` (or the config folder Claude Code was given), on
 
 In the same folder, only when you run `/pet export` (or `/pet import <path> yes`, which saves the pet that is there first): one JSON file, `hatchling-<name>-<date>.json`, readable by you alone (mode 0600). Nothing is sent: you carry the file yourself.
 
-- **In the file**: the pet (animal, name, character and statistics, birth, days, affection, cuddles, stars, the items, coats and animals it has, what it wears, whether it was born golden, its two all-time token counters), your choices (language, lean, hidden, the board of the chats, the comments' model, comments on or off and whether you were asked), the name you gave with `/pet call me`, and the diary.
+- **In the file**: the pet (animal, name, character and statistics, birth, days, affection, cuddles, stars, the items, coats and animals it has, what it wears, whether it was born golden, its two all-time token counters), your choices (language, briefox, hidden, the board of the chats, the comments' model, comments on or off and whether you were asked), the name you gave with `/pet call me`, and the diary.
 - **Not in the file**: your reminders, the work counters, the last look at your sessions, the marks of the chats (full folder paths, times of turns), the pet's last lines, the comments' count, anything of a chat's content.
 - **The diary carries folder names**, and the file your `/pet call me` name: look at it before you send it to anyone.
 - `/pet import` reads the one file you name and no other, and writes only the pet's own keys in the store. The file is checked like a skin pack before any of it is used: nothing in it can name a path.

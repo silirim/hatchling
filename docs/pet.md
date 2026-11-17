@@ -39,7 +39,7 @@ As installed everything the pet says is fixed text on your screen: no model is a
 - **The crown** is not sold: a pet at its last stage has it.
 - **Coats** (`pastel`, `terminal`, `golden`) are a colour only. One pet in a hundred is born golden; `/pet wear <coat>` and `/pet wear plain` switch.
 - **The Santa hat** is sold from 1 to 31 December; once yours, it stays all year.
-- **The founder's eggshell** (`eggshell`, half the shell as a hat) is not sold: a pet hatched by 31 January 2027 has it, and keeps it for ever.
+- **The founder's eggshell** (`eggshell`, half the shell as a hat) is not sold: a pet hatched by 17 December 2026 has it, and keeps it for ever.
   It is a keepsake kept in the pet's file on your machine, not something anyone checks or enforces.
 - **Animals**: the one your pet was born as is yours. Each other common one (penguin, chick, dog, bunny, fox, cactus) is unlocked once with `/pet shop <animal>`; `/pet animal <name>` then switches freely. Name and character stay. A rare seventh is not sold.
 - **Skin packs**: more animals, things and coats from JSON files in `~/.claude/hatchling-skins/`. Data, never code; free. See [skins.md](skins.md).
@@ -50,7 +50,7 @@ The pet notes where a session wastes tokens. A note is advice and costs nothing;
 
 | It notices | Guide |
 |---|---|
-| a long chat (about 60k tokens) without lean | [long-chat.md](fix/long-chat.md) |
+| a long chat (about 60k tokens) without briefox | [long-chat.md](fix/long-chat.md) |
 | a file read again unchanged | [rereads.md](fix/rereads.md) |
 | a command that failed three times in a row | [loops.md](fix/loops.md) |
 | a rebuilt or expired cache | [cache-break.md](fix/cache-break.md) |
@@ -78,7 +78,7 @@ With several chats open, each is in one of four states:
 - **asking**: a tool call has waited 5 seconds for your leave. The pet does not see the dialog itself, so it says "may be waiting for your OK";
 - **closed**: it ended, or gave no sign of life for 90 seconds.
 
-The band counts the chats that wait for you: the waiting and the asking ones. A chat whose turn ended counts for 2 hours, then it is listed and no longer counted. When another chat ends a turn of 2 minutes or more, the pet says so once, with the folder's name. When one may be waiting for your OK it says so once too, with one toast; `/pet alerts on` adds a desktop notification, through the channel Claude Code is set to (off by default). `/pet chats` lists them: folder, state, since when.
+The band counts the chats that wait for you: the waiting and the asking ones. A chat whose turn ended counts for 2 hours, then it is listed and no longer counted. When another chat ends a turn of 2 minutes or more, the pet says so once, with the folder's name. When one may be waiting for your OK it says so once too, with one toast; `/pet alerts on` adds a desktop notification, through the channel Claude Code is set to (off by default). `/pet chats` lists them: folder, state, since when. The row of the chat you are in says only `here`, and that chat is never counted.
 
 **Names.** A chat you named yourself is told by that name, in the list (name, then folder and state), in the bubble and in the toast. The name Claude Code makes by itself, the folder with two hex digits (`workspace-5a`), says no more than the folder and is not shown.
 
@@ -131,7 +131,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 
 | Command | What it does |
 |---|---|
-| `/pet` | the card: stage, hearts, character, stars, lean, comments and their cost |
+| `/pet` | the card: stage, hearts, character, stars, briefox, comments and their cost |
 | `/pet pet` | pet it; the `pet` button does the same |
 | `/pet name <name>` | rename it |
 | `/pet call me <name>` | tell the pet your name: it says it now and then, in a greeting or after a cuddle. Alone it shows the name, `nobody` forgets it. The pet knows only what you type here |
@@ -157,5 +157,5 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet lang <en\|es\|pt\|zh>` | the pet's language |
 | `/pet adopt` | take your old `/buddy`'s name and personality: [privacy.md](privacy.md) |
 | `/pet hide`, `/pet show` | hide or show the band |
-| `/pet demo` | the egg again |
+| `/pet demo` | every mood in turn, 5 seconds each, and the egg again |
 | `/pet help` | the commands, in the pet's language |

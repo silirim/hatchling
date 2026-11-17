@@ -2839,7 +2839,7 @@ test('which chat needs me: beside the name how many other chats work, wait or as
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
   await k.clock.advance(10_500)
   expect(await head()).toMatch(/^Miro  ★ \d+$/)
-  expect(await cardOf($, 'chats')).toBe('Your open chats\n  here  working, just now  (this chat)\nNo other chat is open.\nFolder names, the names you gave your chats and times only, nothing of what is in a chat. /pet chats titles on adds each chat\'s title; /pet chats off turns the board off.')
+  expect(await cardOf($, 'chats')).toBe('Your open chats\n  here  here\nNo other chat is open.\nFolder names, the names you gave your chats and times only, nothing of what is in a chat. /pet chats titles on adds each chat\'s title; /pet chats off turns the board off.')
   // four other chats: one at work, one waiting for the person, one stopped on a permission, one that died without a word
   const now = () => Number(k.disk['chat.me'].beat)
   const others = () => {
@@ -2877,7 +2877,7 @@ test('which chat needs me: beside the name how many other chats work, wait or as
   const list = await cardOf($, 'chats')
   expect(list.split('\n')).toEqual([
     'Your open chats',
-    expect.stringMatching(/^  here    working, (just now|\d+ min ago)  \(this chat\)$/),
+    '  here    here', // the chat the person is in: only "here", no state and no time
     expect.stringMatching(/^  notes   waiting for you, (just now|\d+ min ago)$/),
     expect.stringMatching(/^  api     may be waiting for your OK, (just now|\d+ min ago)$/),
     expect.stringMatching(/^  vodmax  working, \d+ min ago$/),
@@ -2927,6 +2927,34 @@ test('which chat needs me: beside the name how many other chats work, wait or as
   await $.session.end({ reason: 'exit', sessionId: 'me' } as any)
   expect(k.disk['chat.me']).toMatchObject({ closed: true })
   expect(JSON.stringify(Object.fromEntries(Object.entries(k.disk).filter(([key]) => key.startsWith('chat.me'))))).not.toMatch(/again|rm -rf|build|Bash/) // nothing of a prompt, a command or a tool
+})
+
+test('/pet chats: the row of the chat the person is in says only "here", in the four languages, and that chat never counts among the ones that wait', async ($, on) => {
+  const k = voiceKit($, on, { voice: false })
+  k.disk.pet = { owned: [] }
+  const MIN = 60_000
+  await $.session.start({ cwd: '/w/desk', surface: 'terminal', isInteractive: true })
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
+  const mine = async () => (await cardOf($, 'chats')).split('\n')[1]
+  // its own turn ended: this chat waits for the person, and is still "here", with no state and no time; nothing is counted
+  await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
+  await $.turn.complete({ answer: 'done', reason: 'answer' } as any)
+  expect(k.disk['chat.me']).toMatchObject({ done: true })
+  await k.clock.advance(10_500)
+  expect(await head()).toMatch(/^Miro  ★ \d+$/)
+  expect(await mine()).toBe('  desk  here')
+  // another chat waits too: one is counted, never two
+  const now = Number(k.disk['chat.me'].beat)
+  k.disk['chat.idle'] = { cwd: '/home/me/work/notes', at: now, done: true, took: 3 * MIN, beat: now }
+  await k.clock.advance(10_500)
+  expect(await head()).toMatch(/^Miro  ★ \d+  ·  1 chat waits for you$/)
+  expect((await cardOf($, 'chats')).split('\n').slice(1, 3)).toEqual(['  desk   here', expect.stringMatching(/^  notes  waiting for you, (just now|\d+ min ago)$/)])
+  for (const [lang, here, waits] of [['es', 'aquí', 'te espera'], ['pt', 'aqui', 'espera por você'], ['zh', '这里', '在等你'], ['en', 'here', 'waiting for you']] as const) {
+    await cardOf($, `lang ${lang}`)
+    const rows = (await cardOf($, 'chats')).split('\n')
+    expect([lang, rows[1]]).toEqual([lang, `  desk   ${here}`])
+    expect(rows[2]).toContain(waits)
+  }
 })
 
 test('which chat needs me: with the comments on the small model may say the news, under the same cap; with the band hidden nothing is asked; under the bench no chat leaves a mark; marks too old leave the store', async ($, on) => {
@@ -3042,9 +3070,9 @@ test('the plain coats: bought, on at once, a colour with no glint that things to
   expect(await has(PHOSPHOR, 0x157a36, 0x549965, EYE)).toEqual([true, true, false, true])
 })
 
-const EARLY = Date.UTC(2026, 10, 12, 12), AFTER = new Date(2027, 1, 1, 12).getTime() // a day before FOUNDER_UNTIL, and the day after it
+const EARLY = Date.UTC(2026, 10, 12, 12), AFTER = new Date(2027, 1, 1, 12).getTime() // a day before FOUNDER_UNTIL, and a day after it
 test("the founder's eggshell: a pet hatched in time has it and wears it; the catalogue lists it apart, and nobody can buy it", async ($, on) => {
-  expect(FOUNDER_UNTIL).toBe('2027-01-31')
+  expect(FOUNDER_UNTIL).toBe('2026-12-17')
   const k = home(on, {}) // an empty store, on 12 November 2026
   await $.session.start(START)
   await k.clock.advance(9_000)
@@ -3068,7 +3096,7 @@ test("the founder's eggshell after the date: a newborn has none, in the four lan
   await k.clock.advance(9_000)
   expect(k.disk.pet).toMatchObject({ owned: [], born: AFTER })
   expect(await cardOf($)).toMatch(/owns nothing yet/)
-  for (const [lang, name, only, no] of [['es', 'media cáscara de huevo', 'solo fundadores', /^media cáscara de huevo no se vende: .* 2027-01-31\.$/], ['pt', 'meia casca de ovo', 'só fundadores', /^meia casca de ovo não é vendida: .* 2027-01-31\.$/], ['zh', '半个蛋壳', '仅限创始宠物', /^半个蛋壳不出售：.* 2027-01-31 /], ['en', 'half an eggshell', 'founders only', /^half an eggshell is not sold: it is the keepsake of the pets hatched by 2027-01-31\.$/]] as const) {
+  for (const [lang, name, only, no] of [['es', 'media cáscara de huevo', 'solo fundadores', /^media cáscara de huevo no se vende: .* 2026-12-17\.$/], ['pt', 'meia casca de ovo', 'só fundadores', /^meia casca de ovo não é vendida: .* 2026-12-17\.$/], ['zh', '半个蛋壳', '仅限创始宠物', /^半个蛋壳不出售：.* 2026-12-17 /], ['en', 'half an eggshell', 'founders only', /^half an eggshell is not sold: it is the keepsake of the pets hatched by 2026-12-17\.$/]] as const) {
     await cardOf($, `lang ${lang}`)
     const shop = await cardOf($, 'shop')
     expect(shop).toMatch(new RegExp(`^  eggshell +${name} +–  \\S+ +${only}$`, 'm'))
@@ -4095,7 +4123,7 @@ test('the watcher: claude agents --json adds the chats that run without Hatchlin
   expect(await head()).toMatch(/^Miro  ★ \d+  ·  1 chat waits for you$/) // the one that waits for an OK; the idle one was never seen busy
   expect(k.toasts).toEqual(['Hatchling: the chat in api may be waiting for your OK'])
   expect(notes).toEqual([]) // alerts are off until asked for
-  expect((await cardOf($, 'chats')).split('\n').slice(1, -1).map(l => l.trim().replace(/, .*/, '')).sort()).toEqual(['api            may be waiting for your OK', 'here           working', 'release notes  vodmax']) // the name the person gave, cleaned, then the folder
+  expect((await cardOf($, 'chats')).split('\n').slice(1, -1).map(l => l.trim().replace(/, .*/, '')).sort()).toEqual(['api            may be waiting for your OK', 'here           here', 'release notes  vodmax']) // the name the person gave, cleaned, then the folder
   // what is kept of the look: ids, folders, statuses, the one label, and a name only where the person gave one. Never the name Claude Code made, the command, or what it waits for
   expect(Object.keys(k.disk.agents.rows[3]).sort()).toEqual(['cwd', 'id', 'since', 'st', 'wait'])
   expect(Object.keys(k.disk.agents.rows[1]).sort()).toEqual(['cwd', 'id', 'name', 'since', 'st', 'wait'])
@@ -4175,7 +4203,7 @@ test('/pet chats titles: off by default and then nothing of a transcript is aske
   // off, as installed: the list has folders and the person's own names; not one stat, list, read or command about a transcript
   expect(k.disk.titles).toBeUndefined()
   let list = await lines()
-  expect(list.slice(1, -1).map(l => l.trim().replace(/, (just now|\d+ \w+ ago).*$/, '').replace(/ {2,}/g, ' | ')).sort()).toEqual(['gin | working', 'gone | working', 'here | working', 'release notes | notes, working', 'vodmax | working'])
+  expect(list.slice(1, -1).map(l => l.trim().replace(/, (just now|\d+ \w+ ago).*$/, '').replace(/ {2,}/g, ' | ')).sort()).toEqual(['gin | working', 'gone | working', 'here | here', 'release notes | notes, working', 'vodmax | working'])
   expect(list.at(-1)).toMatch(/^Folder names, the names you gave your chats and times only/)
   expect(await cardOf($, 'chats titles')).toMatch(/^Titles are off: nothing of a transcript is read\./)
   expect(transcript()).toEqual([])
@@ -4188,7 +4216,7 @@ test('/pet chats titles: off by default and then nothing of a transcript is aske
   // the title, cleaned and cut to 48 columns, then the folder and the state; the person's name goes before a title; a chat with no title line, or no transcript, shows its folder
   const cut = `Fix the login bug and ${'x'.repeat(25)}…`
   expect(cut.length).toBe(48)
-  expect(list.slice(1, -1).map(l => l.trim().replace(/, (just now|\d+ \w+ ago).*$/, '').replace(/ {2,}/g, ' | ')).sort()).toEqual([`${cut} | vodmax, working`, 'gin | working', 'gone | working', 'here | working', 'release notes | notes, working'])
+  expect(list.slice(1, -1).map(l => l.trim().replace(/, (just now|\d+ \w+ ago).*$/, '').replace(/ {2,}/g, ' | ')).sort()).toEqual([`${cut} | vodmax, working`, 'gin | working', 'gone | working', 'here | here', 'release notes | notes, working'])
   expect(list.at(-1)).toMatch(/^Titles are on: the title line of your other chats' transcripts is read, nothing else/)
   // what was asked: the end of the transcripts of the other chats without a name, by their ids, with a limit of time. Never this chat's, never the named one's, never a whole file
   const tailed = ran.filter(a => a[0] === '/usr/bin/tail')

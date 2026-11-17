@@ -350,7 +350,7 @@ export default {
   'chats.ask.toast': "Hatchling：{name} 里的对话可能在等你批准",
   'chats.ask.toast.named': "Hatchling：你的对话「{name}」可能在等你批准",
   'chats.title': "你打开的对话",
-  'chats.me': "本对话",
+  'chats.me': "这里",
   'chats.state.working': "在忙",
   'chats.state.waiting': "在等你",
   'chats.state.asking': "可能在等你批准",
