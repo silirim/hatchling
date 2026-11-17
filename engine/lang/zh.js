@@ -268,7 +268,6 @@ export default {
   'card.comments.off': '点评未开：只说固定台词，不发送任何内容。/pet comments on 让小模型来写，花你的 token',
   'card.comments.on': '点评已开：模型 {model}，每句约输入 {in}、输出 {out} token，今天 {n}/{cap} 句，今天 {today} token，累计 {all}',
   'card.comments.unread': '点评已开：读不到计数',
-  'card.cost': '本次会话到目前花了 {usd}',
 
   'shop.title': 'HATCHLING 商店 · 你有 {points}',
   'shop.yours': '已拥有',

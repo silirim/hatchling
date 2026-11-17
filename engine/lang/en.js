@@ -282,7 +282,6 @@ export default {
   'card.comments.off': 'comments off: fixed lines only, nothing sent. /pet comments on lets a small model write them, on your tokens',
   'card.comments.on': 'comments on: model {model}, about {in} tokens in and {out} out a line, {n} of {cap} lines today, {today} tokens today, {all} in all',
   'card.comments.unread': 'comments on: their count could not be read',
-  'card.cost': 'this session cost {usd} so far',
 
   // the shop
   'shop.title': 'HATCHLING SHOP · you have {points}',

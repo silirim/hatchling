@@ -268,7 +268,6 @@ export default {
   'card.comments.off': 'comentários desligados: só frases fixas, nada é enviado. /pet comments on deixa um modelo pequeno escrevê-las, com seus tokens',
   'card.comments.on': 'comentários ligados: modelo {model}, uns {in} tokens de entrada e {out} de saída por frase, {n} de {cap} frases hoje, {today} tokens hoje, {all} no total',
   'card.comments.unread': 'comentários ligados: não foi possível ler a contagem',
-  'card.cost': 'esta sessão custou {usd} até agora',
 
   'shop.title': 'LOJA DO HATCHLING · você tem {points}',
   'shop.yours': 'seu',

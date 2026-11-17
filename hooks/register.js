@@ -814,7 +814,6 @@ let windowTokens = 0 // the model's context window; known after the first turn
 let ctxTokens = 0 // what the last request of the main thread was answered over
 let baseTokens = 0 // the same for the first request of the chat, or the first after a compaction: where the chat started. 0: not seen yet
 let afterCompact = false
-let costUsd = /** @type {number | undefined} */ (undefined) // what the session cost so far, as /cost
 let ticks = 0
 // the life of a calm pet. Its chances come from the pet's own seed, not from Math.random: the same pet moves the same way from a start
 const IDLE_GAP_MS = /** @type {[number, number]} */ ([8_000, 20_000]) // between two gestures: never more than one in this time
@@ -1452,7 +1451,6 @@ export function register(/** @type {import('claude-code').On} */ on) {
 
   on('session.measure', ($, e, next) => {
     windowTokens = e.context.window
-    if (e.cost) costUsd = e.cost.usd
     return next(e)
   })
 
@@ -1829,7 +1827,6 @@ export function register(/** @type {import('claude-code').On} */ on) {
         ...(c.closet.length ? [`  ${wornOf(c.closet, who.wear).length ? say('card.wears', { list: wornLine(L, c.closet, who.wear) }) : say('card.wears.none')}`] : []),
         lean,
         comments,
-        ...(costUsd === undefined ? [] : [say('card.cost', { usd: `$${costUsd.toFixed(2)}` })]),
       ].join('\n'),
     }
   })
