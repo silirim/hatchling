@@ -269,6 +269,11 @@ Skin packs in /home/you/.claude/hatchling-skins: 1 loaded, 1 left out.
 Up to 12 faults are told for one pack. `npm run skin:check <file>` tells the same ones, except a name taken by another pack of
 your folder, which only shows there.
 
+## Share a pack
+
+Packs made by others, and how to propose yours by pull request, are in [`packs/`](../packs/README.md): one file a pack,
+installed by copying it to your folder.
+
 ## Importing a Codex pet
 
 Pets made for OpenAI's Codex are shared in public galleries, and many people have one already. `npm run skin:import` turns

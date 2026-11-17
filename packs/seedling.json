@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "id": "seedling",
+  "name": "Seedling",
+  "credits": { "author": "The Hatchling authors", "license": "MIT", "source": "https://github.com/silirim/hatchling" },
+  "items": {
+    "sprout": {
+      "part": "head",
+      "name": { "en": "a sprout", "es": "un brote", "pt": "um broto", "zh": "一株嫩芽" },
+      "fallback": [{ "anchor": "head", "art": ["MM.MM", ".MMM."] }]
+    }
+  }
+}

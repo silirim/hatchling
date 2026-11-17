@@ -116,7 +116,7 @@ Use earns stars. The shop takes them for things to wear, three coats and the oth
 
 </details>
 
-The rest: [docs/pet.md](docs/pet.md).
+More: [docs/pet.md](docs/pet.md) · [community skins](packs/README.md).
 
 ## briefox
 
