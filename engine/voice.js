@@ -128,8 +128,8 @@ export const average = (t) => t.lines && t.input + t.output
 /** Where a line's figure comes from, in words: the person's own lines, or our measure with its month. @param {Tally} t @param {string} [lang] */
 export const measuredHow = (t, lang) => text(lang, average(t).measured ? 'comments.own' : 'comments.ours')
 
-/** What the pet asks once, before it ever speaks: what a yes comes to, in tokens a line and lines a day. @param {Tally} t @param {string} [lang] */
-export const question = (t, lang) => { const a = average(t); return text(lang, 'comments.ask', { in: a.input, out: a.output, cap: RULES.voiceCapDay, how: measuredHow(t, lang) }) }
+/** What the pet says once, before any comment is asked for: they are on, what a line costs in tokens and how many a day, the command that stops them. @param {Tally} t @param {string} [lang] */
+export const notice = (t, lang) => { const a = average(t); return text(lang, 'comments.notice', { in: a.input, out: a.output, cap: RULES.voiceCapDay, how: measuredHow(t, lang) }) }
 
 // How each statistic sounds when it leads and what it is like as the weak point. Three lines in its tone are in engine/lang/ (`tone.*`),
 // in the language the pet speaks: reactions, not reports. The rest of what the model reads stays in English.

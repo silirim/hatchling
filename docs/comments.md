@@ -1,10 +1,12 @@
 # Comments
 
-Off by default. As installed the pet says fixed lines only and no model is asked.
+On as installed. A small model writes one short line in the pet's character: a reaction to what just happened in the turn. Each line is a request on your own tokens, and sends what is listed below.
 
-`/pet comments on` lets a small model write one short line in the pet's character: a reaction to what just happened in the turn. `/pet comments off` goes back to the fixed lines. `/pet comments` shows your own figures.
+`/pet comments off` stops them: the pet then says fixed lines only and no model is asked. `/pet comments on` brings them back. `/pet comments` shows your own figures.
 
-The pet asks once, right after it hatches, with two buttons: `comments on` and `stay quiet`. Unanswered, comments stay off and it does not ask again.
+The pet says so once, right after it hatches, in a notice that stays in the bubble until you do something: comments are on, what a line costs, and the command that stops them. It has one button, `turn off`. No comment is asked for before that notice has been in front of you. Never in a headless run.
+
+A choice you already made stands: if you answered `stay quiet` in an earlier version, or ran `/pet comments off`, they stay off, and a pet you import keeps its own setting.
 
 ## What it costs
 

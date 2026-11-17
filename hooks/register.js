@@ -1,15 +1,15 @@
 // Hatchling for Claude Code: feeds session events to the engine and draws the pet above the prompt.
-// As installed it observes only: nothing is added to the model's context. Two levers the person turns on change that:
+// As installed it observes only: nothing is added to the model's context. One lever the person turns on changes that:
 // /pet briefox adds one sentence to the system prompt, in a section of its own (briefox/text.js; the one lever the bench showed).
 // In the code the lever keeps the name it had when it was eight lines: `style` (the preference, kept so that an earlier choice still holds), `lean` (the engine's word).
 // What the pet says is local text. A button only fills the prompt box: the person sends it, or not.
-// A third thing the person can turn on, /pet comments, spends their tokens: a small model then writes a line about the turn (engine/voice.js;
-// in the code and the store it is still the `voice`).
+// The comments spend the person's tokens: a small model writes a line about the turn (engine/voice.js; in the code and the store
+// they are still the `voice`). They are on as installed: a notice says so once, before any is asked for, and /pet comments off stops them.
 // The pet speaks English, Spanish, Portuguese or Simplified Chinese (engine/lang/): /pet lang picks, and a newborn takes the system's.
 
 import { atom, read, update } from 'claude-code'
 import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
-import { MODEL, MODEL_MAX, asModel, unavailable, tellGone, measuredHow, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, question, lastTurn, recap as recapOf, cleanRecap, RECAP_COST } from '../engine/voice.js'
+import { MODEL, MODEL_MAX, asModel, unavailable, tellGone, measuredHow, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, notice, lastTurn, recap as recapOf, cleanRecap, RECAP_COST } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page, dated, lasting } from '../engine/diary.js'
 import { marks, greeting, finished, folder, counts, listing, leftOf, WATCH, sight, seen, watched, namesOf } from '../engine/company.js'
 import { titles, TITLES } from '../engine/titles.js'
@@ -31,7 +31,7 @@ const pet = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'pet' }), nul
 // `idle` is the small gesture a calm pet is making and `idleN` its frame; `spark` the sparkles lit next to a golden coat, a bit each spot; `hush` counts the phrases that left the bubble, only to draw again.
 // `sig` and `sigAt` are the phrase last shown and when it came up: kept here so that a reload of the mod does not show again a phrase that had its time
 // `note` is a line the pet says for a while by itself, over any other line (its answer to /pet say, the line of a cuddle), `noteFix` the dim line under it, `noteLeft` the ticks it stays: then the bubble is what it was
-// `ask` is a question that holds the bubble with its buttons until it is answered: the one about the comments when `askKind` is '',
+// `ask` is a line that holds the bubble with its buttons until it is answered: the notice that the comments are on when `askKind` is '',
 // else one of the routine (engine/routine.js), `askKind` its kind and `askOpts` the answers it takes, with a comma between them.
 // `back` is when the person last did something before a pause of an hour or more: the welcome back holds the bubble until they do something again
 // `recap` is where the work got to, as the small model said it after a pause, and `recapAt` when that work was left: the line holds
@@ -39,8 +39,24 @@ const pet = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'pet' }), nul
 const ANIM0 = { n: 0, rare: -1, demo: '', sleep: false, egg: 0, love: 0, ask: '', askKind: '', askOpts: '', back: 0, note: '', noteFix: '', noteLeft: 0, skin: 0, idle: '', idleN: 0, spark: 0, hush: 0, sig: '', sigAt: 0, recap: '', recapAt: 0 }
 const NO_ASK = { ask: '', askKind: '', askOpts: '' }
 const anim = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'anim' }), ANIM0)
-const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: false, voiceAsked: false, lang: '', missing: '', chats: true, callme: '', model: '' }
+// Every change of the animation's state goes through `animate`, which counts it: the tick reads that state once and again only
+// after a change. And it wakes the ticker: a pet asleep with nothing under way ticks once a frame of its sleep (DOZE_MS), and is
+// back to TICK_MS the moment anything changes what it shows.
+// The count goes up before the write and after it: a read made while the write is under way is never taken for the new state.
+let stirs = 0, prefStirs = 0
+const animate = async (/** @type {any} */ $, /** @type {(a: typeof ANIM0) => typeof ANIM0} */ fn) => { stirs++; if (tickEvery === DOZE_MS) await wake($); try { return await update($, anim, /** @type {any} */ (fn)) } finally { stirs++ } }
+// While a tick runs, what the ticks read of the session's state is kept until the next change: a tick and its look at the other
+// chats ask for the animation and the preferences a dozen times. Kept from a tick to the next for KEEP_TICKS at most, then asked
+// again whatever the count says, and dropped when a session starts or ends: the engine empties the state at a /clear without a
+// write of ours. Outside a tick nothing is kept: every read asks the session.
+/** @typedef {{ anim?: { at: number, v: typeof ANIM0 }, prefs?: { at: number, v: any } }} Memo */
+/** @type {Memo | null} */ let memo = null
+/** @type {Memo} */ let kept = {}
+const KEEP_TICKS = 4
+const PREFS0 = { hidden: false, wear: '', species: '', born: '', style: false, seed: 0, name: '', stats: /** @type {number[]} */ ([]), personality: '', hatched: 0, asked: false, cuddles: 0, cuddled: 0, voice: true, voiceAsked: false, lang: '', missing: '', chats: true, callme: '', model: '' }
 const prefs = atom(/** @type {const} */ ({ plugin: 'hatchling', key: 'prefs' }), PREFS0)
+/** The preferences the session holds are written here and nowhere else, counted as the animation's changes are. */
+const hold0 = async (/** @type {any} */ $, /** @type {any} */ p) => { prefStirs++; try { return await update($, prefs, () => p) } finally { prefStirs++ } }
 
 const DEFAULT = 0x01000000 // the terminal's own colour
 const STATE = /** @type {Record<string, string>} */ ({ seedling: 'baby', healthy: 'adult', bloom: 'crown' }) // engine mood or stage -> drawing. The sad and ko drawings stay in the zoo, and nothing leads to them
@@ -53,10 +69,28 @@ let newborn = false // this start found no pet in the store
 const LOVE_TICKS = 5 // 2.5 s of hearts after a cuddle
 /** A line that holds the bubble by itself for `ms`, over whatever it was saying, which comes back after. */
 async function hold(/** @type {any} */ $, /** @type {string} */ say, /** @type {string} */ fix, /** @type {number} */ ms) {
-  await update($, anim, a => ({ ...a, note: say, noteFix: fix, noteLeft: Math.round(ms / TICK_MS), sleep: false }))
+  await animate($, a => ({ ...a, note: say, noteFix: fix, noteLeft: Math.round(ms / TICK_MS), sleep: false }))
 }
 const HEART = 0x2665, HEART_RED = 0xe53935
 const TICK_MS = 500
+const DOZE_TICKS = 4, DOZE_MS = DOZE_TICKS * TICK_MS // a frame of the sleep: what a pet asleep with nothing else under way ticks at
+// One ticker a process, whatever the starts of a session (a /clear, a resume, a reload): the one before is stopped, so the pet never
+// moves at twice its pace. `tickEvery` is its period now, `dozeAt` the time of the last slow tick (kept by adding, to count the ticks missed at a wake).
+/** @type {{ cancel: () => void } | null} */ let ticker = null
+let tickEvery = 0, dozeAt = 0
+function pace(/** @type {any} */ $, /** @type {number} */ ms) {
+  if (ticker && tickEvery === ms) return
+  ticker?.cancel()
+  tickEvery = ms
+  ticker = $.clock.every(ms, () => { tick($).catch(() => {}) })
+}
+/** Out of the slow ticks, at once: the count of ticks takes the ones that would have passed since the last slow one, so what is counted in ticks (a look at the other chats every 10 s) keeps its time. */
+async function wake(/** @type {any} */ $) {
+  if (tickEvery !== DOZE_MS) return
+  pace($, TICK_MS)
+  const now = await $.clock.now().catch(() => dozeAt)
+  ticks += Math.max(0, Math.min(DOZE_TICKS - 1, Math.floor((now - dozeAt) / TICK_MS)))
+}
 const GONE_SHOW_MS = 20_000 // how long the line about a pack that is gone stays
 const SKIN_MS = 20_000 // how long the row of the parts stays open after the last press
 // how coins come, said the same in the shop and when one is short
@@ -103,10 +137,19 @@ const styleNext = (/** @type {boolean} */ want) => styleLive === undefined || ct
 /** @type {boolean | undefined} */ let styleOther // whether the others put the style in; undefined: not asked since the last prompt was composed
 /** @type {import('claude-code').PromptComposeInput | undefined} */ let styleAsked // the last prompt composed: the same facts are asked again
 let styleProbing = false // true while the pet asks what the others add: where the call comes back through this hook too (the test kit), the pet then adds nothing
+/**
+ * The facts to ask a prompt with before any was composed in this chat: whole, since `next` refuses an argument that lacks one of
+ * them and the hook of the plugin asked (briefox's) would be skipped, its sentence missing from the answer. The session's model and
+ * surfaces; no tool, output style or trait, which do not bear on whether the sentence is added. Undefined when the session tells no model.
+ */
+async function composeFacts(/** @type {any} */ $) {
+  const model = await $.session.model().catch(() => undefined)
+  return model ? { model, promptModel: model, surfaces: await $.session.surfaces().catch(() => []), tools: [], outputStyle: null, traits: [] } : undefined
+}
 async function otherStyle(/** @type {any} */ $) {
   if (styleOther === undefined) {
     styleProbing = true
-    try { styleOther = (await $.prompt.compose(styleAsked)).sections.some((/** @type {any} */ s) => s.id === BRIEF_ID) } catch { styleOther = false } finally { styleProbing = false }
+    try { styleOther = (await $.prompt.compose(styleAsked ?? await composeFacts($))).sections.some((/** @type {any} */ s) => s.id === BRIEF_ID) } catch { styleOther = false } finally { styleProbing = false }
   }
   return styleOther
 }
@@ -372,8 +415,9 @@ const voiced = (/** @type {{ lang: string, stats: number[] }} */ p, /** @type {s
  * routine has started if it had not and lasts until now. Never without a person, nor under the bench.
  */
 async function touched(/** @type {any} */ $) {
+  await wake($) // the person is here: the quick ticks at once, whatever the pet was doing
   const now = personAt = await $.clock.now()
-  if ((await heldAnim($)).back) await update($, anim, a => ({ ...a, back: 0 }))
+  if ((await heldAnim($)).back) await animate($, a => ({ ...a, back: 0 }))
   if (!social || await bench($)) return
   const r = await routineGet($)
   if (r) await routineSet($, routineTouch(r, now))
@@ -381,7 +425,7 @@ async function touched(/** @type {any} */ $) {
 /** A question of the routine goes up: its words in the language, its kind and the answers its buttons give. */
 async function putQuestion(/** @type {any} */ $, /** @type {import('../engine/routine.js').Question} */ q) {
   const L = (await getPrefs($)).lang
-  await update($, anim, a => ({ ...a, ask: text(L, `ask.${q.kind}`, { time: q.time ? hhmm(q.time) : '' }), askKind: q.kind, askOpts: q.opts.join(','), sleep: false }))
+  await animate($, a => ({ ...a, ask: text(L, `ask.${q.kind}`, { time: q.time ? hhmm(q.time) : '' }), askKind: q.kind, askOpts: q.opts.join(','), sleep: false }))
 }
 /** What a button of a question shows for an answer: yes, no, later, or an hour as the clock shows it. */
 const answerLabel = (/** @type {string} */ lang, /** @type {string} */ opt) => /^\d+$/.test(opt) ? `${opt.padStart(2, '0')}:00` : text(lang, `btn.${opt}`, {}, opt)
@@ -394,19 +438,19 @@ async function answerQ(/** @type {any} */ $, /** @type {string} */ choice) {
   const a = await heldAnim($), L = (await getPrefs($)).lang, now = await $.clock.now()
   if (a.ask && !a.askKind) {
     if (choice !== 'yes' && choice !== 'no') return { line: text(L, 'answer.what', { list: 'yes, no' }), again: false }
-    await setVoice($, choice === 'yes')
+    await setVoice($, choice === 'yes') // to the notice: yes leaves the comments on, no turns them off
     return { line: text(L, choice === 'yes' ? 'toast.comments.on' : 'toast.comments.off'), again: false }
   }
   const r = await routineGet($)
   if (!r) return { line: text(L, 'routine.unkept'), again: false }
   const res = routineAnswer(r, choice, now)
   if (!res.ok) {
-    if (a.ask && !res.opts.length) await update($, anim, x => ({ ...x, ...NO_ASK })) // its time passed, or it was answered elsewhere
+    if (a.ask && !res.opts.length) await animate($, x => ({ ...x, ...NO_ASK })) // its time passed, or it was answered elsewhere
     return { line: text(L, res.reply, { list: res.opts.join(', ') }), again: false }
   }
   if (!(await routineSet($, res.r))) return { line: text(L, 'routine.unkept'), again: false }
   if (res.ask) { await putQuestion($, res.ask); return { line: `${text(L, `ask.${res.ask.kind}`)} ${text(L, 'ask.how', { list: res.ask.opts.join('|') })}`, again: true } }
-  if (a.ask) await update($, anim, x => ({ ...x, ...NO_ASK }))
+  if (a.ask) await animate($, x => ({ ...x, ...NO_ASK }))
   if (res.time) warned = ''
   return { line: text(L, res.reply, { time: res.time ? hhmm(res.time) : '' }), again: false }
 }
@@ -430,10 +474,10 @@ async function company(/** @type {any} */ $) {
   if (!r) return
   { const u = routineUsual(r, now); usualStart = u.days >= ROUTINE.usualDays ? u.start : undefined } // a habit from three days on
   const seen = Math.max(r.seen, personAt)
-  if (a.back && r.seen > a.back && r.seen > personAt) await update($, anim, x => ({ ...x, back: 0 })) // back, in another chat
-  else if (!a.back && backKind(seen, now)) await update($, anim, x => ({ ...x, back: seen, sleep: false }))
+  if (a.back && r.seen > a.back && r.seen > personAt) await animate($, x => ({ ...x, back: 0 })) // back, in another chat
+  else if (!a.back && backKind(seen, now)) await animate($, x => ({ ...x, back: seen, sleep: false }))
   // a question that is up here and no longer in the store: answered in another chat, or its 30 minutes passed
-  if (a.ask && a.askKind && (r.q?.kind !== a.askKind || now - r.q.at >= ROUTINE.questionMs || r.q.at > now)) await update($, anim, x => ({ ...x, ...NO_ASK }))
+  if (a.ask && a.askKind && (r.q?.kind !== a.askKind || now - r.q.at >= ROUTINE.questionMs || r.q.at > now)) await animate($, x => ({ ...x, ...NO_ASK }))
   const w = warnStage(r.until, now), key = `${r.until}:${w}`, line = w ? voiced(p, `until.${w}`, { time: hhmm(r.until), min: String(minsLeft(r.until, now)) }) : ''
   if (w && warned !== key) { warned = key; await hold($, line, '', RULES.warnShowMs) }
   const here = personAt > 0 && now - personAt <= RULES.peerActiveMs, held = (await heldAnim($)).noteLeft > 0 && !(w && warned === key)
@@ -453,7 +497,7 @@ async function untilCmd(/** @type {any} */ $, /** @type {string} */ typed) {
   if (!res.ok) return text(L, res.reply, { time: res.time ? hhmm(res.time) : '' })
   if (!(await routineSet($, res.r))) return text(L, 'routine.unkept')
   const a = await heldAnim($)
-  if (a.ask && (a.askKind === 'finish' || a.askKind === 'usual')) await update($, anim, x => ({ ...x, ...NO_ASK })) // the question about it is answered
+  if (a.ask && (a.askKind === 'finish' || a.askKind === 'usual')) await animate($, x => ({ ...x, ...NO_ASK })) // the question about it is answered
   warned = ''
   return text(L, res.reply, { time: res.time ? hhmm(res.time) : '' })
 }
@@ -463,7 +507,7 @@ async function routineCmd(/** @type {any} */ $, /** @type {string | undefined} *
   if (!r) return text(L, 'routine.unkept')
   if (arg === 'off' || arg === 'on' || arg === 'clear') {
     if (!(await routineSet($, arg === 'clear' ? routineTouch(routineCleared(r), now) : routineSwitched(r, arg === 'off')))) return text(L, 'routine.unkept')
-    if (arg !== 'on' && (await heldAnim($)).askKind) await update($, anim, x => ({ ...x, ...NO_ASK }))
+    if (arg !== 'on' && (await heldAnim($)).askKind) await animate($, x => ({ ...x, ...NO_ASK }))
     if (arg === 'clear') { warned = ''; usualStart = undefined }
     return text(L, arg === 'clear' ? 'routine.cleared' : `routine.${arg}`, { max: ROUTINE.questionsDay })
   }
@@ -594,7 +638,7 @@ const packs = (/** @type {any} */ $, again = false) => packsRead && !again ? pac
 async function settle(/** @type {any} */ $) {
   const { raw, lost, ...p } = await storedPrefs($)
   if (lost || !raw) return
-  await update($, prefs, () => p)
+  await hold0($, p)
   await fill($, p, raw)
 }
 let farewell = '', farewellSaid = '' // the animal of a pack that is gone: said once, gently, by the tick
@@ -636,7 +680,7 @@ async function peers(/** @type {any} */ $) {
   if (!social || !cwd) return
   const p = await getPrefs($), all = p.chats ? await known($, now) : {}, id = await myId($), n = counts(all, id, now)
   const need = n.waiting + n.asking, said = need ? count1(p.lang, 'chats.need', need) : '' // one short count: the chats that need the person
-  if (said !== board) { board = said; await update($, anim, a => ({ ...a, hush: a.hush + 1 })) } // drawn again with the new count
+  if (said !== board) { board = said; await animate($, a => ({ ...a, hush: a.hush + 1 })) } // drawn again with the new count
   if (!p.chats || now - lastOwn > RULES.peerActiveMs) return
   const r = finished(all, peersSeen, { id, cwd, since: openedAt, now, told: peersTold, names: namesOf(await looked($).catch(() => null)) })
   // a turn that ended while another piece of news is still fresh is not lost: it is looked at again, and told when the wait is over
@@ -677,35 +721,46 @@ let turnSaid = '' // the end of what the assistant wrote last in the running tur
 let speaking = false // one call at a time
 /** @type {{ text: string, why: string } | null} */ let heldLine = null // a line that came while the person was typing: shown when the box is empty
 const typing = async (/** @type {any} */ $) => !!String((await $.prompt.read().catch(() => null))?.text ?? '').trim()
-/** Whether the comments are the person's choice here: chosen, with a person at the prompt, and never under the bench. */
+/** Whether the comments are on here: on as installed and until the person turns them off, with a person at the prompt, and never under the bench. */
 const voiceChosen = async (/** @type {any} */ $) => social && !(await bench($)) && (await getPrefs($)).voice
-/** Whether a line may be asked for now: chosen, and the band is shown. A hidden band shows no line, so none is paid for. */
-const voiceOn = async (/** @type {any} */ $) => (await voiceChosen($)) && !(await getPrefs($)).hidden
+/**
+ * Whether a line may be asked for now: on, the person was told so (`voiceAsked`: the notice came up, or they chose with
+ * /pet comments), and the band is shown. Nothing is sent before the person has been told; a hidden band shows no line, so none is paid for.
+ */
+const voiceOn = async (/** @type {any} */ $) => { const p = await getPrefs($); return (await voiceChosen($)) && p.voiceAsked && !p.hidden }
 /** The count of lines and cost in the store, whole; null when the store cannot be read (then nothing is asked: the cap could not be held). */
 async function voiceTally(/** @type {any} */ $) {
   const none = {}, raw = await storeGet($, 'voice').catch(() => none)
   return raw === none ? null : tally(raw, await $.clock.now())
 }
 /**
- * The voice is the person's choice, asked for once in a pet's life: right after the hatching, or at the first start of this version for
- * a pet born before. The question holds the bubble, with its two buttons, until it is answered or the next prompt is sent; it is
- * marked as asked when it comes up, so no later chat asks again, and unanswered the voice stays off (/pet comments on is always there).
- * Never under the bench nor without a person at the prompt, and not for who already turned the voice on. A chat whose greeting
- * offers the old /buddy leaves the question to the next start.
+ * The comments are on as installed, and the person is told so once in a pet's life, before any is asked for: a notice right after
+ * the hatching, or at the first start of this version for a pet that was never asked. It waits under the line of the birth, then
+ * holds the bubble, with its one button (turn off), until the person does something: the button, or the next prompt.
+ * Never under the bench nor without a person at the prompt, and not for who already chose (`voiceAsked`): that choice stands.
  */
 async function askVoice(/** @type {any} */ $) {
   if (!social || await bench($)) return
   const p = await getPrefs($)
-  if (p.voiceAsked || p.hidden || (await storedPrefs($)).lost) return // nor while the store cannot be read: the answer could not be kept; with the band hidden nobody would see the question: it is asked when the band is back, not marked as asked
-  await setPrefs($, { voiceAsked: true })
-  if (p.voice) return
+  if (p.voiceAsked || p.hidden || (await storedPrefs($)).lost) return // nor while the store cannot be read: that it was said could not be kept; with the band hidden nobody would see the notice: it comes when the band is back
   const t = (await voiceTally($)) ?? tally(undefined, await $.clock.now())
-  await update($, anim, a => ({ ...a, ask: question(t, p.lang) }))
+  await animate($, a => ({ ...a, ask: notice(t, p.lang) }))
+  await toldVoice($) // in sight at once, unless the line of the birth is over it
 }
-/** The answer, from a button of the question or from /pet comments on|off: kept in the preferences, and the question goes. */
+/**
+ * The notice is in sight (nothing holds the bubble over it): from now the person was told, which is kept, so no later chat says it
+ * again and the comments may be asked for. Said in a toast too, for a band with no room for the bubble. Looked at every tick.
+ */
+async function toldVoice(/** @type {any} */ $) {
+  const a = await heldAnim($), p = await getPrefs($)
+  if (!a.ask || a.askKind || a.egg > 0 || a.demo || (a.noteLeft > 0 && a.note) || p.voiceAsked || p.hidden) return
+  if (!(await setPrefs($, { voice: p.voice, voiceAsked: true }))) return // both: once told, what the store has is the choice, and an earlier version wrote `voice: false` at every birth
+  await $.ui.toast(text(p.lang, 'toast.comments.notice', { notice: a.ask })).catch(() => {})
+}
+/** The choice, from the button of the notice or from /pet comments on|off: kept in the preferences, and the notice goes. */
 async function setVoice(/** @type {any} */ $, /** @type {boolean} */ on) {
   await setPrefs($, { voice: on, voiceAsked: true })
-  if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ...NO_ASK }))
+  if ((await heldAnim($)).ask) await animate($, a => ({ ...a, ...NO_ASK }))
 }
 async function answerVoice(/** @type {any} */ $, /** @type {boolean} */ on) {
   await setVoice($, on)
@@ -763,7 +818,7 @@ async function recapDrop(/** @type {any} */ $) {
   recapTimer?.cancel()
   recapTimer = null
   pauseAt = 0
-  if ((await heldAnim($)).recap) await update($, anim, a => ({ ...a, recap: '', recapAt: 0 }))
+  if ((await heldAnim($)).recap) await animate($, a => ({ ...a, recap: '', recapAt: 0 }))
 }
 /** The pause the recap was asked for goes in this chat's mark, a time and nothing else: a reload of the mod does not ask again. */
 async function recapMarked(/** @type {any} */ $, /** @type {number} */ at) {
@@ -787,7 +842,7 @@ async function recapNow(/** @type {any} */ $) {
   if (r.asked) await recapMarked($, at)
   if (!r.line || pauseAt !== at || turnAt) return // a prompt was sent meanwhile: the line is of no use any more
   lastActive = await $.clock.now()
-  await update($, anim, a => ({ ...a, recap: r.line, recapAt: at, sleep: false }))
+  await animate($, a => ({ ...a, recap: r.line, recapAt: at, sleep: false }))
 }
 /**
  * At a start: a chat that has a turn behind it (its mark says when) gets its recap now when the pause is already over, else when
@@ -815,6 +870,7 @@ let ctxTokens = 0 // what the last request of the main thread was answered over
 let baseTokens = 0 // the same for the first request of the chat, or the first after a compaction: where the chat started. 0: not seen yet
 let afterCompact = false
 let ticks = 0
+/** @type {{ at: number, stirs: number } | null} */ let dozing = null // set by a tick that found the pet asleep with nothing under way: `lastActive` and the count of changes as they were then; while it holds, the ticks are slow
 // the life of a calm pet. Its chances come from the pet's own seed, not from Math.random: the same pet moves the same way from a start
 const IDLE_GAP_MS = /** @type {[number, number]} */ ([8_000, 20_000]) // between two gestures: never more than one in this time
 const SPARK_GAP_MS = /** @type {[number, number]} */ ([5_000, 13_000]) // between two sparkles of a golden coat
@@ -1000,11 +1056,21 @@ const hearts = (/** @type {number} */ n) => '♥'.repeat(n).padEnd(5, '♡') // 
 /** The chat's engine state, made whole (engine.js `whole`); null when the session holds none. */
 const heldPet = async (/** @type {any} */ $) => { const held = await read($, pet); return held ? whole(held) : null }
 /** The animation's state: a field an earlier version did not have reads as at rest. */
-const heldAnim = async (/** @type {any} */ $) => { const a = /** @type {any} */ (await read($, anim)); return /** @type {typeof ANIM0} */ (Object.fromEntries(Object.entries(ANIM0).map(([k, v]) => [k, typeof a?.[k] === typeof v ? a[k] : v]))) }
+const heldAnim = async (/** @type {any} */ $) => {
+  if (memo?.anim?.at === stirs) return memo.anim.v
+  const at = stirs, a = /** @type {any} */ (await read($, anim)), v = /** @type {typeof ANIM0} */ (Object.fromEntries(Object.entries(ANIM0).map(([k, v]) => [k, typeof a?.[k] === typeof v ? a[k] : v])))
+  if (memo && at === stirs) memo.anim = { at, v }
+  return v
+}
 /** The preferences the session holds, when every field of this version is there and sound; else null, and the caller takes them from the store (storedPrefs makes those whole). */
 async function heldPrefs(/** @type {any} */ $) {
   await packs($)
-  const now = /** @type {any} */ (await read($, prefs))
+  if (memo?.prefs?.at === prefStirs) return heldSound(memo.prefs.v)
+  const at = prefStirs, now = /** @type {any} */ (await read($, prefs))
+  if (memo && at === prefStirs) memo.prefs = { at, v: now }
+  return heldSound(now)
+}
+function heldSound(/** @type {any} */ now) {
   const sound = now && Object.entries(PREFS0).every(([k, v]) => Array.isArray(v) ? Array.isArray(now[k]) : typeof now[k] === typeof v)
   return sound && isAnimal(now.species) && isAnimal(now.born) && now.seed && asStats(now.stats) ? /** @type {typeof PREFS0} */ (now) : null
 }
@@ -1016,7 +1082,7 @@ async function feed(/** @type {any} */ $, /** @type {any} */ e) {
   if (e.type !== 'peer') lastOwn = lastActive
   cur = reduce(cur, { ...e, t: lastActive })
   await update($, pet, () => cur)
-  if ((await heldAnim($)).sleep) await update($, anim, a => ({ ...a, sleep: false }))
+  if ((await heldAnim($)).sleep) await animate($, a => ({ ...a, sleep: false }))
 }
 /**
  * The preferences, the only way to read them. $.state is the session's: after /clear it reads as the initial again while this module
@@ -1029,7 +1095,7 @@ async function getPrefs(/** @type {any} */ $) {
   const { raw, lost, ...p } = await storedPrefs($)
   if (lost) return p
   if (!raw) newborn = true
-  await update($, prefs, () => p)
+  await hold0($, p)
   await fill($, p, raw)
   return p
 }
@@ -1038,6 +1104,12 @@ async function getPrefs(/** @type {any} */ $) {
 // in another chat. Earlier versions kept them all in one object under `prefs`, written whole at every change: it is still read, for
 // what has no key of its own yet, and never written again, so a chat still running such a version cannot undo a choice made here.
 const prefKey = (/** @type {string} */ name) => `pref.${name}`
+// Written beside every preference a chat writes, with a value never written before: what the other chats look at every 10 s
+const PREFS_REV = 'prefs.rev', PULL_ALL = 6
+/** @type {unknown} */ let prefsRev
+let pulls = 0
+let revs = 0
+const revved = async (/** @type {any} */ $) => storeSet($, PREFS_REV, `${await myId($)}:${await $.clock.now().catch(() => 0)}:${++revs}`).catch(() => {})
 const BORN = ['species', 'born', 'missing', 'seed', 'name', 'stats', 'lang'] // what makes the pet this pet: a store without one of them gets it at the first read
 /** Writes what the store lacks and nothing else: the fields a pet is born with, or all of them when the store holds no preference at all. */
 async function fill(/** @type {any} */ $, /** @type {Record<string, unknown>} */ p, /** @type {any} */ raw) {
@@ -1074,7 +1146,7 @@ async function storedPrefs(/** @type {any} */ $) {
   const cuddles = Math.max(0, Math.floor(Number(raw?.cuddles) || 0)), cuddled = Number(raw?.cuddled) || 0
   // the language: the one chosen; a newborn takes the system's when it is one of ours (LC_ALL before LANG); a pet born before the languages keeps English
   const lang = asLang(raw?.lang) ?? (raw ? 'en' : fromLocale(await $.env.get('LC_ALL').catch(() => undefined), await $.env.get('LANG').catch(() => undefined)))
-  return { raw, lost, ...who, hidden: !!raw?.hidden, wear: String(raw?.wear ?? ''), species: /** @type {string} */ (born), born: /** @type {string} */ (isAnimal(raw?.born) ? raw.born : born), style: !!raw?.style, cuddles, cuddled, voice: !!raw?.voice, voiceAsked: !!raw?.voiceAsked, model: asModel(raw?.model), lang, chats: raw?.chats !== false, missing: back ? '' : gone || (typeof raw?.missing === 'string' ? raw.missing : '') }
+  return { raw, lost, ...who, hidden: !!raw?.hidden, wear: String(raw?.wear ?? ''), species: /** @type {string} */ (born), born: /** @type {string} */ (isAnimal(raw?.born) ? raw.born : born), style: !!raw?.style, cuddles, cuddled, voice: raw?.voiceAsked ? !!raw.voice : true, voiceAsked: !!raw?.voiceAsked, model: asModel(raw?.model), lang, chats: raw?.chats !== false, missing: back ? '' : gone || (typeof raw?.missing === 'string' ? raw.missing : '') }
 }
 /**
  * Changes the preferences and keeps them for the next session. Only the fields of `patch` are written, each under its own key: every
@@ -1090,9 +1162,10 @@ async function setPrefs(/** @type {any} */ $, /** @type {Partial<typeof PREFS0>}
   // the choice, as ever: each choice has a key of its own, so nothing else is written over
   if (lost && !(await heldPrefs($))) return false
   const p = { ...(raw ? stored : now), ...patch } // an empty or unreadable store: this session's are the ones to show
-  await update($, prefs, () => p)
+  await hold0($, p)
   if (!raw && !lost) await fill($, p, raw)
   for (const [name, value] of Object.entries(patch)) await storeSet($, prefKey(name), value).catch(() => {})
+  await revved($)
   // the diet is gone: a choice kept for it by an earlier version is read by nobody, and leaves the store at the first write
   if (!dietDropped && !(await bench($))) { dietDropped = true; await $.store.delete(prefKey('diet')).catch(() => {}) }
   return true
@@ -1115,7 +1188,7 @@ async function cuddle(/** @type {any} */ $) {
   const p = await getPrefs($), t = (await voiceOn($)) ? await voiceTally($) : null
   const capped = !!t && due(t, 'cuddle', now) === 'cap'
   const say = capped ? voicedAs(p.lang, 'cuddle.cap', STATS.indexOf(speaker(p.stats, n))) : called(cuddleLine(speaker(p.stats, n), n, p.lang), p.callme, p.lang, n)
-  await update($, anim, a => ({ ...a, love: LOVE_TICKS }))
+  await animate($, a => ({ ...a, love: LOVE_TICKS }))
   await hold($, say, '', RULES.cuddleShowMs)
   if (!capped) speak($, 'cuddle', turnInfo).catch(() => {}) // not awaited: the fixed line is on screen at once, the voice's takes its place if it comes
   return { name: p.name, n, coins, say, lang: p.lang }
@@ -1138,7 +1211,7 @@ function wornLine(/** @type {string} */ lang, /** @type {string[]} */ closet, /*
     .map(part => { const item = worn.find(i => i.slot === part); return text(lang, 'wears.part', { slot: text(lang, `part.${part}`), item: item ? itemName(lang, item) : bare(lang, part) }) }).join(text(lang, 'sep'))
 }
 /** The skin button opens the row of the parts, one button each; `done`, or a while without a press, closes it. */
-async function skin(/** @type {any} */ $, open = true) { await update($, anim, a => ({ ...a, skin: open ? Math.round(SKIN_MS / TICK_MS) : 0 })) }
+async function skin(/** @type {any} */ $, open = true) { await animate($, a => ({ ...a, skin: open ? Math.round(SKIN_MS / TICK_MS) : 0 })) }
 /**
  * A part's button: the next thing owned for that part, after the last one nothing. The other parts stay as the store has them now:
  * what is on and what is owned are read again first, so a press here never takes off what another chat put on meanwhile.
@@ -1183,11 +1256,19 @@ async function share(/** @type {any} */ $, /** @type {boolean} */ write) {
   await update($, pet, () => cur)
 }
 /** The choices made in another chat (lean above all) reach this one: the session's copy is brought up to the store's. */
-async function pullPrefs(/** @type {any} */ $) {
+async function pullPrefs(/** @type {any} */ $, timed = false) {
+  // on the timer: one key says whether any chat of this version wrote a preference since the last look, and only then are they all
+  // read. Every PULL_ALL looks they are read all the same, for a chat of an earlier version, which wrote no such key. A command and a
+  // prompt read them all, always.
+  if (timed) {
+    const rev = await storeGet($, PREFS_REV).catch(() => prefsRev)
+    if (rev === prefsRev && ++pulls % PULL_ALL) return
+    prefsRev = rev
+  }
   const now = await heldPrefs($)
   const { raw, lost, ...p } = await storedPrefs($)
   if (lost || !now || !isAnimal(raw?.species) || raw.seed !== p.seed || JSON.stringify(p) === JSON.stringify(now)) return // nothing whole to compare
-  await update($, prefs, () => p)
+  await hold0($, p)
   if (p.style !== now.style) await feedLean($)
 }
 
@@ -1223,12 +1304,14 @@ async function moveIn(/** @type {any} */ $, /** @type {import('../engine/move.js
   if (!(await set('pet', m.pet))) return false // nothing was changed
   const wrote = [await set('diary', m.diary)]
   if (m.routine) wrote.push(await set('routine', routineOf(m.routine))) // what it learned of the person's days moves in with it; a file of before the routine leaves what is here
-  for (const name of Object.keys(PREFS0)) wrote.push(await set(prefKey(name), name === 'missing' ? '' : /** @type {Record<string, unknown>} */ (m.prefs)[name]))
+  // the comments move in as they were: off in the file stays off here, with no notice (it counts as a choice made)
+  for (const name of Object.keys(PREFS0)) wrote.push(await set(prefKey(name), name === 'missing' ? '' : name === 'voiceAsked' ? m.prefs.voiceAsked || !m.prefs.voice : /** @type {Record<string, unknown>} */ (m.prefs)[name]))
+  await revved($)
   cur = adopt(cur, m.pet, m.pet)
   await update($, pet, () => cur)
   const { raw, lost, ...p } = await storedPrefs($)
-  if (!lost) await update($, prefs, () => p)
-  if (!lost && p.voiceAsked && (await heldAnim($)).ask) await update($, anim, a => ({ ...a, ...NO_ASK })) // the question about the comments was answered where the pet comes from: the choice that moved in stands
+  if (!lost) await hold0($, p)
+  if (!lost && p.voiceAsked && (await heldAnim($)).ask) await animate($, a => ({ ...a, ...NO_ASK })) // the notice was seen, or the choice made, where the pet comes from: what moved in stands
   await founding($)
   await feedLean($)
   return wrote.every(Boolean)
@@ -1270,28 +1353,55 @@ async function founding(/** @type {any} */ $) {
   if (!said.includes('none') && !said.includes('nohead') && !wornOf(closet, p.wear).some(id => partOf(id) === 'head')) await setPrefs($, { wear: putOn(closet, p.wear, EGGSHELL.id) })
 }
 
+/** Every PEER_TICKS: the other chats, the reminders, the routine, the preferences another chat changed, the shared pet, a comment during a long turn. */
+async function round(/** @type {any} */ $) {
+  watch($).catch(() => {}); await peers($).catch(() => {}); await remind($).catch(() => {}); await company($).catch(() => {}); await pullPrefs($, true).catch(() => {}); await share($, false).catch(() => {}); midTurn($).catch(() => {}) // the comment is not awaited: the drawing goes on
+}
 /** Runs the animation: frames while something moves, a rare blink when calm, sleep after 5 idle minutes, a redraw when a mood times out. */
 async function tick(/** @type {any} */ $) {
+  if (ticks % KEEP_TICKS === 0 || tickEvery === DOZE_MS) kept = {}
+  memo = kept
+  try { await ticked($) } finally { memo = null }
+}
+async function ticked(/** @type {any} */ $) {
   if (!cur) return
+  if (tickEvery === DOZE_MS) {
+    // a slow tick. Asleep, and nothing else under way since a tick last looked (no line held, nothing counting down, no question,
+    // nobody back): the next frame of its sleep, and every 10 s the sign of life and the look at the other chats. Nothing else is asked
+    if (dozing && dozing.at === lastActive && dozing.stirs === stirs && !asked && !heldLine && !farewell && !demoQueue.length && !bubbleUntil) {
+      ticks += DOZE_TICKS; dozeAt += DOZE_MS
+      stirs++
+      await update($, anim, a => ({ ...a, n: a.n + 1, rare: -1 })).finally(() => { stirs++ }) // not through `animate`: its own frame does not wake it
+      if (dozing) dozing.stirs = stirs
+      if (ticks % PEER_TICKS === 0) { await beat($).catch(() => {}); await round($) }
+      return
+    }
+    await wake($) // something is under way: the quick ticks again, from this one
+  }
+  dozing = null
   ticks++
   if (asked || ticks % 10 === 0) await beat($).catch(() => {}) // looked at every 5 s, and at every tick while a call waits for leave
   if (heldLine && !(await typing($))) { const line = heldLine; heldLine = null; await feed($, { type: 'voice', ...line }) }
-  const hatching = await heldAnim($)
+  // the animation's state, read once a tick and again only after something changed it
+  let seen = await heldAnim($), seenAt = stirs
+  const anew = async () => { if (stirs !== seenAt) { seenAt = stirs; seen = await heldAnim($) } return seen }
+  const hatching = seen
   if (hatching.egg > 0 && !hatching.demo && !demoQueue.length) {
-    await update($, anim, a => ({ ...a, n: a.n + 1, egg: a.egg - 1 }))
-    if (hatching.egg === 1) { await born($).catch(() => {}); await askVoice($).catch(() => {}) } // hatched: it says who it is, and then asks whether it may speak (the question waits under the line)
+    await animate($, a => ({ ...a, n: a.n + 1, egg: a.egg - 1 }))
+    if (hatching.egg === 1) { await born($).catch(() => {}); await askVoice($).catch(() => {}) } // hatched: it says who it is, and then that the comments are on (the notice waits under the line)
     return
   }
+  if (hatching.ask && !hatching.askKind) await toldVoice($).catch(() => {})
   if (farewell && !hatching.noteLeft) { // its pack is gone: it is the animal it was born as again, and says so once, with no blame
     const p = await getPrefs($), was = farewell
     farewell = ''; farewellSaid = was
     await hold($, text(p.lang, 'animal.gone', { animal: animalName(p.lang, p.species) }), text(p.lang, 'animal.gone.fix'), GONE_SHOW_MS)
   }
-  if (hatching.love > 0) await update($, anim, a => ({ ...a, love: a.love - 1 }))
-  if (hatching.skin > 0) await update($, anim, a => ({ ...a, skin: Math.max(0, a.skin - 1) }))
-  if (hatching.noteLeft > 0) await update($, anim, a => ({ ...a, noteLeft: a.noteLeft - 1, ...(a.noteLeft === 1 ? { note: '', noteFix: '' } : null) }))
-  if (ticks % PEER_TICKS === 0) { watch($).catch(() => {}); await peers($).catch(() => {}); await remind($).catch(() => {}); await company($).catch(() => {}); await pullPrefs($).catch(() => {}); await share($, false).catch(() => {}); midTurn($).catch(() => {}) } // the comment is not awaited: the drawing goes on
-  const shown = (await heldAnim($)).demo
+  if (hatching.love > 0) await animate($, a => ({ ...a, love: a.love - 1 }))
+  if (hatching.skin > 0) await animate($, a => ({ ...a, skin: Math.max(0, a.skin - 1) }))
+  if (hatching.noteLeft > 0) await animate($, a => ({ ...a, noteLeft: a.noteLeft - 1, ...(a.noteLeft === 1 ? { note: '', noteFix: '' } : null) }))
+  if (ticks % PEER_TICKS === 0) await round($)
+  const shown = (await anew()).demo
   if (demoQueue.length || shown) {
     // each mood gets its whole 5 s, counted from when it comes up; the egg goes through its phases in that time, as at a birth
     if (demoLeft <= 0) demoLeft = DEMO_TICKS
@@ -1299,52 +1409,56 @@ async function tick(/** @type {any} */ $) {
     demoLeft--
     const egg = demo === 'egg' ? Math.ceil((demoLeft + 1) * EGG_TICKS / DEMO_TICKS) - 1 : 0
     if (!demo) demoLeft = 0
-    await update($, anim, a => ({ ...a, n: a.n + 1, rare: -1, demo, egg }))
+    await animate($, a => ({ ...a, n: a.n + 1, rare: -1, demo, egg }))
     return
   }
   const now = await $.clock.now()
-  { const kept = await heldAnim($); if (kept.sig !== bubbleSig || kept.sigAt !== bubbleAt) await update($, anim, a => ({ ...a, sig: bubbleSig, sigAt: bubbleAt })) } // what the drawing noted, kept for a reload
-  if (bubbleUntil && now >= bubbleUntil) { bubbleUntil = 0; await update($, anim, a => ({ ...a, hush: a.hush + 1 })) } // the phrase had its time: drawn again without it
-  const a0 = await heldAnim($)
+  { const kept = await anew(); if (kept.sig !== bubbleSig || kept.sigAt !== bubbleAt) await animate($, a => ({ ...a, sig: bubbleSig, sigAt: bubbleAt })) } // what the drawing noted, kept for a reload
+  if (bubbleUntil && now >= bubbleUntil) { bubbleUntil = 0; await animate($, a => ({ ...a, hush: a.hush + 1 })) } // the phrase had its time: drawn again without it
+  const a0 = await anew()
   if (now - lastActive > SLEEP_MS) {
-    if (!a0.sleep || ticks % 4 === 0) await update($, anim, a => ({ ...a, n: a.n + 1, rare: -1, sleep: true, idle: '', idleN: 0, spark: 0 }))
+    const still = stirs === seenAt && a0.sleep && !a0.egg && !a0.love && !a0.skin && !a0.noteLeft && !a0.demo && !(a0.ask && !a0.askKind) // nothing changed it while this tick ran, and nothing in it counts down or waits to be marked
+    if (!a0.sleep || ticks % DOZE_TICKS === 0) await animate($, a => ({ ...a, n: a.n + 1, rare: -1, sleep: true, idle: '', idleN: 0, spark: 0 }))
+    // asleep with nothing under way, on a frame of the sleep: from here the slow ticks, each on a frame
+    if (still && ticks % DOZE_TICKS === 0) { dozing = { at: lastActive, stirs }; dozeAt = now; pace($, DOZE_MS) }
     return
   }
   const v = view(cur, now), p = await getPrefs($)
   const { st, worn } = drawn(v, a0, p)
   if (!rng) rng = p.seed | 0 || 1
   // a golden coat sparkles now and then: one or two pixels next to the body, lit for a second
-  if (a0.spark) { if (--sparkLeft <= 0 || !worn.includes(GOLDEN.id)) await update($, anim, a => ({ ...a, spark: 0 })) }
+  if (a0.spark) { if (--sparkLeft <= 0 || !worn.includes(GOLDEN.id)) await animate($, a => ({ ...a, spark: 0 })) }
   else if (worn.includes(GOLDEN.id)) {
     if (!sparkAt) sparkAt = now + between(SPARK_GAP_MS)
-    else if (now >= sparkAt) { const spark = 1 << Math.floor(rnd() * 4) | (rnd() < 0.4 ? 1 << Math.floor(rnd() * 4) : 0); sparkLeft = SPARK_TICKS; sparkAt = now + between(SPARK_GAP_MS); await update($, anim, a => ({ ...a, spark })) }
+    else if (now >= sparkAt) { const spark = 1 << Math.floor(rnd() * 4) | (rnd() < 0.4 ? 1 << Math.floor(rnd() * 4) : 0); sparkLeft = SPARK_TICKS; sparkAt = now + between(SPARK_GAP_MS); await animate($, a => ({ ...a, spark })) }
   }
   if (a0.idle) { // a gesture under way: its next frame, and after the last one the pet is still again for a while
     const frames = st.idle?.[a0.idle]?.frames.length ?? 0
-    if (a0.idleN + 1 >= frames) { idleAt = now + between(IDLE_GAP_MS); await update($, anim, a => ({ ...a, idle: '', idleN: 0 })) }
-    else await update($, anim, a => ({ ...a, idleN: a.idleN + 1 }))
+    if (a0.idleN + 1 >= frames) { idleAt = now + between(IDLE_GAP_MS); await animate($, a => ({ ...a, idle: '', idleN: 0 })) }
+    else await animate($, a => ({ ...a, idleN: a.idleN + 1 }))
     lastMood = v.mood
     return
   }
   const moving = v.animate && st.frames.length > 1
-  if (moving) await update($, anim, a => ({ ...a, n: a.n + 1, rare: -1 }))
-  else if (rareShown) { rareShown = false; await update($, anim, a => ({ ...a, rare: -1 })) }
+  if (moving) await animate($, a => ({ ...a, n: a.n + 1, rare: -1 }))
+  else if (rareShown) { rareShown = false; await animate($, a => ({ ...a, rare: -1 })) }
   else if (ticks % 12 === 0 && st.rare.length && rnd() < 0.5) {
     rareShown = true
-    await update($, anim, a => ({ ...a, rare: 0 }))
-  } else if (v.mood !== lastMood) await update($, anim, a => ({ ...a, n: a.n + 1, rare: -1 }))
+    await animate($, a => ({ ...a, rare: 0 }))
+  } else if (v.mood !== lastMood) await animate($, a => ({ ...a, n: a.n + 1, rare: -1 }))
   else if (st.idle && !bubbleOpen && !a0.skin && !a0.love) {
     // calm, with nothing in the bubble: now and then a small gesture, picked at random among the ones this body has. Never while a
     // phrase is up, and never sooner than IDLE_GAP_MS after the last. (Whether the terminal has the focus cannot be known from a mod.)
     const names = Object.keys(st.idle)
     if (!idleAt) idleAt = now + between(IDLE_GAP_MS)
-    else if (now >= idleAt && names.length) { const idle = /** @type {string} */ (names[Math.floor(rnd() * names.length)]); await update($, anim, a => ({ ...a, idle, idleN: 0, rare: -1 })) }
+    else if (now >= idleAt && names.length) { const idle = /** @type {string} */ (names[Math.floor(rnd() * names.length)]); await animate($, a => ({ ...a, idle, idleN: 0, rare: -1 })) }
   }
   lastMood = v.mood
 }
 
 export function register(/** @type {import('claude-code').On} */ on) {
   on('session.start', async ($, e, next) => {
+    kept = {}
     social = e.isInteractive
     cwd = e.cwd
     await packs($, true) // before anything reads the pet: its animal may be one of a pack
@@ -1360,14 +1474,15 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (fresh) { warned = ''; await touched($).catch(() => {}) } // who opens a chat is here: the day of the routine starts
     if (fresh && social) remindAt = (await $.clock.now()) + RULES.remindStartMs // the reminders, once the greeting had its time
     else openedAt = await $.clock.now()
-    if (fresh && newborn && social) await update($, anim, a => ({ ...a, egg: EGG_TICKS })) // the first start ever: it hatches before the greeting
+    if (fresh && newborn && social) await animate($, a => ({ ...a, egg: EGG_TICKS })) // the first start ever: it hatches before the greeting
     newborn = false
-    if (!(await heldAnim($)).egg) await askVoice($).catch(() => {}) // a pet born before this version is asked once; a newborn after it hatched
+    if (!(await heldAnim($)).egg) await askVoice($).catch(() => {}) // a pet never told is told once; a newborn after it hatched
     await recapResume($, fresh).catch(() => {})
     const rows = await $.config.list().catch(() => [])
     light = String(rows.find(r => r.key === 'theme')?.value ?? '').includes('light')
     await $.command.register({ name: 'pet', description: 'Hatchling: show the pet card. Also: /pet briefox <on|off> (one sentence in the system prompt), /pet comments <on|off>, /pet lang <en|es|pt|zh>, /pet say <text>, /pet call me <name>, /pet diary [today|yesterday|week], /pet remind <text>, /pet reminders, /pet share, /pet export, /pet import <file>, /pet hide, /pet show, /pet shop [item], /pet wear <item|off <item>|none>, /pet animal <name>, /pet skins, /pet chats, /pet chats titles <on|off>, /pet alerts <on|off>, /pet name <name>, /pet pet, /pet adopt, /pet demo' })
-    $.clock.every(TICK_MS, () => { tick($).catch(() => {}) })
+    ticker?.cancel(); ticker = null; pace($, TICK_MS) // with this start's `$`
+    kept = {}
     return next(e)
   })
 
@@ -1398,7 +1513,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     await pullPrefs($).catch(() => {}) // lean switched in another chat counts from this turn
     await feed($, { type: 'prompt', turn: !e.command }).catch(() => {}) // a slash command sends no request: no word on an expired cache
     if (!e.command) { await mark($, false); turnInfo = TURN0(); turnAt = await $.clock.now(); midAt = 0; turnSaid = ''; await recapDrop($).catch(() => {}) } // a slash command starts no turn
-    if (!e.command) { const up = await heldAnim($); if (up.ask && !up.askKind) await update($, anim, a => ({ ...a, ...NO_ASK })).catch(() => {}) } // the question about the comments went unanswered: they stay off. One of the routine waits its 30 minutes
+    if (!e.command) { const up = await heldAnim($); if (up.ask && !up.askKind && (await getPrefs($)).voiceAsked) await animate($, a => ({ ...a, ...NO_ASK })).catch(() => {}) } // the notice was in sight and the person went on: it goes, the comments stay on. One still under the line of the birth waits; a question of the routine waits its 30 minutes
     return next(e)
   })
 
@@ -1482,6 +1597,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
   })
 
   on('session.end', async ($, e, next) => {
+    kept = {} // the state may be emptied under this: nothing read before is kept
     await feed($, { type: 'sessionEnd' }).catch(() => {})
     // after /clear the process goes on and no session.start fires, so start the next one here
     // the new chat sends everything again anyway: a style that waited gets in with its first request
@@ -1490,7 +1606,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     // closed, the mark still tells when the last turn was and whether it was cut
     const was = social && cwd ? myMark ?? await ownMark($).catch(() => undefined) : undefined, last = was ? leftOf(was) : null
     await mark($, true, { closed: true, ...(last && { left: last.at, ...(last.mid && { mid: /** @type {const} */ (true) }) }) }).catch(() => {}) // this chat is over: the others stop counting it at once (after /clear the next one has an id of its own)
-    if (e.reason === 'clear') { if ((await heldAnim($)).ask) await update($, anim, a => ({ ...a, ...NO_ASK })).catch(() => {}); ctxTokens = baseTokens = turnAt = 0; styleOther = undefined; turnSaid = ''; styleLive = undefined; if (chatId) formerIds = [...formerIds, chatId].slice(-16); chatId = ''; await feed($, { type: 'sessionStart' }).catch(() => {}); await feedLean($) }
+    if (e.reason === 'clear') { if ((await heldAnim($)).ask) await animate($, a => ({ ...a, ...NO_ASK })).catch(() => {}); ctxTokens = baseTokens = turnAt = 0; styleOther = undefined; turnSaid = ''; styleLive = undefined; if (chatId) formerIds = [...formerIds, chatId].slice(-16); chatId = ''; await feed($, { type: 'sessionStart' }).catch(() => {}); await feedLean($) }
     await share($, true).catch(() => {})
     return next(e)
   })
@@ -1621,12 +1737,13 @@ export function register(/** @type {import('claude-code').On} */ on) {
       const bad = onOff('comments')
       if (bad) return bad
       if (arg === 'on' || arg === 'off') await setVoice($, arg === 'on')
+      else if (social && (!(await getPrefs($)).voiceAsked || ((await heldAnim($)).ask && !(await heldAnim($)).askKind))) await setVoice($, (await getPrefs($)).voice) // this answer says all the notice says, and more: the person was told, and the notice goes
       const t = (await voiceTally($)) ?? tally(undefined, await $.clock.now()), avg = average(t)
       const cost = avg.measured ? `${avg.input} tokens in and ${avg.output} out a line, measured over the ${t.lines} line${t.lines === 1 ? '' : 's'} paid so far` : `about ${avg.input} tokens in and ${avg.output} out a line, ${measuredHow(t)} on our own lines and replaced by your own after the first line`
       const thinks = "The tokens out are more than the line's own, about 12: the rest is the model's thinking, which a mod cannot switch off (it can only ask for low effort, and does)."
       const which = `The model in use: ${modelNow}${modelNow === MODEL ? '' : ` (the default is ${MODEL})`}. /pet model <alias or id> changes it; a larger model costs more tokens per line. If it does not answer, the pet stays silent, tells you once a day and never picks another by itself.`
       const cap = `${RULES.voiceCapDay} lines a day`
-      if (!(await getPrefs($)).voice) return { text: `Comments off: the pet says its fixed lines, and nothing is sent anywhere for it. /pet comments on lets a small model write one line about the turn. That spends tokens of your own account: ${cost}, never more than ${cap}. The recap after a pause is a larger request: ${RECAP_COST}. ${which}` }
+      if (!(await getPrefs($)).voice) return { text: `Comments off: the pet says its fixed lines, and nothing is sent anywhere for it. They are on as installed; you turned them off. /pet comments on lets a small model write one line about the turn again. That spends tokens of your own account: ${cost}, never more than ${cap}. The recap after a pause is a larger request: ${RECAP_COST}. ${which}` }
       return { text: [
         `Comments on. They spend tokens of your own account: each line is one request to a small model (${modelNow}, through Claude Code's own client).`,
         which,
@@ -1846,7 +1963,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const L = p.lang, who = { name: p.name, voice: speaker(p.stats, v.turn), lang: L, call: p.callme, callN: dayOf(await $.clock.now()) } // the dominant character, now and then the second: by the turn, so a line keeps its voice
     const quiet = (/** @type {string} */ say) => ({ say, fix: null, link: null, ask: '', label: '', more: null, aside: '' })
     const recapping = !hatching && !a.demo && !!a.recap // where the work got to: it holds the bubble until the next prompt, and when it was is said as of now
-    const asking = !hatching && !a.demo && !!a.ask && !(a.askKind && recapping) // a question (about the comments, or one of the routine) holds the bubble until it is answered; a cuddle's line passes over it for its seconds. One of the routine waits under the recap: where the work got to comes first
+    const asking = !hatching && !a.demo && !!a.ask && !(a.askKind && recapping) // the notice about the comments, or a question of the routine, holds the bubble until it is answered; a cuddle's line passes over it for its seconds. One of the routine waits under the recap: where the work got to comes first
     const opts = a.askKind ? a.askOpts.split(',').filter(Boolean) : []
     const mine = zooOf(v.animals, p) // the animals to pick from: with more than one the skin menu has a part for them
     const dressing = !hatching && !asking && !a.demo && a.skin > 0 && (v.closet.length > 0 || mine.length > 1) // the row of the parts is open: the bubble tells what is on, the buttons are the parts
@@ -1858,7 +1975,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const spoken = () => { const said = bubble(v, who); return ydayLine && now < ydayUntil && v.talk && !said.aside ? { ...said, aside: ydayLine } : said }
     const b = hatching ? quiet(text(L, a.egg > EGG_CRACKS ? 'egg.whole' : 'egg.crack')) : dressing ? { ...quiet([...(v.closet.length ? [wornLine(L, v.closet, p.wear, true)] : []), ...(mine.length > 1 ? [text(L, 'wears.part', { slot: text(L, 'part.animal'), item: animalName(L, p.species) })] : [])].join(text(L, 'sep'))), fix: text(L, 'skin.pick') } : a.noteLeft > 0 && a.note && !a.demo ? { ...quiet(a.note), fix: a.noteFix || null } : asking ? quiet(a.ask) : recapping ? { ...quiet(text(L, 'recap.say', { when: since(a.recapAt, await $.clock.now(), L), line: a.recap })), aside: welcome } : away ? { ...quiet(welcome), fix: early } : (a.demo ? a.demo === 'sleep' : a.sleep) ? quiet(text(L, 'sleep')) : spoken()
     // how long the phrase stays. What has its own time, or waits for an answer, is not timed here: the egg, the row of the parts, a
-    // line held for its seconds, the demo, the question about the voice and a greeting that asks (both go at the next prompt).
+    // line held for its seconds, the demo, the notice about the comments and a greeting that asks (both go at the next prompt).
     // The plain line of a calm chat is not news: it never opens the bubble.
     const question = v.calm && v.talk?.kind === 'greet' && v.talk.greet === 'resume'
     const timed = !(hatching || dressing || asking || recapping || away || a.demo || (a.noteLeft > 0 && a.note) || question)
@@ -1876,8 +1993,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
     // beside them, only when other chats of the person are open: how many are working, waiting, or may be waiting for an OK
     const bare = `${p.name}  ★ ${v.coins}`, head = `${bare}${board && p.chats ? `  ·  ${board}` : ''}`
     // one row of text: a surface with neither a cell grid nor a drawing of ours, and a terminal too narrow or too low for the drawing.
-    // Where there are no buttons the question about the comments says how to answer it
-    const told = asking && !(a.noteLeft > 0 && a.note) ? `${b.say} ${a.askKind ? text(L, 'ask.how', { list: opts.join('|') }) : text(L, 'comments.ask.how')}` : b.say
+    // Where there are no buttons a question of the routine says how to answer it; the notice about the comments names its command itself
+    const told = asking && a.askKind && !(a.noteLeft > 0 && a.note) ? `${b.say} ${text(L, 'ask.how', { list: opts.join('|') })}` : b.say
     const row = (/** @type {number} */ max) => { tally.last = 'row'; return Box({ children: [Text({ dimColor: true, children: [cut(open ? `${head}  ${told}` : head, max)] })] }) }
 
     const more = b.more
@@ -1900,7 +2017,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
         key('skin-done', text(L, 'btn.done'), 0, () => { skin($, false).catch(() => {}) }, true)
       } else {
         if (answering && a.askKind) for (const opt of opts) key(`answer-${opt}`, answerLabel(L, opt), 0, () => { pressAnswer($, opt).catch(() => {}) }) // a question of the routine: a button an answer
-        else if (answering) { key('voice-on', text(L, 'btn.comments.on'), 0, () => { answerVoice($, true).catch(() => {}) }); key('voice-off', text(L, 'btn.comments.off'), 0, () => { answerVoice($, false).catch(() => {}) }) }
+        else if (answering) key('voice-off', text(L, 'btn.comments.off'), 0, () => { answerVoice($, false).catch(() => {}) }) // the notice: one button, turn off
         else if ((v.closet.length || mine.length > 1) && !hatching) ownKey('skin', text(L, 'btn.skin'), 2, () => { skin($).catch(() => {}) }, true)
         if (ask) key('fix', b.label, 0, () => { fix($, ask).catch(() => {}) })
         if (more?.ask && bubbled) key('more', more.label, 0, () => { fix($, more.ask).catch(() => {}) })
@@ -1919,8 +2036,9 @@ export function register(/** @type {import('claude-code').On} */ on) {
       tally.last = 'svg'
       const said = open ? [b.say, b.fix, more?.say, b.aside].flatMap((t, i) => t ? [Text({ ...(i ? { dimColor: true } : null), children: [t] })] : []) : []
       return Box({ flexDirection: 'row', gap: 2, alignItems: 'center', children: [
-        ui.Svg({ source: pic.source, alt: hatching ? p.name : `${p.name}, ${animalName(L, p.species)}`, width: pic.width, height: pic.height }),
-        Box({ key: 'beside', flexDirection: 'column', children: [
+        // the picture in a box that does not shrink, and the text beside it in one that does: a long line (the statistics of the birth, on a phone) wraps, and never takes the picture's room
+        Box({ key: 'pic', flexShrink: 0, children: [ui.Svg({ source: pic.source, alt: hatching ? p.name : `${p.name}, ${animalName(L, p.species)}`, width: pic.width, height: pic.height })] }),
+        Box({ key: 'beside', flexDirection: 'column', flexShrink: 1, children: [
           Box({ key: 'head', flexDirection: 'row', gap: 2, children: [Text({ dimColor: true, children: [head] }), ...own.map(k => k.el())] }),
           ...said,
           ...(keys.length ? [Box({ key: 'keys', flexDirection: 'row', gap: 2, children: keys.map(k => k.el()) })] : []),

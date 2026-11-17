@@ -10,7 +10,7 @@ The pet sits above the prompt with one dim row: its name, its stars, how many of
 
 At the first start the pet is an egg, and hatches after 8 seconds.
 
-As installed everything the pet says is fixed text on your screen: no model is asked and nothing enters the chat's context. A button only fills the prompt box.
+Right after it hatches the pet says who it is, and then, once, that its comments are on: a small model writes them on your tokens, and `/pet comments off` stops them ([comments.md](comments.md)). Everything else the pet says is fixed text on your screen: no model is asked for it and nothing enters the chat's context. A button only fills the prompt box.
 
 ## Affection, growth and stars
 
@@ -158,7 +158,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | `/pet chats titles [on\|off]` | each chat's title in that list, read from its transcript's title line; off by default |
 | `/pet alerts [on\|off]` | a desktop notification when another chat may be waiting for your OK; off by default |
 | `/pet briefox <on\|off>` | the sentence `Be brief.` |
-| `/pet comments <on\|off>` | comments by a small model, on your tokens |
+| `/pet comments <on\|off>` | comments by a small model, on your tokens; on as installed |
 | `/pet model [alias\|id\|default]` | the model of the comments: [comments.md](comments.md) |
 | `/pet say <text>` | speak to the pet: [comments.md](comments.md) |
 | `/pet diary [today\|yesterday\|week]` | the work report; today and yesterday by default |

@@ -1,6 +1,6 @@
 {
   "name": "hatchling",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Two Claude Code plugins in one repository: briefox, one sentence in the system prompt for cheaper long sessions, and hatchling, a pixel pet that keeps you company",

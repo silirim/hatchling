@@ -20,8 +20,9 @@ const test: typeof kitTest = (name, ...rest: any[]) => {
 
 // The preferences as the store holds them: each under a key of its own, `pref.<name>`, over the one object (`prefs`) earlier versions kept
 const prefsOf = (disk: Record<string, any>) => ({ ...disk.prefs, ...Object.fromEntries(Object.entries(disk).filter(([key]) => key.startsWith('pref.')).map(([key, value]) => [key.slice(5), value])) }) as Record<string, any>
-/** Another chat on this version changes some preferences: it writes their keys and nothing else. */
-const elsewhere = (disk: Record<string, any>, patch: Record<string, unknown>) => { for (const [name, value] of Object.entries(patch)) disk[`pref.${name}`] = value }
+/** Another chat on this version changes some preferences: it writes their keys, and the key that says a preference was written. */
+let wrote = 0
+const elsewhere = (disk: Record<string, any>, patch: Record<string, unknown>) => { for (const [name, value] of Object.entries(patch)) disk[`pref.${name}`] = value; disk['prefs.rev'] = `other:${++wrote}` }
 /** A store that lost every preference. */
 const forget = (disk: Record<string, any>) => { for (const key of Object.keys(disk)) if (key === 'prefs' || key.startsWith('pref.')) delete disk[key] }
 const KNOWN = ['asked', 'born', 'callme', 'chats', 'cuddled', 'cuddles', 'hatched', 'hidden', 'lang', 'missing', 'model', 'name', 'personality', 'seed', 'species', 'stats', 'style', 'voice', 'voiceAsked', 'wear'] // the preferences of this version
@@ -249,7 +250,7 @@ test('two chats on one store: a change keeps what the other chat chose meanwhile
   disk.prefs = { ...disk.prefs, budget: 150_000, species: 'bunny' }
   await $.command.run({ command: 'pet', args: 'lang pt' } as any)
   expect(prefsOf(disk)).toMatchObject({ lang: 'pt', species: 'bunny', born: 'fox', style: false })
-  expect(Object.keys(disk).filter(key => key.startsWith('pref.')).sort()).toEqual(['pref.asked', 'pref.lang', 'pref.name', 'pref.seed', 'pref.stats', 'pref.voiceAsked']) // the language, what the pet lacked at its first read, and the hint about /pet adopt and the question about the comments marked as said: no copy of the rest
+  expect(Object.keys(disk).filter(key => key.startsWith('pref.')).sort()).toEqual(['pref.asked', 'pref.lang', 'pref.name', 'pref.seed', 'pref.stats', 'pref.voice', 'pref.voiceAsked']) // the language, what the pet lacked at its first read, the hint about /pet adopt marked as said, and the notice about the comments with them on: no copy of the rest
   expect(disk.prefs).toEqual({ species: 'bunny', born: 'fox', hidden: false, wear: '', diet: false, style: false, budget: 150_000 }) // the earlier version's object is read and never written
 
   // the other chat turns the style on; this one hides the band
@@ -500,10 +501,10 @@ test('a headless run leaves no mark and gets no greeting', async ($, on) => {
   await $.turn.complete({ answer: '', reason: 'answer' } as any)
   expect(Object.keys(disk).filter(key => key === 'chats' || key.startsWith('chat.'))).toEqual([])
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/first chat|folder|pick it up|May I/)
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).not.toContain('comments on')
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/first chat|folder|pick it up|Comments are on/)
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).not.toContain('turn off')
   await ui.unmount()
-  expect(prefsOf(disk)).toMatchObject({ voice: false, voiceAsked: false }) // nobody to ask: the voice is off and the question is kept for a person
+  expect(prefsOf(disk)).toMatchObject({ voice: true, voiceAsked: false }) // nobody to tell: no notice, which is kept for a person, and with no person at the prompt no comment is ever asked for
 })
 
 test('the phrase sits in a speech bubble: advice inside, keys outside, tail at the pet', async ($, on) => {
@@ -575,7 +576,9 @@ function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 
   on('ui.toast', (_: any, e: any) => { k.toasts.push(String(e.message ?? e.text ?? JSON.stringify(e))); return { value: undefined } })
   on('prompt.read', () => ({ value: { text: k.box, cursor: 0 } }))
   on('prompt.fill', (_: any, e: any) => { k.filled = e.text; return { isFilled: true, text: e.text, cursor: 0 } })
-  on('prompt.compose', () => ({ sections: [] }) as any)
+  // `sections` is what the plugins beneath answer for a prompt, `composed` the facts each prompt was asked with
+  on('prompt.compose', (_: any, e: any) => { ((k as any).composed ??= []).push(e); return { sections: (k as any).sections ?? [] } as any })
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
   return Object.assign(k, { clock }) // the same object the handlers read: a test may replace `state` or `disk.pet`
 }
 const cardOf = async ($: any, args = '') => String((await $.command.run({ command: 'pet', args } as any) as any).text)
@@ -616,21 +619,23 @@ test('a pet is born with a name and a character of its own: on the card and in t
     expect(said.some(t => /^I am [A-Z][a-z]+, a [a-z]+$/.test(t))).toBe(true)
     expect(said.some(t => /^WIT \d+ · CURIOSITY \d+ · CALM \d+ · RIGOR \d+ · WARMTH \d+ · [A-Z].+\.$/.test(t.replace(/\n/g, ' ')))).toBe(true)
     expect(k.toasts.at(-1)).toMatch(/^[A-Z][a-z]+ has hatched: \/pet shows its card\.$/) // and in a toast, for a band with no room for the bubble
-    expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin', 'pet']) } // the question's buttons wait under the line
+    expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin', 'pet'])
+    expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: false }) } // the notice and its button wait under the line: not said yet
   await ui.unmount()
   await k.clock.advance(20_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  // then it asks whether it may speak, once, and says what a yes comes to
-  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('May I comment on your work? It uses a small\nmodel on your account: about 650 tokens in\nand 75 out a line (measured in November\n2026), at most 40 lines a day. It gets a\nshort summary of the turn. A recap after a\npause: about 1,300 to 2,000 in and 570 to\n750 out. Details: /pet comments')
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
-  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
+  // then, once, the notice: the comments are on, what they cost and what stops them, with one button; marked as said only now, in sight
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('Comments are on: a small model writes them\non your tokens, about 650 in and 75 out a\nline (measured in November 2026), at most 40\nlines a day. /pet comments off stops them.')
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
+  expect([prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([true, true])
+  expect(k.toasts.at(-1)).toBe('Hatchling: Comments are on: a small model writes them on your tokens, about 650 in and 75 out a line (measured in November 2026), at most 40 lines a day. /pet comments off stops them.') // in a toast too, for a band with no room for the bubble
   await ui.press({ key: 'voice-off' })
   expect(k.toasts.at(-1)).toBe('Hatchling stays quiet. /pet comments on changes that.')
-  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
+  expect([prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
   await ui.unmount()
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   const said = (await ui.findAll({ type: 'Text' })).map(x => x.text)
-  expect(said.join(' ')).not.toMatch(/egg|shell|May I/)
+  expect(said.join(' ')).not.toMatch(/egg|shell|Comments are on/)
   expect(said.some(t => t?.startsWith(`${born.name}: `))).toBe(true)
   expect(said.join(' ')).not.toMatch(/!/)
   expect(said.join(' ').replace(/\n/g, ' ')).toContain('had a /buddy before? /pet adopt gives me its name and character') // once, under the first greeting, with nothing read
@@ -1805,7 +1810,7 @@ function voiceKit($: any, on: any, prefs: object = {}) {
   return Object.assign(k, { v, settle, turn, texts })
 }
 
-test('comments off, as installed: no call to a model, whatever happens, and the card says so', async ($, on) => {
+test('comments off, by the person\'s choice: no call to a model, whatever happens, and the card says so', async ($, on) => {
   const k = voiceKit($, on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   k.v.fail = true
@@ -1856,7 +1861,7 @@ test('comments on: it says what it costs and sends; a line at the end of a turn 
   // the real tokens of the call, and no dollars: none kept, none said
   expect(k.disk.voice).toMatchObject({ today: 1, todayTokens: 320, lines: 1, input: 300, output: 20 })
   expect(Object.keys(k.disk.voice).filter(key => /usd/i.test(key))).toEqual([])
-  expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 300 tokens in and 20 out a line, 1 of 40 lines today, 320 tokens today, 320 in all$/m)
+  expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 300 tokens in and 20 out a line, 1 of 40 lines today, 320 tokens today, 320 in all\. \/pet comments off stops them$/m)
   expect(await cardOf($, 'comments')).toMatch(/Cost: 300 tokens in and 20 out a line, measured over the 1 line paid so far\./)
   expect(await cardOf($, 'comments')).toMatch(/\nToday: 1 of 40 lines, 320 tokens \(320 in all\): 39 left\./)
   expect(await cardOf($, 'comments')).not.toContain('$')
@@ -1951,7 +1956,7 @@ test('comments on: the cap of the day stops it, a new day starts the count again
   await $.command.run({ command: 'pet', args: 'pet' } as any)
   await k.settle()
   expect(k.v.calls).toEqual([]) // 40 lines today: not one more, not even for a failure or a cuddle
-  expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 300 tokens in and 20 out a line, 40 of 40 lines today, 0 tokens today, 28800 in all$/m)
+  expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 300 tokens in and 20 out a line, 40 of 40 lines today, 0 tokens today, 28800 in all\. \/pet comments off stops them$/m)
   expect(await cardOf($, 'comments')).toMatch(/\nCost: 300 tokens in and 20 out a line, measured over the 90 lines paid so far\..*\nToday: 40 of 40 lines, 0 tokens \(28800 in all\): none left, they come back tomorrow\. \/pet comments off stops them\.$/s)
   expect(await cardOf($, 'comments')).not.toMatch(/\$|0\.0016|0\.0036/)
   // the next day: what the store counted belongs to the day before
@@ -1989,75 +1994,126 @@ test('under the bench the voice is off, even when the person had it on', async (
   expect(await cardOf($)).toMatch(/\ncomments off:/)
 })
 
-test('the voice is asked for once, at the first start of a pet born before: unanswered it stays off, and no later chat asks again', async ($, on) => {
-  const k = voiceKit($, on, { voiceAsked: false })
-  k.disk.voice = { lines: 10, input: 5000, output: 200 } // lines paid for earlier: the figure in the question is the measured one
+test('comments are on as installed: a pet never told gets the notice once, with one button; the next prompt takes it away and they stay on; no later chat says it again', async ($, on) => {
+  const k = voiceKit($, on, { voice: false, voiceAsked: false }) // as 0.2.0 kept a pet it never asked: `voice: false` was written at every birth
+  k.disk.voice = { lines: 10, input: 5000, output: 200 } // lines paid for earlier: the figure in the notice is the measured one
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  const Q = 'May I comment on your work? It uses a small\nmodel on your account: about 500 tokens in\nand 20 out a line (measured on your lines),\nat most 40 lines a day. It gets a short\nsummary of the turn. A recap after a pause:\nabout 1,300 to 2,000 in and 570 to 750 out.\nDetails: /pet comments'
-  expect(await k.texts()).toContain(Q)
-  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true]) // marked when it comes up
+  const N = 'Comments are on: a small model writes them\non your tokens, about 500 in and 20 out a\nline (measured on your lines), at most 40\nlines a day. /pet comments off stops them.'
+  expect(await k.texts()).toContain(N)
+  expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: true }) // marked as said when it is in sight, with the comments on
+  expect(k.toasts).toEqual([`Hatchling: ${N.replace(/\n/g, ' ')}`]) // and said in a toast, once
+  expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 500 tokens in and 20 out a line, 0 of 40 lines today, 0 tokens today, 5200 in all\. \/pet comments off stops them$/m)
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect((await desk.findAll({ type: 'Text' })).map(x => x.text)).toContain(Q.replace(/\n/g, ' ')) // the apps wrap it themselves
-  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet']) // and have the buttons to answer it
+  expect((await desk.findAll({ type: 'Text' })).map(x => x.text)).toContain(N.replace(/\n/g, ' ')) // the apps wrap it themselves
+  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off']) // one button
   await desk.unmount()
-  // a cuddle, a slash command and a reload leave it up; the next prompt sent takes it away, with the voice off
-  await $.command.run({ command: 'pet', args: 'pet' } as any)
-  expect((await k.texts()).join(' ')).not.toMatch(/May I/) // the cuddle's line passes in front for its 5 seconds, and the question is back after
-  await k.clock.advance(6_000)
-  expect(await k.texts()).toContain(Q)
+  // a slash command and a reload leave it up; the next prompt sent takes it away, with the comments on
   await $.prompt.submit({ text: '/pet', command: { name: 'pet', args: '' }, wait: false, origin: 'user' } as any)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  expect(await k.texts()).toContain(Q)
-  await k.turn()
-  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
-  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
+  expect(await k.texts()).toContain(N)
   expect(k.v.calls).toEqual([])
-  // the next chat, and a start over an emptied session: no second question
+  await k.turn()
+  expect((await k.texts()).join(' ')).not.toMatch(/Comments are on/)
+  expect(k.v.calls.length).toBe(1) // told, and on: the turn gets its line
+  expect(prefsOf(k.disk).voice).toBe(true)
+  // the next chat, and a start over an emptied session: no second notice, no second toast
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as any)
   k.state = {}
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
-  expect(await cardOf($, 'comments on')).toMatch(/^Comments on\./) // still reachable
-  expect(prefsOf(k.disk).voice).toBe(true)
+  expect((await k.texts()).join(' ')).not.toMatch(/Comments are on/)
+  expect(k.toasts.length).toBe(1)
+  expect(await cardOf($, 'comments')).toMatch(/^Comments on\./)
 })
 
-test('the question about the voice: "voice on" turns it on and keeps the answer, /pet comments answers it too, and who had it on is not asked', async ($, on) => {
+test('nothing is sent before the person was told: a newborn asks no model while it hatches nor under the line of its birth, and a prompt sent then does not take the notice away', async ($, on) => {
+  const k = voiceKit($, on)
+  forget(k.disk) // a newborn: comments on, as installed
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: false })
+  k.v.fail = true
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't1' } as any)) // in the egg: a failed command, which would get a line at once
+  await k.clock.advance(9_000) // hatched: the line of its birth is up for 20 s, the notice waits under it
+  expect((await k.texts()).join(' ')).toMatch(/I am \w+, a \w+/)
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't2' } as any))
+  await $.command.run({ command: 'pet', args: 'pet' } as any) // nor for a cuddle
+  await k.settle()
+  expect(k.v.calls).toEqual([])
+  expect(k.disk.voice).toBeUndefined()
+  expect(prefsOf(k.disk).voiceAsked).toBe(false)
+  expect(k.toasts.join(' ')).not.toMatch(/Comments are on/)
+  await k.clock.advance(21_000) // the line of the birth had its time: the notice is in sight, though a prompt was sent meanwhile
+  expect((await k.texts()).join(' ').replace(/\n/g, ' ')).toMatch(/Comments are on: a small model writes them on your tokens, about 650 in and 75 out a line \(measured in November 2026\), at most 40 lines a day\. \/pet comments off stops them\./)
+  expect(prefsOf(k.disk).voiceAsked).toBe(true)
+  expect(k.toasts.filter(t => /Comments are on/.test(t)).length).toBe(1)
+  await k.clock.advance(31_000) // past the wait of a failure's line
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't3' } as any))
+  expect(k.v.calls.length).toBe(1) // told: from now it speaks
+})
+
+test('the notice: "turn off" turns the comments off and keeps the choice; no model is asked after, and no later chat says the notice again', async ($, on) => {
   const k = voiceKit($, on, { voiceAsked: false })
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
-  await ui.press({ key: 'voice-on' })
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
+  await ui.press({ key: 'voice-off' })
   await ui.unmount()
-  expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: true })
-  expect(k.toasts.at(-1)).toBe('Hatchling: comments on. /pet comments off stops them, /pet comments says what they send and cost.')
-  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
-  expect(k.v.calls).toEqual([]) // the answer asks no model
-  await k.turn()
-  expect(k.v.calls.length).toBe(1) // and from the next turn it speaks
-})
-
-test('the question about the voice goes when /pet comments off is typed; a pet that already speaks is never asked', async ($, on) => {
-  const k = voiceKit($, on, { voiceAsked: false })
+  expect(prefsOf(k.disk)).toMatchObject({ voice: false, voiceAsked: true })
+  expect(k.toasts.at(-1)).toBe('Hatchling stays quiet. /pet comments on changes that.')
+  expect((await k.texts()).join(' ')).not.toMatch(/Comments are on/)
+  k.v.fail = true
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't1' } as any))
+  await $.command.run({ command: 'pet', args: 'pet' } as any)
+  await k.settle()
+  expect(k.v.calls).toEqual([]) // off: not one request
+  expect(await cardOf($)).toMatch(/\ncomments off: fixed lines only, nothing sent\./)
+  k.state = {}
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  expect((await k.texts()).join(' ')).toMatch(/May I comment/)
-  await cardOf($, 'comments off')
-  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
-  expect([!!prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
-
-  // chosen before this version: not asked, and the choice stays
+  expect((await k.texts()).join(' ')).not.toMatch(/Comments are on/)
+  expect(prefsOf(k.disk)).toMatchObject({ voice: false, voiceAsked: true })
+  // /pet no answers the notice the same way, /pet yes leaves them on
   elsewhere(k.disk, { voice: true, voiceAsked: false })
   k.state = {}
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
+  expect(await cardOf($, 'no')).toBe('Hatchling stays quiet. /pet comments on changes that.')
+  expect(prefsOf(k.disk)).toMatchObject({ voice: false, voiceAsked: true })
+})
+
+test('a choice made before this version stands: who answered "stay quiet" or ran /pet comments off stays off and gets no notice; /pet comments off and /pet comments take the notice away', async ($, on) => {
+  const k = voiceKit($, on, { voice: false, voiceAsked: true }) // as 0.2.0 kept a "stay quiet", a /pet comments off, and a question left unanswered
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect((await k.texts()).join(' ')).not.toMatch(/Comments are on/)
+  k.v.fail = true
+  await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't1' } as any))
+  expect(k.v.calls).toEqual([])
+  expect(k.toasts).toEqual([])
+  expect(prefsOf(k.disk)).toMatchObject({ voice: false, voiceAsked: true })
+  expect(await cardOf($)).toMatch(/\ncomments off:/)
+
+  // a pet never told: the notice is up, and /pet comments off takes it away
+  elsewhere(k.disk, { voice: false, voiceAsked: false }) // `voice: false` is what 0.2.0 wrote for every pet at its birth: no choice until it asked
+  k.state = {}
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect((await k.texts()).join(' ')).toMatch(/Comments are on/)
+  await cardOf($, 'comments off')
+  expect((await k.texts()).join(' ')).not.toMatch(/Comments are on/)
+  expect(prefsOf(k.disk)).toMatchObject({ voice: false, voiceAsked: true })
+
+  // who had them on before the question existed keeps them on, and reads the notice once
+  elsewhere(k.disk, { voice: true, voiceAsked: false })
+  k.state = {}
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  expect((await k.texts()).join(' ')).toMatch(/Comments are on/)
+  expect(await cardOf($, 'comments')).toMatch(/^Comments on\./) // the whole of it, read: the notice goes
+  expect((await k.texts()).join(' ')).not.toMatch(/Comments are on/)
   expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: true })
 })
 
-test('under the bench nobody is asked about the voice, and the person\'s preferences are not touched', async ($, on) => {
+test('under the bench nobody is told about the comments, none is asked for, and the person\'s preferences are not touched', async ($, on) => {
   const k = voiceKit($, on, { voiceAsked: false })
   k.env.HATCHLING_BENCH = '/tmp/bench'
   const before = JSON.stringify(prefsOf(k.disk))
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  expect((await k.texts()).join(' ')).not.toMatch(/May I/)
+  expect((await k.texts()).join(' ')).not.toMatch(/Comments are on/)
   await k.turn()
   expect(JSON.stringify(prefsOf(k.disk))).toBe(before)
   expect(k.v.calls).toEqual([])
@@ -2074,8 +2130,8 @@ test('a newborn takes the language of the system when it is one of ours, LC_ALL 
   await ui.unmount()
   await k.clock.advance(29_500) // hatched, and it said who it is
   const asked = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await asked.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/^\S+  ★ 0 · ¿Puedo comentar tu trabajo\?/)
-  expect((await asked.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['acariciar', 'comentarios sí', 'en silencio'])
+  expect((await asked.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/^\S+  ★ 0 · Los comentarios están activos: los escribe\nun modelo pequeño con tus tokens/)
+  expect((await asked.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['acariciar', 'apagar'])
   await asked.press({ key: 'voice-off' })
   expect(k.toasts.at(-1)).toBe('Hatchling se queda callado. /pet comments on lo cambia.')
   await asked.unmount()
@@ -2169,9 +2225,9 @@ test('the bubble in Chinese: wrapped and bordered by width on screen, two column
   k.state = {}
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const ask = await bubble()
-  expect(ask.lines[0]!.split('\n')).toEqual(['我可以点评你的工作吗？会用你账户上的小模型，', '每句约输入 650、输出 75 token（2026 年 11 月', '测得），每天最多 40 句，并发给它一段本轮的简', '短摘要。暂停后的回顾：约输入 1300 到 2000、', '输出 570 到 750。详情：/pet comments'])
+  expect(ask.lines[0]!.split('\n')).toEqual(['点评已开启：由小模型来写，花你的 token，每句', '约输入 650、输出 75（2026 年 11 月测得），每', '天最多 40 句。/pet comments off 关闭。'])
   expect(ask.width).toBe(48)
-  expect(ask.buttons.slice(-2)).toEqual(['开启点评', '保持安静'])
+  expect(ask.buttons.slice(-1)).toEqual(['关闭'])
 })
 
 test('comments on in another language: the model is told the language, and a reply is held to its width on screen, not its letters', async ($, on) => {
@@ -2201,6 +2257,7 @@ test('the diary is written by the mod itself, in the store: the first day, a cud
   expect(k.disk.diary.lines).toEqual([{ at: k.clock.now(), kind: 'first' }])
   expect(k.disk.diary.folders).toEqual({ hatchling: 1 }) // the folder's name, never its path
   await k.clock.advance(9_000)
+  await cardOf($, 'comments off') // the diary is the mod's own, with the comments on or off: off here, so that a call for any of it would show
   // a turn with a command that fails and a file read: none of it reaches the diary
   k.v.fail = true
   await k.turn(async () => { await $.tool.call({ tool: 'Bash', command: 'npm test --token=hunter2' } as any); await $.tool.call({ tool: 'Read', file_path: '/home/me/secret-client/notes.txt' } as any) })
@@ -2568,18 +2625,18 @@ test('a calm pet moves a little: a gesture now and then, never two within 8 seco
     /** One look every half second: the drawings seen, and when the drawing was not the still one. */
     const watch = async (seconds: number, still: string) => { const moved: number[] = [], seen = new Set<string>(); for (let i = 0; i < seconds * 2; i++) { await k.clock.advance(500); const s = await shot(); seen.add(s.cells); if (s.rows !== rows) moved.push(i) } return { moved, seen } } // a gesture is drawn on the taller canvas; a blink is not, and is not counted
     const still = (await shot()).cells, rows = (await shot()).rows
-    // the greeting asks and holds the bubble: for a whole minute the pet does not move
+    // the greeting asks and holds the bubble: for half a minute, longer than any wait between two gestures, the pet does not move
     expect((await shot()).open).toBe(true)
-    expect((await watch(60, still)).moved).toEqual([])
+    expect((await watch(30, still)).moved).toEqual([])
     // the question is answered by a prompt: the bubble goes, and the gestures come
     await k.turn()
-    const calm = await watch(150, still)
+    const calm = await watch(100, still)
     const starts = calm.moved.filter((i, n) => n === 0 || i - calm.moved[n - 1]! > 1)
-    expect(starts.length).toBeGreaterThanOrEqual(5) // one every 8 to 20 seconds
-    expect(starts.length).toBeLessThanOrEqual(150 / 8)
+    expect(starts.length).toBeGreaterThanOrEqual(4) // one every 8 to 20 seconds
+    expect(starts.length).toBeLessThanOrEqual(100 / 8)
     for (let n = 1; n < starts.length; n++) expect(starts[n]! - starts[n - 1]!).toBeGreaterThanOrEqual(16) // 8 seconds, in half seconds
     expect(calm.seen.size).toBeGreaterThanOrEqual(4) // more than one gesture: looks, ears, a hop
-    expect(calm.moved.length).toBeLessThan(150 * 2 * 0.25) // rare and short: still most of the time
+    expect(calm.moved.length).toBeLessThan(100 * 2 * 0.25) // rare and short: still most of the time
 
     // every animal has gestures drawn for the baby, the adult and the crowned one, each frame with where the body sits
     for (const [name, sp] of Object.entries(BUILTIN.species) as [string, any][]) for (const st of ['baby', 'adult', 'crown']) {
@@ -2593,9 +2650,9 @@ test('a calm pet moves a little: a gesture now and then, never two within 8 seco
     await k.clock.advance(11_000)
     const inks = async () => { const c = new Uint32Array(Uint8Array.from(atob((await shot()).cells), ch => ch.charCodeAt(0)).buffer); return new Set([...c].filter((_, i) => i % 3 !== 0)) }
     let lit = 0, glint = 0
-    for (let i = 0; i < 120; i++) { await k.clock.advance(500); const s = await inks(); if (s.has(0xffd54f)) lit++; if (s.has(0xfff6cf)) glint++ }
-    expect(glint).toBe(120)
-    expect(lit).toBeGreaterThanOrEqual(4) // a sparkle every 5 to 13 seconds, a second long
+    for (let i = 0; i < 100; i++) { await k.clock.advance(500); const s = await inks(); if (s.has(0xffd54f)) lit++; if (s.has(0xfff6cf)) glint++ }
+    expect(glint).toBe(100)
+    expect(lit).toBeGreaterThanOrEqual(3) // a sparkle every 5 to 13 seconds, a second long
     expect(lit).toBeLessThanOrEqual(30)
   }
 })
@@ -2850,7 +2907,7 @@ test('E19: with the bubble closed the buttons skin and pet are in the row of the
   ])
 })
 
-test('E23: the question about the comments: on a surface with no buttons it says how to answer; a cuddle over it leaves no answer buttons under the cuddle; asked with the band hidden it is not marked as asked', async ($, on) => {
+test('E23: the notice about the comments: on a surface with no buttons its line names the command; a cuddle over it leaves no button of the notice under the cuddle; with the band hidden it is not marked as said', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en', hidden: true })
   k.disk.prefs.voiceAsked = false
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
@@ -2859,23 +2916,23 @@ test('E23: the question about the comments: on a surface with no buttons it says
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   expect(prefsOf(k.disk).voiceAsked).toBe(true)
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect((await desk.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/May I comment on your work\?/) // the apps have the buttons
-  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
+  expect((await desk.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/Comments are on: /) // the apps have the button
+  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
   await desk.unmount()
-  const code = await $.ui.mount({ ...BAND, surface: 'vscode' }) // one line, no buttons: it says how to answer
-  expect((await code.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/May I comment on your work\?.*Answer with \/pet comments on or \/pet comments off\.$/)
+  const code = await $.ui.mount({ ...BAND, surface: 'vscode' }) // one line, no buttons: it names the command
+  expect((await code.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/Comments are on: .*\/pet comments off stops them\.$/)
   await code.unmount()
   let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
   await ui.unmount()
-  await cardOf($, 'pet') // a cuddle: its line is over the question for 5 seconds
+  await cardOf($, 'pet') // a cuddle: its line is over the notice for 5 seconds
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/May I comment/)
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/Comments are on/)
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin', 'pet'])
   await ui.unmount()
   await k.clock.advance(6_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet']) // the question is back, with its buttons
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off']) // the notice is back, with its button
   await ui.unmount()
 })
 
@@ -3395,7 +3452,7 @@ test('/pet call me: the pet learns the person\'s name only from what is typed th
   // told: cleaned, cut to 24, kept under its own key
   expect(await cardOf($, 'call me  \x1b[31mAna\x1b[0m\n María <b> ')).toBe('I will call you Ana María b, now and then.')
   expect(await cardOf($, 'call me Ana María')).toBe('I will call you Ana María, now and then.')
-  expect([k.disk['pref.callme'], k.sets.at(-1)]).toEqual(['Ana María', 'pref.callme'])
+  expect([k.disk['pref.callme'], k.sets.slice(-2)]).toEqual(['Ana María', ['pref.callme', 'prefs.rev']]) // its one key, and the key that tells the other chats a preference was written
   expect(await cardOf($, 'call me')).toBe('I call you Ana María. /pet call me <name> changes it, /pet call me nobody forgets it.')
   expect(await cardOf($, `call me ${'x'.repeat(60)}`)).toBe(`I will call you ${'x'.repeat(24)}, now and then.`)
   expect(await cardOf($, 'call me {}<>$')).toMatch(/^I do not know your name\./) // nothing of it is a name: nothing changes
@@ -3493,9 +3550,9 @@ test('the recap: 30 minutes after a turn with no new prompt the pet says once wh
   expect(ask.prompt).not.toMatch(/TOOL INPUT|TOOL OUTPUT|OLDER ANSWER|older request|First I look/) // text blocks of the last turn only, and the oldest of them gave way
   // shown with when it was, worked out at the drawing: it stays, and the time moves on
   expect(await k.said()).toContain(`30 min ago: ${LINE}`)
-  await k.clock.advance(60 * 60_000)
+  await k.clock.advance(6 * 60_000)
   await k.settle()
-  expect(await k.said()).toContain(`2 h ago: ${LINE}`) // still there, asleep or not
+  expect(await k.said()).toContain(`36 min ago: ${LINE}`) // still there, asleep or not
   expect(k.recaps().length).toBe(1) // once per pause
   // counted in the day and in the tokens as any line; neither the input nor the line is in the store
   expect(k.disk.voice).toMatchObject({ today: 2, lines: 2, todayTokens: 640 })
@@ -3510,30 +3567,49 @@ test('the recap: 30 minutes after a turn with no new prompt the pet says once wh
   expect(JSON.stringify(k.state)).not.toContain(LINE)
 })
 
-test('the recap: a new prompt cancels the wait, and each pause has its own', { timeoutMs: 60_000 }, async ($, on) => {
+test('the recap: a new prompt cancels the wait, and a turn that runs is no pause', { timeoutMs: 60_000 }, async ($, on) => {
   const k = recapKit($, on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.turn()
   await k.clock.advance(PAUSE - 60_000)
   await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any) // back before the pause was over
-  await k.clock.advance(PAUSE + 60_000) // a turn that runs is no pause
+  await k.clock.advance(3 * 60_000) // past the time the first pause would have ended, with the turn running
   await k.settle()
   expect(k.recaps()).toEqual([])
+  expect(k.r.reads).toBe(0)
+})
+
+test('the recap: each pause has its own, counted from the end of its turn, also of one cut short', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  await k.clock.advance(60_000)
+  await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any)
+  await k.clock.advance(2 * 60_000)
   await $.turn.complete({ answer: 'cut', reason: 'aborted' } as any)
-  await k.clock.advance(PAUSE - 60_000)
+  await k.clock.advance(PAUSE - 60_000) // more than a pause since the first turn ended, less than one since this turn did
   await k.settle()
   expect(k.recaps()).toEqual([]) // counted from the end of this turn
   await k.clock.advance(60_000)
   await k.settle()
   expect(k.recaps().length).toBe(1)
   expect(k.recaps()[0].prompt).toMatch(/\nThat turn was cut short before the assistant finished: say that it stopped midway, never that the work is done\.\n/)
+})
+
+test('the recap: once per pause, and a slash command is no prompt: it starts no new pause', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  await k.clock.advance(PAUSE)
+  await k.settle()
+  expect(k.recaps().length).toBe(1)
   await $.command.run({ command: 'pet', args: 'chats' } as any) // a slash command is no prompt
   await k.clock.advance(PAUSE + 60_000)
   await k.settle()
   expect(k.recaps().length).toBe(1)
 })
 
-test('the recap with no messages from the session: the end of the reply the comments already hold; with nothing at all, no call', { timeoutMs: 60_000 }, async ($, on) => {
+test('the recap with no messages from the session: the end of the reply the comments already hold', { timeoutMs: 60_000 }, async ($, on) => {
   const k = recapKit($, on)
   k.r.rows = []
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
@@ -3544,10 +3620,17 @@ test('the recap with no messages from the session: the end of the reply the comm
   expect(k.recaps()[0].prompt).toMatch(/\nWhat the assistant wrote in that turn ended:\nx+ All done: the tests pass now\.\n/)
   expect(k.recaps()[0].prompt.split('turn ended:\n')[1].split('\n\n')[0].length).toBe(600)
   expect(k.recaps()[0].prompt).not.toMatch(/request began|secret plan/)
+})
+
+test('the recap with no messages from the session and no reply held: with nothing at all, no call', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  k.r.rows = []
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.turn(async () => {}, '')
-  await k.clock.advance(PAUSE)
+  await k.clock.advance(PAUSE + 60_000)
   await k.settle()
-  expect(k.recaps().length).toBe(1)
+  expect(k.recaps()).toEqual([])
+  expect(k.r.reads).toBeGreaterThan(0) // the session was asked, and had nothing
 })
 
 test('the recap of a chat closed and resumed: asked at each start of the process when its last turn is older than 30 minutes, also for a pause already recapped, with the day it was; not again under a reload', { timeoutMs: 60_000 }, async ($, on) => {
@@ -3562,7 +3645,7 @@ test('the recap of a chat closed and resumed: asked at each start of the process
   expect(JSON.stringify(k.disk)).not.toMatch(/Parser tests|README|fix the/)
   // a reload of the mod, the same process: the same pause, no second recap, and the line is still there
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  for (let i = 0; i < 4; i++) await k.clock.advance(8 * 60_000) // in steps: each start of this test adds a tick of its own, and one advance holds only so many
+  await k.clock.advance(PAUSE + 2 * 60_000) // past the time a pause takes
   await k.settle()
   expect(k.recaps().length).toBe(1)
   expect(await k.said()).toContain(`yesterday: ${LINE}`)
@@ -3574,7 +3657,7 @@ test('the recap of a chat closed and resumed: asked at each start of the process
   await k.settle()
   expect(k.recaps().length).toBe(2)
   expect(await k.said()).toContain(`yesterday: ${LINE}`)
-  for (let i = 0; i < 4; i++) await k.clock.advance(8 * 60_000) // in steps: each start of this test adds a tick of its own, and one advance holds only so many
+  await k.clock.advance(2 * 60_000) // no turn was made: no pause is counted from this start
   await k.settle()
   expect(k.recaps().length).toBe(2)
   expect(JSON.stringify(k.disk)).not.toMatch(/Parser tests|README|fix the/)
@@ -3629,7 +3712,7 @@ test('the recap one character too long is shown cut at the last whole word, with
   expect(await k.said()).toContain(`31 min ago: ${'word '.repeat(23).trim()}\u2026`)
 })
 
-test('the recap is part of the comments: off, no call and nothing read from the session; at the day\'s cap, no call; a call that fails, silence', { timeoutMs: 60_000 }, async ($, on) => {
+test('the recap is part of the comments: off, no call and nothing read from the session', { timeoutMs: 60_000 }, async ($, on) => {
   const k = recapKit($, on, {})
   k.disk['chat.me'] = { cwd: '/w', at: NOW - 2 * 3_600_000, done: true }
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
@@ -3639,17 +3722,25 @@ test('the recap is part of the comments: off, no call and nothing read from the 
   expect(k.v.calls).toEqual([])
   expect(k.r.reads).toBe(0)
   expect(k.disk.voice).toBeUndefined()
-  // on, with the day's lines used up
-  await cardOf($, 'comments on')
-  k.disk.voice = { day: dayOf(NOW), today: RULES.voiceCapDay, lines: RULES.voiceCapDay }
+})
+
+test('the recap is part of the comments: at the day\'s cap, no call', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  k.disk.voice = { day: dayOf(NOW), today: RULES.voiceCapDay, lines: RULES.voiceCapDay } // on, with the day's lines used up
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.turn()
   await k.clock.advance(PAUSE + 60_000)
   await k.settle()
   expect(k.v.calls).toEqual([])
   expect(k.disk.voice.today).toBe(RULES.voiceCapDay)
+})
+
+test('the recap is part of the comments: a call that fails is counted, and nothing is said', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
   // two lines left, one for the comment at the end of the turn and one for the recap, and the calls fail: counted, and nothing is said
   k.disk.voice = { day: dayOf(NOW), today: RULES.voiceCapDay - 2, lines: RULES.voiceCapDay - 2 }
   k.v.reply = { isAnswered: false, reason: 'error', usage: NONE }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.turn()
   await k.clock.advance(PAUSE + 60_000)
   await k.settle()
@@ -3796,6 +3887,24 @@ test('the terminal drawing is the same, byte for byte', async ($, on) => {
   expect(seen).toEqual(['12x5 f3219565', '14x7 c736b204', '12x5 7a533345', '14x7 538509fc'])
 })
 
+test('before the first prompt of a chat the pet asks what the other plugins add with whole facts (the session\'s model and surfaces): no hook on the way is skipped for a missing one, and the briefox plugin\'s sentence is seen', async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' }) as any
+  k.sections = [{ id: 'briefox', text: 'Be brief.', scope: 'session' }] // the briefox plugin, installed too
+  on('session.surfaces', () => ({ value: ['terminal'] }) as any)
+  await $.session.start(START)
+  // no prompt was composed yet: `next` refuses an argument that lacks a fact, so the pet names them all
+  expect(k.composed.length).toBeGreaterThan(0)
+  for (const facts of k.composed) expect(facts).toEqual({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [] })
+  expect(await cardOf($)).toMatch(/\nbriefox on, by the briefox plugin \(\/briefox off takes it out\)\./)
+  // once a prompt was composed, its own facts are the ones asked again
+  const ask = { model: 'claude-haiku-5-5', promptModel: 'claude-haiku-5-5', surfaces: [], tools: ['Bash'], outputStyle: null, traits: [] } as any
+  await $.prompt.compose(ask)
+  await $.session.end({ reason: 'other', sessionId: 's1' } as any).catch(() => {})
+  k.composed.length = 0
+  expect(await cardOf($, 'briefox')).toMatch(/^Briefox on: the briefox plugin adds/)
+  for (const facts of k.composed) expect(facts).toEqual(ask)
+})
+
 // The pet in the Claude apps: an Svg made from the frame the terminal draws, with the name, the phrase and the buttons beside it
 test('in the desktop and mobile apps the pet is an Svg with its phrase and buttons; vscode keeps its row', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
@@ -3871,6 +3980,42 @@ test('in the desktop and mobile apps the pet is an Svg with its phrase and butto
   expect(code.texts.length).toBe(1)
   expect(code.texts[0]).toMatch(/^Miro  ★ 0/)
   await code.ui.unmount()
+})
+
+// A new chat opened from the phone: the picture is in the tree at every moment of the birth, and the text never takes its place
+test('in the apps a newborn is drawn as an Svg from the egg on: whole, cracked, under the line of its birth and under the notice; the picture keeps its box beside the text', async ($, on) => {
+  const k = home(on, {})
+  await $.session.start({ cwd: '/w/x', surface: 'mobile', isInteractive: true })
+  const look = async (surface: string) => {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const svg = (await ui.find({ type: 'Svg' }))?.props as any, texts = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)), boxes = (await ui.findAll({ type: 'Box' })).map((x: any) => x.props as any), keys = (await ui.findAll({ type: 'Button' })).map((x: any) => x.key as string)
+    await ui.unmount()
+    return { svg, texts, boxes, keys }
+  }
+  const seen: string[] = []
+  for (const [wait, said, keys] of [[0, /^an egg\. something moves inside$/, []], [6_500, /^the shell is cracking$/, []], [2_000, /^I am \w+, a \w+$/, ['skin', 'pet']], [20_500, /^Comments are on: /, ['pet', 'voice-off']]] as const) {
+    await k.clock.advance(wait)
+    const shots = []
+    for (const surface of ['mobile', 'desktop']) {
+      const d = await look(surface)
+      expect(d.svg).toBeTruthy() // the picture, whatever the bubble says
+      expect(String(d.svg.source)).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="\d+" height="\d+" viewBox="0 0 \d+ \d+" shape-rendering="crispEdges"><rect /)
+      expect([d.svg.width >= 36, d.svg.height >= 36, d.svg.height <= 96, String(d.svg.alt).length > 2]).toEqual([true, true, true, true])
+      expect(d.texts[0]).toMatch(/^\w+  ★ 0$/)
+      expect(d.texts[1]).toMatch(said)
+      expect(d.keys).toEqual([...keys])
+      // the picture in a box of its own that does not shrink, the text in one that does: a long line cannot squeeze the picture out
+      expect(d.boxes.find(b => b.key === 'pic')).toMatchObject({ flexShrink: 0 })
+      expect(d.boxes.find(b => b.key === 'beside')).toMatchObject({ flexDirection: 'column', flexShrink: 1 })
+      shots.push(String(d.svg.source))
+    }
+    expect(shots[0]).toBe(shots[1])
+    seen.push(shots[0]!)
+  }
+  expect(new Set(seen.slice(0, 3)).size).toBe(3) // the whole egg, the cracked one, the animal
+  expect(seen[3]).toBe(seen[2])
+  // under the line of its birth the statistics are a second text, beside the picture and not in its place
+  expect((await cardOf($, 'where')).split('\n').find(line => line.startsWith('  mobile'))).toMatch(/last answer: the Svg picture$/)
 })
 
 test('/pet where: a line a surface, with when a client attached, how many times the band was asked there and what the last answer was', async ($, on) => {
@@ -3978,7 +4123,7 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   // what is this computer's own stays: the marks of its chats, the lines the pet said here and the day's count
   expect(k.disk['chat.there']).toEqual({ cwd: '/w/elsewhere', at: EARLY - 2000, done: true })
   expect(k.disk.voice).toMatchObject({ today: 1, last: ['a line of this machine'] })
-  expect(Object.keys(k.disk).filter(key => !/^(pet|diary|work|voice|routine|pref\.\w+|chat\.\w+)$/.test(key))).toEqual([])
+  expect(Object.keys(k.disk).filter(key => !/^(pet|diary|work|voice|routine|pref\.\w+|prefs\.rev|chat\.\w+)$/.test(key))).toEqual([]) // `prefs.rev`: the key that tells the other chats a preference was written
   // and exported again from here it is the same file, but for the moment it was written
   await cardOf($, 'export')
   const again = JSON.parse(m.files[file]!)
@@ -3986,25 +4131,25 @@ test('/pet export then /pet import on an empty store gives the same pet: the fil
   expect([again.routine.off, Object.keys(again.routine.days)]).toEqual([out.routine.off, Object.keys(out.routine.days)]) // the routine moved in with it; its day lasts until now, the commands since counted
 })
 
-test('/pet import over a newborn whose question about the comments is up: the choice that moves in stands, and the question goes at once', async ($, on) => {
+test('/pet import over a newborn whose notice about the comments is up: the choice that moves in stands, off stays off, and the notice goes at once', async ($, on) => {
   const k = home(on, {}, MOVED), m = moving(on, k)
   k.disk.pet = structuredClone(MOVED_PET)
   await $.session.start(START)
   await cardOf($, 'export')
   const text = Object.values(m.files)[0]!
   expect(JSON.parse(text).prefs.voiceAsked).toBe(true)
-  for (const key of Object.keys(k.disk)) delete k.disk[key] // another computer: a pet hatches there, and asks
+  for (const key of Object.keys(k.disk)) delete k.disk[key] // another computer: a pet hatches there, and says its notice
   k.state = {}
   await $.session.start(START)
   await k.clock.advance(29_500) // hatched, and it said who it is
   let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'comments on', 'stay quiet'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
   await ui.unmount()
   m.files['/t/miro.json'] = text
   expect(await cardOf($, 'import /t/miro.json yes')).toMatch(/^Miro moved in\./)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/May I comment/)
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).not.toContain('comments on')
+  expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/Comments are on/)
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).not.toContain('turn off')
   await ui.unmount()
   expect(prefsOf(k.disk)).toMatchObject({ voice: false, voiceAsked: true })
 })
@@ -4169,21 +4314,21 @@ test('reminders: kept in the store, capped and cleaned; shown in the bubble at a
   expect(await typed('remind x')).toBe('The reminders could not be read or kept: the store cannot be used now.')
 })
 
-test('reminders: a timed one that falls due while the question about the comments is up is said over it, and the question is back after', async ($, on) => {
+test('reminders: a timed one that falls due while the notice about the comments is up is said over it, and the notice is back after', async ($, on) => {
   const k = voiceKit($, on, { voice: false })
-  forget(k.disk) // a newborn: it hatches, then asks
+  forget(k.disk) // a newborn: it hatches, then says its notice
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.clock.advance(29_500) // hatched, and it said who it is
   const buttons = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const b = (await ui.findAll({ type: 'Button' })).map((x: any) => x.text); await ui.unmount(); return b }
-  expect(await buttons()).toEqual(['pet', 'comments on', 'stay quiet'])
+  expect(await buttons()).toEqual(['pet', 'turn off'])
   expect(await cardOf($, 'remind in 1m check the build')).toBe('Reminder 1 kept, in 1 min: check the build')
-  expect(await buttons()).toEqual(['pet', 'comments on', 'stay quiet']) // a command is no answer: the question waits
+  expect(await buttons()).toEqual(['pet', 'turn off']) // a command is no answer: the notice waits
   await k.clock.advance(70_000)
   expect(await bubbleOf($)).toEqual(['remember: check the build', '/pet remind done 1 when it is done'])
   expect(k.disk.reminders[0].told).toBe(true)
   await k.clock.advance(RULES.remindShowMs + 1_000)
-  expect((await bubbleOf($)).join(' ')).toMatch(/May I comment on your work\?/)
-  expect(await buttons()).toEqual(['pet', 'comments on', 'stay quiet'])
+  expect((await bubbleOf($)).join(' ')).toMatch(/Comments are on: /)
+  expect(await buttons()).toEqual(['pet', 'turn off'])
 })
 
 test('reminders: back after a pause the pet says them again at the next prompt; none under the bench band, and none while the band is hidden', async ($, on) => {
@@ -4447,7 +4592,7 @@ test('the day\'s questions: the finish time ten minutes after the first use, nev
   await k.pass(11_000)
   expect([/coffee/.test(await k.said()), await k.buttons()]).toEqual([false, ['skin', 'pet']])
   // nothing else is asked that day, and no model was asked for any of it (the kit's would throw)
-  for (let i = 0; i < 4; i++) { await k.pass(20 * 60_000); await cardOf($, 'pet'); expect(k.disk.routine.asked).toBe(2) }
+  for (let i = 0; i < 2; i++) { await k.pass(6 * 60_000); await cardOf($, 'pet'); expect(k.disk.routine.asked).toBe(2) } // past the wait between two questions, twice; the rest of the day is engine/routine.test.js
 })
 
 test('a question nobody answers goes after 30 minutes; /pet routine off stops the questions, shows what was learned, and clear forgets; nothing is asked without a person or under the bench', { timeoutMs: 60_000 }, async ($, on) => {
@@ -4473,7 +4618,7 @@ test('a question nobody answers goes after 30 minutes; /pet routine off stops th
   expect(await cardOf($, 'until off')).toBe('No finish time today.')
   // off: the coffee question, due now, never comes
   expect(await cardOf($, 'routine off')).toMatch(/^Questions off: the pet asks nothing about your day\./)
-  for (let i = 0; i < 3; i++) { await k.pass(10 * 60_000); await cardOf($, 'pet') }
+  for (let i = 0; i < 2; i++) { await k.pass(60_000); await cardOf($, 'pet') } // due now, and looked at every 10 seconds
   expect([k.disk.routine.asked, k.disk.routine.off, await k.buttons()]).toEqual([1, true, ['skin', 'pet']])
   expect(await cardOf($, 'routine')).toMatch(/\nQuestions off\. \/pet routine on brings them back/)
   expect(await cardOf($, 'routine on')).toBe('Questions on: at most 3 a day, one at a time.')
@@ -4519,7 +4664,7 @@ test('after three answered days the usual time is proposed with yes and no; no b
 })
 
 test('the finish time is warned about 30 and 10 minutes before and at the time: in the band of every open chat, with one toast for all of them', { timeoutMs: 60_000 }, async ($, on) => {
-  const k = dayKit($, on, dayAt(17, 17))
+  const k = dayKit($, on, dayAt(17, 17, 25))
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   expect(await cardOf($, 'until 18')).toMatch(/^Until 18:00, then\./)
   await k.to(dayAt(17, 17, 29))
@@ -4539,57 +4684,64 @@ test('the finish time is warned about 30 and 10 minutes before and at the time: 
   await k.to(dayAt(17, 18) + 11_000)
   expect(oneOf('until.w0', { time: '18:00' })).toContain(await k.said())
   expect(k.toasts.length).toBe(2)
-  await k.to(dayAt(17, 18, 20))
+  await k.to(dayAt(17, 18, 3))
   expect([/18:00/.test(await k.said()), k.toasts.length]).toEqual([false, 2]) // each once
 })
 
-test('the welcome back: after an hour with nothing done the line is in the bubble and stays until the person does something; done in another chat, it goes; then the coffee reminder is said', { timeoutMs: 60_000 }, async ($, on) => {
+test('the welcome back: after an hour with nothing done the line is in the bubble and stays until the person does something; then the coffee reminder is said', { timeoutMs: 60_000 }, async ($, on) => {
   const k = dayKit($, on, dayAt(17, 9))
-  k.disk.routine = { day: '2026-11-17', done: ['finish', 'small'], days: { '2026-11-17': { start: dayAt(17, 8), end: dayAt(17, 8, 59), coffee: false, coffeeAt: dayAt(17, 8, 30) } } } // asked and answered already: no coffee yet
+  k.disk.routine = { day: '2026-11-17', done: ['finish', 'small'], days: { '2026-11-17': { start: dayAt(17, 8), end: dayAt(17, 8, 59), coffee: false, coffeeAt: dayAt(17, 8) } } } // asked and answered already: no coffee yet
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.to(dayAt(17, 9, 59))
   expect(wordings('en', 'back.hour')).not.toContain(await k.said())
   await k.to(dayAt(17, 10) + 11_000)
   expect(wordings('en', 'back.hour')).toContain(await k.said()) // an hour: it is there for when they sit down
-  await k.to(dayAt(17, 10, 40))
-  expect(wordings('en', 'back.hour')).toContain(await k.said()) // and stays, asleep or not; the coffee reminder, due since 10:30, waits for the person
+  await k.to(dayAt(17, 10, 3))
+  expect(wordings('en', 'back.hour')).toContain(await k.said()) // and stays, asleep or not; the coffee reminder, due since 10:00, waits for the person
   expect(k.disk.routine.done).not.toContain('again')
-  await k.to(dayAt(17, 12, 30))
-  expect(wordings('en', 'back.long')).toContain(await k.said()) // worded as of now: three hours and more
   // the person presses a button: the welcome goes, and now the reminder about the coffee is said
   await k.press('pet')
-  expect([...wordings('en', 'back.long'), ...wordings('en', 'back.hour')]).not.toContain(await k.said())
+  expect(wordings('en', 'back.hour')).not.toContain(await k.said())
   await k.pass(RULES.cuddleShowMs + 11_000)
   expect(wordings('en', 'cup.no')).toContain(await k.said())
   expect(k.disk.routine.done).toContain('again')
   await k.pass(RULES.remindShowMs + 60_000)
   expect(wordings('en', 'cup.no')).not.toContain(await k.said()) // once
-  // away again; back in another chat: this one's welcome goes
-  await k.to(dayAt(17, 14))
-  const lunch = await k.said()
-  expect(wordings('en', 'back.lunch')).toContain(lunch) // left at half past twelve, back at two
+})
+
+// How long away and at what hour makes which welcome is engine/routine.test.js (`back`): here, that the words are those of the moment it is drawn
+test('the welcome back is worded as of now, not as of when it came up; when the person is back in another chat, this one\'s welcome goes', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = dayKit($, on, dayAt(17, 2, 59)) // a late night: the routine's day ends at four
+  k.disk.routine = { day: '2026-11-16', done: ['finish', 'small', 'again'], days: { '2026-11-16': { start: dayAt(16, 8), end: dayAt(17, 2, 58), coffee: true, coffeeAt: dayAt(16, 8, 30) } } }
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.to(dayAt(17, 3, 59) + 11_000)
+  expect(wordings('en', 'back.hour')).toContain(await k.said()) // away an hour
+  await k.to(dayAt(17, 4) + 1_000)
+  const morning = await k.said()
+  expect(wordings('en', 'back.morning')).toContain(morning) // the same welcome a minute later, on the next day: the next morning
+  // back in another chat: this one's welcome goes at the next look
   k.disk.routine = { ...k.disk.routine, seen: k.clock.now() }
   await k.pass(11_000)
-  expect(await k.said()).not.toBe(lunch)
+  expect(await k.said()).not.toBe(morning)
 })
 
 test('back after a pause with the comments on: the recap comes first and the welcome is the line under it, both kept until the person does something; then the reminder that fell due is said', { timeoutMs: 60_000 }, async ($, on) => {
   const k = recapKit($, on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await cardOf($, 'routine off') // the day's questions are not this test's
-  await cardOf($, 'remind in 70m call the plumber')
+  await cardOf($, 'remind in 62m call the plumber')
   await k.turn()
   k.v.reply = { isAnswered: true, text: LINE, usage: USAGE }
-  for (let i = 0; i < 7; i++) { await k.clock.advance(5 * 60_000); await k.settle() }
+  await k.clock.advance(35 * 60_000); await k.settle()
   expect((await bubbleOf($)).join(' | ')).toBe(`35 min ago: ${LINE}`)
-  for (let i = 0; i < 6; i++) { await k.clock.advance(5 * 60_000); await k.settle() }
+  await k.clock.advance(25 * 60_000 + 11_000); await k.settle()
   const both = await bubbleOf($)
-  expect(both[0]).toBe(`65 min ago: ${LINE}`)
+  expect(both[0]).toBe(`60 min ago: ${LINE}`)
   expect(['hour', 'lunch', 'long', 'morning'].flatMap(kind => wordings('en', `back.${kind}`))).toContain(both[1]) // whichever the hour of the machine makes it
   expect(k.v.calls.every((c: any) => !/routine|finish|coffee/.test(JSON.stringify(c)))).toBe(true) // nothing of the routine goes to the model
   // the reminder fell due while the person was away: it waits for them, as ever, and the two lines stay
-  await k.clock.advance(5 * 60_000 + 11_000)
-  expect(await bubbleOf($)).toEqual([`70 min ago: ${LINE}`, both[1]])
+  await k.clock.advance(3 * 60_000)
+  expect(await bubbleOf($)).toEqual([`63 min ago: ${LINE}`, both[1]])
   // the person is back and sends a prompt: the recap and the welcome had their time, and now the reminder is said. None was lost
   await k.turn()
   expect((await bubbleOf($)).join(' | ')).not.toContain(LINE)

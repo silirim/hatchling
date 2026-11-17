@@ -9,7 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/licence-MIT-4caf50?style=flat-square" alt="Licence: MIT">
   <img src="https://img.shields.io/badge/Claude%20Code-2.1.275%2B-4caf50?style=flat-square" alt="Claude Code 2.1.275 or later">
-  <img src="https://img.shields.io/badge/pet-0%20tokens-4caf50?style=flat-square" alt="The pet: 0 tokens">
+  <img src="https://img.shields.io/badge/comments-on%2C%20your%20tokens-4caf50?style=flat-square" alt="Comments: on as installed, on your tokens">
   <img src="https://img.shields.io/badge/animals-7-4caf50?style=flat-square" alt="7 animals">
   <img src="https://img.shields.io/badge/languages-4-4caf50?style=flat-square" alt="4 languages">
   <img src="https://img.shields.io/github/stars/silirim/hatchling?style=flat-square&color=4caf50" alt="GitHub stars">
@@ -26,7 +26,7 @@
 <table>
   <tr>
     <td align="center" width="25%"><h3>7</h3>animals to hatch<br><sub><a href="docs/pet.md">docs/pet.md</a></sub></td>
-    <td align="center" width="25%"><h3>0 tokens</h3>unless you turn comments on<br><sub><a href="docs/privacy.md">docs/privacy.md</a></sub></td>
+    <td align="center" width="25%"><h3>725 tokens</h3>a comment; on as installed<br><sub><a href="docs/privacy.md">docs/privacy.md</a></sub></td>
     <td align="center" width="25%"><h3>-12.7%</h3>cost of a long session with "Be brief."<br><sub>8+8 runs, Opus 5.5, p 0.0006: <a href="bench/RESULTS.md">Series 9</a></sub></td>
     <td align="center" width="25%"><h3>8 lines, 1 sentence</h3>the lines were not shown to beat the sentence<br><sub>two projects: <a href="bench/RESULTS.md">Series 8 and 9</a></sub></td>
   </tr>
@@ -70,7 +70,7 @@ The sentence alone:
 - It reports your day: chats, folders, turns, files changed.
 - An egg hatches into one of seven animals; the seventh is rare, and not shown.
 - It grows with use and never loses anything.
-- It costs no tokens, unless you turn its comments on.
+- Comments are on, on your tokens; `/pet comments off` stops them.
 
 ### Dress it
 
@@ -108,7 +108,7 @@ Use earns stars. The shop takes them for things to wear, three coats and the oth
 | `/pet remind <text>`, `/pet reminders` | reminders in the bubble |
 | `/pet share` | a picture of the pet for a post |
 | `/pet export`, `/pet import <path>` | move the pet to another computer |
-| `/pet comments on\|off` | comments; off by default |
+| `/pet comments on\|off` | comments; on as installed |
 | `/pet model [alias\|id]` | comments' model; default `haiku` |
 | `/pet briefox on\|off` | briefox's sentence, from the pet |
 | `/pet hide`, `/pet show` | hide or show it |
@@ -151,8 +151,8 @@ Every run: [bench/RESULTS.md](bench/RESULTS.md). On your project: [bench/README.
 ## What stays on your machine
 
 - **Kept locally** (`~/.claude/plugins/store/`): the pet's counters and preferences, a diary of times, counts and folder names, your reminders and routine answers (never sent to the comments model; only the routine is exported; command answers are chat lines), each chat's full folder path and last-turn times (30 chats, 30 days), your live sessions' folders, statuses and given names. Never a prompt, a file, a command or the content of a chat, except each open chat's title line with titles on. briefox keeps only its switch.
-- **Nothing is sent anywhere**, and no model is asked.
-- **The one exception is comments, off by default.** A small model, on your tokens (about 650 in, 75 out; at most 40 a day), gets the pet's character and language, your name if told, why it speaks, tool names (MCP servers' too) and counts, failed programs' names, how many files changed, the assistant's last 600 characters, its last two lines, three diary lines with folder names, another finished chat's folder name and times and, with `/pet say`, your first 300 characters. A pause or resume sends a recap: up to 16,000 characters of the last turn's text, 300 of your last prompt.
+- **Nothing else is sent**, no model asked.
+- **Comments are on as installed**; `/pet comments off` stops them. A small model, on your tokens (650 in, 75 out; at most 40 a day), gets the pet's character and language, your name if told, why it speaks, tool names (MCP servers' too) and counts, failed programs' names, how many files changed, the assistant's last 600 characters, its last two lines, three diary lines with folder names, another finished chat's folder name and times and, with `/pet say`, your first 300 characters. A pause or resume sends a recap: up to 16,000 characters of the last turn's text, 300 of your last prompt.
 - `/pet adopt` reads `~/.claude.json` when you run it. `/pet share` saves a picture in `~/.claude/hatchling-share/`. `/pet export` saves the pet there.
 - Complete: [docs/privacy.md](docs/privacy.md).
 

@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { RULES, dayOf, reduce, initialState, view } from './engine.js'
 import { bubble } from './catalog.js'
-import { tally, due, left, reserve, settle, pathy, average, system, summary, reply, clean, tooLong, question, MODEL, MODEL_MAX, asModel, unavailable, tellGone } from './voice.js'
+import { tally, due, left, reserve, settle, pathy, average, system, summary, reply, clean, tooLong, notice, MODEL, MODEL_MAX, asModel, unavailable, tellGone } from './voice.js'
 
 const T = Date.UTC(2026, 10, 13, 12), MIN = 60_000
 const USAGE = { input_tokens: 300, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -208,12 +208,12 @@ test('the animal is told with the parts it has and has not; an unknown one names
   assert.match(system({ name: 'x', animal: 'dog', stats: [1, 2, 3, 4, 5] }), /begin each line your own way: no habitual opening word/)
 })
 
-test('the question asked once says what a yes comes to: whose account, the tokens of a line and the lines of a day, what is sent, where the details are', () => {
-  const q = question(tally(undefined, T))
-  assert.equal(q, 'May I comment on your work? It uses a small model on your account: about 650 tokens in and 75 out a line (measured in November 2026), at most 40 lines a day. It gets a short summary of the turn. A recap after a pause: about 1,300 to 2,000 in and 570 to 750 out. Details: /pet comments')
-  assert.doesNotMatch(q, /!|coin|wallet|\$/)
+test('the notice said once: the comments are on, whose tokens, the tokens of a line and the lines of a day, the command that stops them', () => {
+  const q = notice(tally(undefined, T))
+  assert.equal(q, 'Comments are on: a small model writes them on your tokens, about 650 in and 75 out a line (measured in November 2026), at most 40 lines a day. /pet comments off stops them.')
+  assert.doesNotMatch(q, /!|coin|wallet|\$|\?/)
   // once lines were paid for, the figure is the measured one
-  assert.match(question(count(tally(undefined, T), USAGE, T)), /about 300 tokens in and 20 out a line \(measured on your lines\), at most 40 lines a day/)
+  assert.match(notice(count(tally(undefined, T), USAGE, T)), /about 300 in and 20 out a line \(measured on your lines\), at most 40 lines a day/)
 })
 
 test('the model is told the language and answers in it: the tone lines are in that language, Chinese is asked for in characters, English is as it was', () => {
@@ -232,8 +232,8 @@ test('the model is told the language and answers in it: the tone lines are in th
   assert.match(summary({ why: 'cuddle', lang: 'zh' }), /in about ten characters, in Simplified Chinese\. Not a report/)
   assert.equal(summary({ why: 'cuddle', lang: 'en' }), summary({ why: 'cuddle' }))
   assert.equal(system({ ...pet, lang: 'xx' }), system(pet)) // a language there is not: English
-  // the question, in each language, names the command as it is typed and has no exclamation mark
-  for (const lang of ['es', 'pt', 'zh']) { const q = question(tally(undefined, T), lang); assert.match(q, /650.*75.*2026.*40.*\/pet comments$/); assert.doesNotMatch(q, /[!！¡$]/); assert.notEqual(q, question(tally(undefined, T))) }
+  // the notice, in each language, names the command as it is typed and has no exclamation mark
+  for (const lang of ['es', 'pt', 'zh']) { const q = notice(tally(undefined, T), lang); assert.match(q, /650.*75.*2026.*40.*\/pet comments off /); assert.doesNotMatch(q, /[!！¡$?？]/); assert.notEqual(q, notice(tally(undefined, T))) }
 })
 
 test('the limit of a line is its width on screen: 60 columns are 60 letters or 30 Chinese characters', () => {

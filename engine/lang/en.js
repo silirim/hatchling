@@ -96,9 +96,8 @@ export default {
   'egg.crack': 'the shell is cracking',
   sleep: 'zzz',
 
-  // the comments (the line a small model writes): the question asked once, and three lines in the tone of each character
-  'comments.ask': 'May I comment on your work? It uses a small model on your account: about {in} tokens in and {out} out a line ({how}), at most {cap} lines a day. It gets a short summary of the turn. A recap after a pause: about 1,300 to 2,000 in and 570 to 750 out. Details: /pet comments',
-  'comments.ask.how': 'Answer with /pet comments on or /pet comments off.',
+  // the comments (the line a small model writes): the notice said once, that they are on and what stops them, and three lines in the tone of each character
+  'comments.notice': 'Comments are on: a small model writes them on your tokens, about {in} in and {out} out a line ({how}), at most {cap} lines a day. /pet comments off stops them.',
   // /pet model: the model the comments are asked of, and the word said once a day when it does not answer
   'comments.ours': 'measured in November 2026',
   'comments.own': 'measured on your lines',
@@ -120,13 +119,13 @@ export default {
   'btn.outline': 'outline',
   'btn.resume': 'resume',
   'btn.adopt': 'adopt',
-  'btn.comments.on': 'comments on',
-  'btn.comments.off': 'stay quiet',
+  'btn.comments.off': 'turn off',
   'btn.skin': 'skin',
 
   // toasts and short replies
   'toast.hidden': 'Hatchling is hidden. /pet show brings it back.',
   'toast.shown': 'Hatchling is back.',
+  'toast.comments.notice': 'Hatchling: {notice}',
   'toast.comments.on': 'Hatchling: comments on. /pet comments off stops them, /pet comments says what they send and cost.',
   'toast.comments.off': 'Hatchling stays quiet. /pet comments on changes that.',
   'toast.box': 'Hatchling: empty the prompt box first.',
@@ -280,7 +279,7 @@ export default {
   'gone.diet': '/pet diet was taken out: in our bench it showed no saving (alone -3.6%, p 0.31). Nothing is trimmed any more; docs/privacy.md says where the outputs it saved are. /pet briefox, one sentence, is the lever that showed one.',
   'gone.weight': '/pet weight was taken out: /context in Claude Code already shows what every request carries.',
   'card.comments.off': 'comments off: fixed lines only, nothing sent. /pet comments on lets a small model write them, on your tokens',
-  'card.comments.on': 'comments on: model {model}, about {in} tokens in and {out} out a line, {n} of {cap} lines today, {today} tokens today, {all} in all',
+  'card.comments.on': 'comments on: model {model}, about {in} tokens in and {out} out a line, {n} of {cap} lines today, {today} tokens today, {all} in all. /pet comments off stops them',
   'card.comments.unread': 'comments on: their count could not be read',
 
   // the shop
@@ -360,7 +359,7 @@ export default {
   'gone.budget': "The context budget was taken out: no valid run of ours showed that compacting at a threshold pays; on paper it did not on a large model. Nothing was set. After a long pause in a large chat the pet suggests /compact, and you decide.",
   'diary.unkept': "The diary could not be cleared: the store cannot be written now.",
   'shop.debt': "The balance is under zero: two chats spent the same stars at once. Both things are yours; nothing more can be bought until use brings it back to zero.",
-  'help': ["Hatchling commands", "  /pet                       the pet card", "  /pet pet                   a cuddle", "  /pet say <text>            talk to the pet (with comments on)", "  /pet remind <text>         keep a reminder; in <20m|2h|1d> <text> times it", "  /pet reminders             list them; /pet remind done <n|all> removes", "  /pet yes                   answer the pet's question; also /pet no, /pet answer <choice>", "  /pet until [18:30|off]     the time you finish today: it warns before", "  /pet routine [off|on|clear]  what it learned of your days; its questions", "  /pet name [name]           its name, or a new one", "  /pet call me [name]        what it calls you; nobody forgets it", "  /pet shop [item|animal]    the shop; with a name, buys or unlocks", "  /pet skin                  what is on, part by part", "  /pet wear <item>           put a thing on its part, or take it off", "  /pet wear none             take everything off", "  /pet wear plain|golden     the coat: its own colours, or the golden one", "  /pet animal [name]         the animals you have; with a name, switches", "  /pet skins                 your skin packs", "  /pet chats [on|off]        your open chats: working, waiting, or asking", "  /pet chats titles [on|off] each chat's title in that list; off by default", "  /pet alerts [on|off]       a desktop notification when a chat waits for your OK", "  /pet briefox [on|off]      one sentence in the system prompt: Be brief.", "  /pet comments [on|off]     lines by a small model, on your tokens", "  /pet model [alias|id]      the model of the comments, now {model}", "  /pet lang [en|es|pt|zh]    its language", "  /pet share                 a picture of the pet to attach to a post", "  /pet export                save the pet to a file, for another computer", "  /pet import <file> [yes]   bring in a pet saved with /pet export", "  /pet diary [today|yesterday|week]  the work report: chats, folders, turns, files changed", "  /pet diary lines           the pet's own diary", "  /pet diary clear           empty both", "  /pet adopt                 take the name and character of your old /buddy", "  /pet hide                  hide the band", "  /pet show                  show it again", "  /pet demo                  every mood, 5 s each", "  /pet where                 troubleshooting: where the pet draws, and what", "  /pet help                  this list"],
+  'help': ["Hatchling commands", "  /pet                       the pet card", "  /pet pet                   a cuddle", "  /pet say <text>            talk to the pet (with comments on)", "  /pet remind <text>         keep a reminder; in <20m|2h|1d> <text> times it", "  /pet reminders             list them; /pet remind done <n|all> removes", "  /pet yes                   answer the pet's question; also /pet no, /pet answer <choice>", "  /pet until [18:30|off]     the time you finish today: it warns before", "  /pet routine [off|on|clear]  what it learned of your days; its questions", "  /pet name [name]           its name, or a new one", "  /pet call me [name]        what it calls you; nobody forgets it", "  /pet shop [item|animal]    the shop; with a name, buys or unlocks", "  /pet skin                  what is on, part by part", "  /pet wear <item>           put a thing on its part, or take it off", "  /pet wear none             take everything off", "  /pet wear plain|golden     the coat: its own colours, or the golden one", "  /pet animal [name]         the animals you have; with a name, switches", "  /pet skins                 your skin packs", "  /pet chats [on|off]        your open chats: working, waiting, or asking", "  /pet chats titles [on|off] each chat's title in that list; off by default", "  /pet alerts [on|off]       a desktop notification when a chat waits for your OK", "  /pet briefox [on|off]      one sentence in the system prompt: Be brief.", "  /pet comments [on|off]     lines by a small model, on your tokens; on as installed", "  /pet model [alias|id]      the model of the comments, now {model}", "  /pet lang [en|es|pt|zh]    its language", "  /pet share                 a picture of the pet to attach to a post", "  /pet export                save the pet to a file, for another computer", "  /pet import <file> [yes]   bring in a pet saved with /pet export", "  /pet diary [today|yesterday|week]  the work report: chats, folders, turns, files changed", "  /pet diary lines           the pet's own diary", "  /pet diary clear           empty both", "  /pet adopt                 take the name and character of your old /buddy", "  /pet hide                  hide the band", "  /pet show                  show it again", "  /pet demo                  every mood, 5 s each", "  /pet where                 troubleshooting: where the pet draws, and what", "  /pet help                  this list"],
   'store.lost': "The pet's store cannot be read right now: nothing is shown or changed until it can be.",
   'peer.ask.here': "the other chat in this folder ({name}) may be waiting for your OK",
   'peer.ask.away': "another chat may be waiting for your OK",

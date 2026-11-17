@@ -2,9 +2,9 @@
 
 ## What is sent
 
-**As installed, nothing.** Neither plugin sends anything anywhere or asks any model. The work report, the reminders, the watch on your other chats and their titles are made on your machine, with no model. briefox adds its one sentence to the system prompt of your own chat, and reads the token count of each request to know when the chat is long.
+**As installed, comments, and nothing else.** But for comments, neither plugin sends anything anywhere or asks any model. The work report, the reminders, the watch on your other chats and their titles are made on your machine, with no model. briefox adds its one sentence to the system prompt of your own chat, and reads the token count of each request to know when the chat is long.
 
-**The one exception is comments**, off until you turn them on ([comments.md](comments.md) has the cost). Each comment, and each `/pet say`, is one request to a small model on your own account, with:
+**Comments are on as installed**; `/pet comments off` stops them, and then nothing at all is sent ([comments.md](comments.md) has the cost). The pet says so once, in a notice, before the first one is asked for; none is asked for in a headless run. Each comment, and each `/pet say`, is one request to a small model on your own account, with:
 
 - the pet's name, animal, statistics and language, and the rules of a line;
 - the name you told the pet with `/pet call me`, when you told one;
@@ -41,7 +41,7 @@ In `~/.claude/hatchling-share/` (or the config folder Claude Code was given), on
 
 In the same folder, only when you run `/pet export` (or `/pet import <path> yes`, which saves the pet that is there first): one JSON file, `hatchling-<name>-<date>.json`, readable by you alone (mode 0600). Nothing is sent: you carry the file yourself.
 
-- **In the file**: the pet (animal, name, character and statistics, birth, days, affection, cuddles, stars, the items, coats and animals it has, what it wears, whether it was born golden, its two all-time token counters), your choices (language, briefox, hidden, the board of the chats, the comments' model, comments on or off and whether you were asked), the name you gave with `/pet call me`, and the diary, and the routine it learned (the days above: start, end, coffee, finish time; and whether its questions are off).
+- **In the file**: the pet (animal, name, character and statistics, birth, days, affection, cuddles, stars, the items, coats and animals it has, what it wears, whether it was born golden, its two all-time token counters), your choices (language, briefox, hidden, the board of the chats, the comments' model, comments on or off and whether you were told), the name you gave with `/pet call me`, and the diary, and the routine it learned (the days above: start, end, coffee, finish time; and whether its questions are off).
 - **Not in the file**: your reminders, the work counters, the last look at your sessions, the marks of the chats (full folder paths, times of turns), the pet's last lines, the comments' count, anything of a chat's content.
 - **The diary carries folder names**, and the file your `/pet call me` name: look at it before you send it to anyone.
 - `/pet import` reads the one file you name and no other, and writes only the pet's own keys in the store. The file is checked like a skin pack before any of it is used: nothing in it can name a path.
