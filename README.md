@@ -40,7 +40,7 @@
 ## Install
 
 <p align="center">
-  <img src="assets/terminal.gif" alt="A first start in a terminal: the egg hatches above the prompt"><br>
+  <img src="assets/terminal.gif" alt="A first start in a terminal: an egg above the prompt hatches into a penguin with a golden egg beside it, its name and stars over the picture, the skin button at its left and its card in a bubble; then the bubble holds the notice that comments are on, with a turn off button. Cut to the rows of the band and the prompt"><br>
   <sub>A real recording of a first start.</sub>
 </p>
 

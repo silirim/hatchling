@@ -757,7 +757,7 @@ async function toldVoice(/** @type {any} */ $) {
   const a = await heldAnim($), p = await getPrefs($)
   if (!a.ask || a.askKind || a.egg > 0 || a.demo || (a.noteLeft > 0 && a.note) || p.voiceAsked || p.hidden) return
   if (!(await setPrefs($, { voice: p.voice, voiceAsked: true }))) return // both: once told, what the store has is the choice, and an earlier version wrote `voice: false` at every birth
-  await $.ui.toast(text(p.lang, 'toast.comments.notice', { notice: a.ask })).catch(() => {})
+  await $.ui.toast(text(p.lang, 'toast.comments.notice')).catch(() => {}) // short, so that no surface cuts it: the whole notice is in the bubble
 }
 /** The choice, from the button of the notice or from /pet comments on|off: kept in the preferences, and the notice goes. */
 async function setVoice(/** @type {any} */ $, /** @type {boolean} */ on) {
@@ -1084,17 +1084,21 @@ const hearts = (/** @type {number} */ n) => '♥'.repeat(n).padEnd(5, '♡') // 
 // readers of it: each gives a value whole for this version, or says there is none, and no drawing or command meets an absent field.
 /** The chat's engine state, made whole (engine.js `whole`); null when the session holds none. */
 const heldPet = async (/** @type {any} */ $) => { const held = await read($, pet); return held ? whole(held) : null }
-/** The animation's state: a field an earlier version did not have reads as at rest. */
-const heldAnim = async (/** @type {any} */ $) => {
-  if (memo?.anim?.at === stirs) return memo.anim.v
+/**
+ * The animation's state: a field an earlier version did not have reads as at rest. A drawing (`drawing`) always asks the session,
+ * never the copy a tick keeps: the read is what makes the session draw it again at the next write, and a drawing asked while a
+ * tick ran, served from that copy, was drawn no more (0.3.5: the band stood still on the line of the birth).
+ */
+const heldAnim = async (/** @type {any} */ $, drawing = false) => {
+  if (!drawing && memo?.anim?.at === stirs) return memo.anim.v
   const at = stirs, a = /** @type {any} */ (await read($, anim)), v = /** @type {typeof ANIM0} */ (Object.fromEntries(Object.entries(ANIM0).map(([k, v]) => [k, typeof a?.[k] === typeof v ? a[k] : v])))
   if (memo && at === stirs) memo.anim = { at, v }
   return v
 }
 /** The preferences the session holds, when every field of this version is there and sound; else null, and the caller takes them from the store (storedPrefs makes those whole). */
-async function heldPrefs(/** @type {any} */ $) {
+async function heldPrefs(/** @type {any} */ $, drawing = false) {
   await packs($)
-  if (memo?.prefs?.at === prefStirs) return heldSound(memo.prefs.v)
+  if (!drawing && memo?.prefs?.at === prefStirs) return heldSound(memo.prefs.v) // a drawing asks the session itself, as for the animation
   const at = prefStirs, now = /** @type {any} */ (await read($, prefs))
   if (memo && at === prefStirs) memo.prefs = { at, v: now }
   return heldSound(now)
@@ -1991,8 +1995,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const tally = bandAsks[e.surface] = { n: (bandAsks[e.surface]?.n ?? 0) + 1, last: /** @type {'svg' | 'row' | 'raster' | 'nothing'} */ ('nothing') }
     const state = (await heldPet($)) ?? cur // after /clear the session's copy is empty until the next event
-    const a = await heldAnim($)
-    const p = (await heldPrefs($)) ?? await storedPrefs($)
+    const a = await heldAnim($, true)
+    const p = (await heldPrefs($, true)) ?? await storedPrefs($)
     // E20: a store that cannot be read gives no pet: nothing is drawn until the real one can be, never one made up for the moment
     if (e.props.hasSurvey || !state || p.hidden || /** @type {any} */ (p).lost) return next(e)
 
@@ -2126,10 +2130,18 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const skinned = skinWide > 1 && room >= wide + skinWide + 1 && !(open && wrapWith(skinWide) < BUBBLE_MIN && wrapWith(0) >= BUBBLE_MIN)
     const link = skinned ? skinWide : 1
     const beside = room - wide - link - 1 // what is left of the column
-    const wrapAt = wrapWith(link)
     // the speech bubble: each phrase is wrapped here, by its width on screen, and the border hugs the widest line
-    const phrases = [{ rows: wrap(b.say, Math.max(1, wrapAt)), dim: false }, ...(b.fix ? [{ rows: wrap(b.fix, Math.max(1, wrapAt)), dim: true }] : []), ...(more ? [{ rows: wrap(more.say, Math.max(1, wrapAt)), dim: true }] : []), ...(b.aside ? [{ rows: wrap(b.aside, Math.max(1, wrapAt)), dim: true }] : [])]
+    const phrasesAt = (/** @type {number} */ at) => [{ rows: wrap(b.say, Math.max(1, at)), dim: false }, ...(b.fix ? [{ rows: wrap(b.fix, Math.max(1, at)), dim: true }] : []), ...(more ? [{ rows: wrap(more.say, Math.max(1, at)), dim: true }] : []), ...(b.aside ? [{ rows: wrap(b.aside, Math.max(1, at)), dim: true }] : [])]
     const under = dressing || (asking && !(a.noteLeft > 0 && a.note)) || !!(b.ask || b.link || more?.ask) // a row of buttons under the bubble
+    const rowsAt = (/** @type {number} */ at) => 2 + phrasesAt(at).reduce((n, ph) => n + ph.rows.length, 0) + (under ? 1 : 0)
+    // In a low band (a terminal of 22 rows gives 6) a long phrase wrapped at BUBBLE_MAX is taller than the band may be: the notice
+    // about the comments, four lines and its button, was then not drawn at all. Where the row has the columns, such a bubble is
+    // wider, by as little as makes it fit
+    let wrapAt = wrapWith(link)
+    if (open && wrapAt >= BUBBLE_MIN && rowsAt(wrapAt) > high && room < Infinity) {
+      for (let at = wrapAt + 1, most = room - wide - Math.max(1, link) - 1 - 4; at <= most; at++) if (rowsAt(at) <= high) { wrapAt = at; break }
+    }
+    const phrases = phrasesAt(wrapAt)
     const boxed = 2 + phrases.reduce((n, ph) => n + ph.rows.length, 0), whole = boxed + (under ? 1 : 0) // the bubble's rows with its border, and with its buttons
     // shown when it is open, there is room for a line of BUBBLE_MIN columns, and it is not taller than the band may be
     const bubbled = open && wrapAt >= BUBBLE_MIN && whole <= high

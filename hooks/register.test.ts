@@ -558,8 +558,9 @@ function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 
   on('store.set', (_: any, e: any) => { if ((k as any).ro) throw new Error('read-only'); k.sets.push(e.key); k.disk[e.key] = structuredClone(e.value); return { value: undefined } })
   on('store.keys', () => { if (k.lost) throw new Error('unreadable'); return { value: Object.keys(k.disk) } })
   on('store.delete', (_: any, e: any) => { delete k.disk[e.key]; return { value: undefined } })
-  on('state.get', (_: any, e: any) => ({ value: k.state[e.key] ?? { value: undefined, version: 0 } }))
-  on('state.set', (_: any, e: any) => { const version = (k.state[e.key]?.version ?? 0) + 1; k.state[e.key] = { value: e.value, version }; return { value: { isSet: true, version } } })
+  // `got` and `put`, when a test sets them, hear the key of each read and of each write of the session's state
+  on('state.get', (_: any, e: any) => { (k as any).got?.(String(e.key)); return { value: k.state[e.key] ?? { value: undefined, version: 0 } } })
+  on('state.set', (_: any, e: any) => { const version = (k.state[e.key]?.version ?? 0) + 1; k.state[e.key] = { value: e.value, version }; (k as any).put?.(String(e.key)); return { value: { isSet: true, version } } })
   on('session.id', () => ({ value: (k as any).id ?? 'me' }))
   on('config.list', () => ({ value: (k as any).theme ? [{ key: 'theme', value: (k as any).theme }] : [] }) as any)
   on('command.register', () => ({ value: { command: 'pet' } }))
@@ -630,7 +631,7 @@ test('a pet is born with a name and a character of its own: on the card and in t
   expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('Comments are on: a small model writes them\non your tokens, about 650 in and 75 out a\nline (measured in November 2026), at most 40\nlines a day. /pet comments off stops them.')
   expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['turn off'])
   expect([prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([true, true])
-  expect(k.toasts.at(-1)).toBe('Hatchling: Comments are on: a small model writes them on your tokens, about 650 in and 75 out a line (measured in November 2026), at most 40 lines a day. /pet comments off stops them.') // in a toast too, for a band with no room for the bubble
+  expect(k.toasts.at(-1)).toBe('Hatchling: comments are on, your tokens. /pet comments off stops them.') // in a toast too, for a band with no room for the bubble
   await ui.press({ key: 'voice-off' })
   expect(k.toasts.at(-1)).toBe('Hatchling stays quiet. /pet comments on changes that.')
   expect([prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([false, true])
@@ -2005,7 +2006,7 @@ test('comments are on as installed: a pet never told gets the notice once, with 
   const N = 'Comments are on: a small model writes them\non your tokens, about 500 in and 20 out a\nline (measured on your lines), at most 40\nlines a day. /pet comments off stops them.'
   expect(await k.texts()).toContain(N)
   expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: true }) // marked as said when it is in sight, with the comments on
-  expect(k.toasts).toEqual([`Hatchling: ${N.replace(/\n/g, ' ')}`]) // and said in a toast, once
+  expect(k.toasts).toEqual(['Hatchling: comments are on, your tokens. /pet comments off stops them.']) // and said in a toast, once
   expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 500 tokens in and 20 out a line, 0 of 40 lines today, 0 tokens today, 5200 in all\. \/pet comments off stops them$/m)
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await desk.findAll({ type: 'Text' })).map(x => x.text)).toContain(N.replace(/\n/g, ' ')) // the apps wrap it themselves
@@ -2044,14 +2045,73 @@ test('nothing is sent before the person was told: a newborn asks no model while 
   expect(k.v.calls).toEqual([])
   expect(k.disk.voice).toBeUndefined()
   expect(prefsOf(k.disk).voiceAsked).toBe(false)
-  expect(k.toasts.join(' ')).not.toMatch(/Comments are on/)
+  expect(k.toasts.join(' ')).not.toMatch(/comments are on/i)
   await k.clock.advance(21_000) // the line of the birth had its time: the notice is in sight, though a prompt was sent meanwhile
   expect((await k.texts()).join(' ').replace(/\n/g, ' ')).toMatch(/Comments are on: a small model writes them on your tokens, about 650 in and 75 out a line \(measured in November 2026\), at most 40 lines a day\. \/pet comments off stops them\./)
   expect(prefsOf(k.disk).voiceAsked).toBe(true)
-  expect(k.toasts.filter(t => /Comments are on/.test(t)).length).toBe(1)
+  expect(k.toasts.filter(t => /comments are on/.test(t)).length).toBe(1)
   await k.clock.advance(31_000) // past the wait of a failure's line
   await k.turn(() => $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 't3' } as any))
   expect(k.v.calls.length).toBe(1) // told: from now it speaks
+})
+
+// 0.3.5, seen at a first start in a real terminal: the band stood still on the line of the birth, the notice came as a toast only.
+// A drawing asked while a tick ran was served the copy the tick keeps of the animation and of the preferences, so it asked the
+// session for neither, and the session, which draws again who read a value when it is written, drew that band no more.
+test('from the hatch to the notice with nothing typed: every drawing asks the session for what it draws, also one asked while a tick runs; the card stays 20 s, then the notice, whole, with its button, until the person does something; the toast is one short line', async ($, on) => {
+  const k = home(on, {})
+  // the session, as the engine is: it draws the band while a tick of the mod is under way. Here, right after the tick read the
+  // animation for the second time (its look after its own write: from there on it holds a copy that is good), once a tick
+  const LOW = { bodyColumns: 91, maxRows: 6 } // as the terminal it was seen in: 96 columns and 22 rows, where the band may take 6
+  const draws: { at: number, read: string[], texts: string[], keys: string[] }[] = []
+  let drawing: Promise<void> | null = null, asked: string[] = [], reads = 0
+  const draw = async (at: number) => {
+    asked = []
+    const ui = await $.ui.mount({ ...BAND, props: { hasSurvey: false, ...LOW }, surface: 'terminal' })
+    const read = [...asked]
+    const texts = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text).replace(/\n/g, ' ')), keys = (await ui.findAll({ type: 'Button' })).map((x: any) => String(x.text))
+    await ui.unmount()
+    draws.push({ at, read, texts, keys })
+  }
+  ;(k as any).got = (key: string) => {
+    if (drawing) asked.push(key)
+    else if (key === 'anim' && ++reads === 2) drawing = draw(k.clock.now())
+  }
+  const t0 = k.clock.now()
+  await $.session.start({ cwd: '/w/new', surface: 'terminal', isInteractive: true })
+  // the egg, the line of the birth, and a minute more: nothing is typed, nothing pressed
+  for (let ms = 0; ms < 8_000 + RULES.bornShowMs + 62_000; ms += 500) { reads = 0; await k.clock.advance(500); await drawing; drawing = null }
+  const seen = draws.map(d => ({ ...d, at: d.at - t0 }))
+  expect(seen.length).toBeGreaterThan(50)
+  expect(seen.filter(d => !d.read.includes('anim') || !d.read.includes('prefs')).map(d => d.at)).toEqual([]) // each asked the session for the animation and for the preferences: the session draws it again when they change
+  const NOTICE = 'Comments are on: a small model writes them on your tokens, about 650 in and 75 out a line (measured in November 2026), at most 40 lines a day. /pet comments off stops them.'
+  const card = seen.filter(d => d.texts.some(t => /^I am \w+, a \w+$/.test(t))), told = seen.filter(d => d.texts.includes(NOTICE))
+  expect(card.length).toBeGreaterThan(30)
+  expect(card.every(d => !d.texts.includes(NOTICE) && d.keys.join() === 'skin')).toBe(true)
+  expect(told.length).toBeGreaterThan(0) // the write that ends the line of the birth is drawn: the notice is in the bubble
+  expect(told.every(d => d.keys.join() === 'turn off')).toBe(true)
+  const shown = Math.min(...told.map(d => d.at)) - Math.min(...card.map(d => d.at)) // the card had its 20 s, no more: to a tick, as a drawing a tick is what is looked at
+  expect([shown >= RULES.bornShowMs - 500, shown <= RULES.bornShowMs]).toEqual([true, true])
+  // a minute later, with nothing done: still the notice and its button, said once in a toast no surface has to cut
+  drawing = draw(k.clock.now()); await drawing
+  expect([draws.at(-1)!.at - t0, draws.at(-1)!.texts.includes(NOTICE), draws.at(-1)!.keys]).toEqual([8_000 + RULES.bornShowMs + 62_000, true, ['turn off']])
+  expect(k.toasts.filter(t => /comments/i.test(t))).toEqual(['Hatchling: comments are on, your tokens. /pet comments off stops them.'])
+  expect(Math.max(...k.toasts.map(t => t.length))).toBeLessThanOrEqual(72)
+  // the notice at BUBBLE_MAX columns is four lines: with its border and its button, a row more than that band has. It is drawn wider, whole
+  const low = await $.ui.mount({ ...BAND, props: { hasSurvey: false, ...LOW }, surface: 'terminal' })
+  const lines = String((await low.find({ type: 'Text', text: /^Comments are on/ }))!.text).split('\n')
+  expect([lines.length, lines.join(' '), Math.max(...lines.map(l => l.length)) > 44]).toEqual([3, NOTICE, true])
+  expect(await low.find({ type: 'Button', key: 'voice-off' })).toBeTruthy()
+  await low.unmount()
+  // a band with rows to spare keeps the bubble's usual width
+  const roomy = await $.ui.mount({ ...BAND, props: { hasSurvey: false, bodyColumns: 91, maxRows: 12 }, surface: 'terminal' })
+  expect(Math.max(...String((await roomy.find({ type: 'Text', text: /^Comments are on/ }))!.text).split('\n').map(l => l.length))).toBeLessThanOrEqual(44)
+  await roomy.unmount()
+  // and with neither the rows nor the columns there is no bubble: the toast said it, and /pet comments tells the rest
+  const narrow = await $.ui.mount({ ...BAND, props: { hasSurvey: false, bodyColumns: 75, maxRows: 6 }, surface: 'terminal' })
+  expect(await narrow.find({ type: 'Box', key: 'bubble' })).toBeFalsy()
+  await narrow.unmount()
+  expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: true })
 })
 
 test('the notice: "turn off" turns the comments off and keeps the choice; no model is asked after, and no later chat says the notice again', async ($, on) => {

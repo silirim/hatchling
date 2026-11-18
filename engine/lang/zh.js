@@ -112,7 +112,7 @@ export default {
 
   'toast.hidden': 'Hatchling 已隐藏。/pet show 让它回来。',
   'toast.shown': 'Hatchling 回来了。',
-  'toast.comments.notice': 'Hatchling：{notice}',
+  'toast.comments.notice': 'Hatchling：点评已开启，花你的 token。/pet comments off 关闭。',
   'toast.comments.on': 'Hatchling：点评已开启。/pet comments off 关闭，/pet comments 说明发送内容和花费。',
   'toast.comments.off': 'Hatchling 保持安静。/pet comments on 可以改。',
   'toast.box': 'Hatchling：请先清空输入框。',

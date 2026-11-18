@@ -124,7 +124,7 @@ export default {
   // toasts and short replies
   'toast.hidden': 'Hatchling is hidden. /pet show brings it back.',
   'toast.shown': 'Hatchling is back.',
-  'toast.comments.notice': 'Hatchling: {notice}',
+  'toast.comments.notice': 'Hatchling: comments are on, your tokens. /pet comments off stops them.',
   'toast.comments.on': 'Hatchling: comments on. /pet comments off stops them, /pet comments says what they send and cost.',
   'toast.comments.off': 'Hatchling stays quiet. /pet comments on changes that.',
   'toast.box': 'Hatchling: empty the prompt box first.',

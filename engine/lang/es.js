@@ -112,7 +112,7 @@ export default {
 
   'toast.hidden': 'Hatchling está oculto. /pet show lo trae de vuelta.',
   'toast.shown': 'Hatchling ha vuelto.',
-  'toast.comments.notice': 'Hatchling: {notice}',
+  'toast.comments.notice': 'Hatchling: comentarios activos, con tus tokens. /pet comments off los detiene.',
   'toast.comments.on': 'Hatchling: comentarios activados. /pet comments off los detiene, /pet comments dice qué envían y cuánto cuestan.',
   'toast.comments.off': 'Hatchling se queda callado. /pet comments on lo cambia.',
   'toast.box': 'Hatchling: vacía primero la caja del prompt.',
