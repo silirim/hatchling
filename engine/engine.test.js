@@ -509,7 +509,7 @@ test('the Santa hat is sold in December only, by the clock of the machine; who h
 test("the founder's eggshell: a pet born on or before FOUNDER_UNTIL has it, one born after never, and who has it keeps it", () => {
   const at = (/** @type {number[]} */ ...d) => new Date(d[0] ?? 0, (d[1] ?? 1) - 1, d[2] ?? 1, d[3] ?? 12, d[4] ?? 0, d[5] ?? 0).getTime() // the machine's own clock
   const [y, m, d] = FOUNDER_UNTIL.split('-').map(Number), last = at(y ?? 0, m, d, 23, 59, 59), after = at(y ?? 0, m, (d ?? 0) + 1, 0, 0, 0)
-  assert.equal(FOUNDER_UNTIL, '2026-12-17') // launch (17 November 2026) + 30 days
+  assert.equal(FOUNDER_UNTIL, '2026-12-18') // launch (18 November 2026) + 30 days
   assert.deepEqual([at(2026, 11, 15), at(y ?? 0, m, d, 0), last, after, at(2027, 6, 1), 0].map(founder), [true, true, true, false, false, false]) // the whole last day, by the local date
   assert.ok(!SOLD.includes(EGGSHELL) && !SHOP.some(i => i.id === 'eggshell') && EGGSHELL.slot === 'head' && EGGSHELL.price === 0) // never sold
   // a newborn: born now, and a founder's when now is in time

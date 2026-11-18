@@ -3261,7 +3261,7 @@ test('the plain coats: bought, on at once, a colour with no glint that things to
 
 const EARLY = Date.UTC(2026, 10, 12, 12), AFTER = new Date(2027, 1, 1, 12).getTime() // a day before FOUNDER_UNTIL, and a day after it
 test("the founder's eggshell: a pet hatched in time has it and wears it; the catalogue lists it apart, and nobody can buy it", async ($, on) => {
-  expect(FOUNDER_UNTIL).toBe('2026-12-17')
+  expect(FOUNDER_UNTIL).toBe('2026-12-18')
   const k = home(on, {}) // an empty store, on 12 November 2026
   await $.session.start(START)
   await k.clock.advance(9_000)
@@ -3285,7 +3285,7 @@ test("the founder's eggshell after the date: a newborn has none, in the four lan
   await k.clock.advance(9_000)
   expect(k.disk.pet).toMatchObject({ owned: [], born: AFTER })
   expect(await cardOf($)).toMatch(/owns nothing yet/)
-  for (const [lang, name, only, no] of [['es', 'media cáscara de huevo', 'solo fundadores', /^media cáscara de huevo no se vende: .* 2026-12-17\.$/], ['pt', 'meia casca de ovo', 'só fundadores', /^meia casca de ovo não é vendida: .* 2026-12-17\.$/], ['zh', '半个蛋壳', '仅限创始宠物', /^半个蛋壳不出售：.* 2026-12-17 /], ['en', 'half an eggshell', 'founders only', /^half an eggshell is not sold: it is the keepsake of the pets hatched by 2026-12-17\.$/]] as const) {
+  for (const [lang, name, only, no] of [['es', 'media cáscara de huevo', 'solo fundadores', /^media cáscara de huevo no se vende: .* 2026-12-18\.$/], ['pt', 'meia casca de ovo', 'só fundadores', /^meia casca de ovo não é vendida: .* 2026-12-18\.$/], ['zh', '半个蛋壳', '仅限创始宠物', /^半个蛋壳不出售：.* 2026-12-18 /], ['en', 'half an eggshell', 'founders only', /^half an eggshell is not sold: it is the keepsake of the pets hatched by 2026-12-18\.$/]] as const) {
     await cardOf($, `lang ${lang}`)
     const shop = await cardOf($, 'shop')
     expect(shop).toMatch(new RegExp(`^  eggshell +${name} +–  \\S+ +${only}$`, 'm'))

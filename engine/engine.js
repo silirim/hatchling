@@ -230,7 +230,7 @@ export const SOLD = [...SHOP, ...COATS]
  * (`birth`), and who has it keeps it for ever. The one place the date is written: a local date of the person's machine.
  * The rule: 30 days after the day the repository went public, 17 November 2026.
  */
-export const FOUNDER_UNTIL = '2026-12-17'
+export const FOUNDER_UNTIL = '2026-12-18'
 export const EGGSHELL = { id: 'eggshell', name: 'half an eggshell', slot: 'head', price: 0 }
 /** What a pet can own, in the order it is kept and told: the keepsake, then what is sold. */
 export const OWNABLE = [EGGSHELL, ...SOLD]
