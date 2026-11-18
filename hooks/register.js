@@ -22,7 +22,7 @@ import { cols, pad, wrap, tidy } from '../engine/width.js'
 import { pick } from '../engine/pick.js'
 import { whole as routineOf, touch as routineTouch, next as routineNext, answer as routineAnswer, setUntil, usual as routineUsual, stage as warnStage, minsLeft, back as backKind, switched as routineSwitched, cleared as routineCleared, hhmm, minutes as minutesOf, LIMITS as ROUTINE } from '../engine/routine.js'
 import zoo from '../sprites/zoo.js'
-import { REG, install, coatOf, dressed, portrait, LIMITS as SKIN_LIMITS } from '../engine/skins.js'
+import { REG, install, coatOf, dressed, padLeft, snore, portrait, LIMITS as SKIN_LIMITS } from '../engine/skins.js'
 import { shareLines, picture, png, svg, sharePath } from '../engine/share.js'
 import { pack as movePack, parse as moveParse, movePath, asked as moveAsked, stageOf, LIMITS as MOVE_LIMITS } from '../engine/move.js'
 
@@ -934,13 +934,13 @@ function inks(/** @type {string[]} */ rows, /** @type {Record<string, string>} *
 /** Pixel rows to Raster cells: two pixel rows per text row, drawn with half blocks. */
 function cells(/** @type {string[]} */ rows, /** @type {Record<string, string>} */ pal, love = 0, /** @type {{ of: Set<number>, to: number } | null} */ edge = null) {
   const out = []
-  const color = inks(rows, pal, light ? 'light' : 'dark', edge)
+  const color = inks(rows, pal, light ? 'light' : 'dark', edge), sunk = Math.max(0, LOVE_TICKS + 1 - rows.length / 2)
   for (let r = 0; r < rows.length; r += 2) {
     const upper = rows[r] ?? '' // frames have an even number of rows
     for (let c = 0; c < upper.length; c++) {
       const top = color(r, c), bottom = color(r + 1, c)
-      // after a cuddle two hearts rise along the edges, a text row a tick, drawn only where the frame is empty
-      const heart = love > 0 && (c === 0 ? r / 2 === love - 1 : c === upper.length - 1 && r / 2 === love + 1)
+      // after a cuddle two hearts rise along the edges, a text row a tick, drawn only where the frame is empty: from the feet up, whatever the drawing's height
+      const heart = love > 0 && (c === 0 ? r / 2 === love - 1 - sunk : c === upper.length - 1 && r / 2 === love + 1 - sunk)
       if (top === null && bottom === null) out.push(heart ? HEART : 0x20, heart ? HEART_RED : DEFAULT, DEFAULT)
       else if (top === null) out.push(0x2584, bottom, DEFAULT) // ▄
       else out.push(0x2580, top, bottom ?? DEFAULT) // ▀
@@ -1013,9 +1013,9 @@ function drawn(/** @type {ReturnType<typeof view>} */ v, /** @type {{demo: strin
 
 /** Sprite for a view. Frames come in two heights, and an item on the ground widens them, so the Raster key carries the size. */
 function sprite(/** @type {ReturnType<typeof view>} */ v, /** @type {Pose} */ a, /** @type {{wear: string, species: string}} */ p) {
-  const { rows, pal, edge } = frame(v, a, p, light)
-  if (a.egg > 0) return { key: `pet-${rows.length}`, columns: /** @type {string} */ (rows[0]).length, rows: rows.length / 2, cells: cells(rows, pal) }
-  return { key: `pet-${/** @type {string} */ (rows[0]).length}x${rows.length}`, columns: /** @type {string} */ (rows[0]).length, rows: rows.length / 2, cells: cells(rows, pal, a.love, edge) }
+  const { rows, pal, edge, axis, under } = frame(v, a, p, light)
+  if (a.egg > 0) return { key: `pet-${rows.length}`, columns: /** @type {string} */ (rows[0]).length, rows: rows.length / 2, cells: cells(rows, pal), axis, under }
+  return { key: `pet-${/** @type {string} */ (rows[0]).length}x${rows.length}`, columns: /** @type {string} */ (rows[0]).length, rows: rows.length / 2, cells: cells(rows, pal, a.love, edge), axis, under }
 }
 
 /** The pet's drawing in the apps: the frame its mood stands still on. No tick moves it there, so no blink, gesture, heart or sparkle. */
@@ -1024,31 +1024,50 @@ function still(/** @type {ReturnType<typeof view>} */ v, /** @type {Pose} */ a, 
   return svgOf(rows, pal, edge)
 }
 
-/** The pixel rows of a view with their colours: what the terminal's cells and the apps' Svg are both made from. `lit` is a light theme. */
+/** The pixel rows a drawing takes, from its topmost pixel down to the last row. */
+const tallOf = (/** @type {string[]} */ rows) => { const t = rows.findIndex(r => /[^.]/.test(r)); return t < 0 ? 0 : rows.length - t }
+/** A frame as its last `keep` pixel rows: the empty rows over the drawing are cut, so the name sits on the row above it; a shorter frame gets empty rows above. */
+const lowest = (/** @type {string[]} */ rows, /** @type {number} */ keep) => rows.length >= keep ? rows.slice(rows.length - keep) : [...Array.from({ length: keep - rows.length }, () => '.'.repeat(/** @type {string} */ (rows[0]).length)), ...rows]
+
+/**
+ * The pixel rows of a view with their colours: what the terminal's cells and the apps' Svg are both made from. `lit` is a light theme.
+ * The frame is as tall as the drawing of its state and no taller: the empty rows over it are cut, by the state's standing frames
+ * with what is worn, so it does not change height from one frame to the next. A gesture that would need a row more (a hop under a
+ * head that reaches the top row) is left out, and a sparkle of the golden coat up there is not drawn.
+ * `axis` is the column of the body's middle, for what is centred over the pet; `under`, the text rows a thing takes under the feet.
+ */
 function frame(/** @type {ReturnType<typeof view>} */ v, /** @type {Pose} */ a, /** @type {{wear: string, species: string}} */ p, /** @type {boolean} */ lit) {
   const { sp, name, worn, st, small } = drawn(v, a, p)
   const wear = worn.filter(id => id !== 'crown' && partOf(id) !== GOLDEN.slot && !(a.demo === 'bloom' && partOf(id) === 'head'))
   if (a.egg > 0) { // not an animal yet: whole, then rocking, then cracked
-    const rows = /** @type {string[]} */ (zoo.egg.frames[a.egg > EGG_ROCKS ? 0 : a.egg > EGG_CRACKS ? 1 + a.n % 2 : 3])
-    return { rows, pal: /** @type {Record<string, string>} */ ({ ...zoo.egg.palette, ...(lit ? zoo.light : null) }), edge: null }
+    const rows = /** @type {string[]} */ (zoo.egg.frames[a.egg > EGG_ROCKS ? 0 : a.egg > EGG_CRACKS ? 1 + a.n % 2 : 3]), need = Math.max(...zoo.egg.frames.map(tallOf))
+    return { rows: lowest(rows, need + need % 2), pal: /** @type {Record<string, string>} */ ({ ...zoo.egg.palette, ...(lit ? zoo.light : null) }), edge: null, axis: zoo.width / 2, under: 0 }
   }
   const i = v.animate || name === 'sleep' ? a.n % st.frames.length : 0, rare = a.rare >= 0 && st.rare.length > 0
-  // a calm pet's small gesture (a look aside, a flick of the ears, a hop): a few frames of its own, each with where the body sits
-  const move = !rare && !a.demo && a.idle ? st.idle?.[a.idle] : undefined, k = move ? Math.min(a.idleN, move.frames.length - 1) : 0
-  let rows = rare ? st.rare[0] : move ? move.frames[k] : st.frames[i]
   // the items are drawn over every stage and under every bubble, one over the other from the ground up to the head; asleep a grown pet is curled up and wears nothing (no `at`), a baby only shuts its eyes and keeps it all: its frame is as wide all the same
-  const at = move ? move.at[k] ?? move.at[0] : st.at?.[rare ? 0 : i] ?? st.at?.[0]
+  const stands = st.at?.[rare ? 0 : i] ?? st.at?.[0]
   // a coat is colours, not a drawing: it tints the body on every animal, stage and state, asleep too. Awake the golden one has
   // a glint of two pale pixels on it, and now and then a sparkle or two light up next to it
-  const body = small ? 'baby' : 'adult', coatId = worn.find(id => partOf(id) === GOLDEN.slot)
-  const coat = coatId ? coatOf(coatId, animalOf(p.species)) : null
-  const gold = coatId === GOLDEN.id && at ? /** @type {{ shine: [number, number][], spark: [number, number][] } | undefined} */ (sp.gold[body]) : null
-  const glint = gold ? [...gold.shine.map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'x'])), ...gold.spark.filter((_, n) => a.spark >> n & 1).map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'y']))] : []
-  rows = dressed(rows, at, wear, glint, animalOf(p.species), body)
+  const animal = animalOf(p.species), body = small ? 'baby' : 'adult', coatId = worn.find(id => partOf(id) === GOLDEN.slot)
+  const coat = coatId ? coatOf(coatId, animal) : null
+  const gold = coatId === GOLDEN.id && stands ? /** @type {{ shine: [number, number][], spark: [number, number][] } | undefined} */ (sp.gold[body]) : null
+  const shine = gold ? gold.shine.map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'x'])) : []
+  const glint = gold ? [...shine, ...gold.spark.filter((_, n) => a.spark >> n & 1).map(([r, c]) => /** @type {[number, number, string]} */ ([r, c, 'y']))] : []
+  const [W, H] = sp.size
+  // every frame on the effect canvas, a calm one too: the drawing is as wide in every frame of a state, and the body does not step aside for a gesture
+  const put = (/** @type {string[]} */ f, /** @type {[number, number] | undefined} */ at, /** @type {[number, number, string][]} */ marks) => { const d = dressed(f, at, wear, marks, animal, body); return d.length === H ? d.map(r => `.${r}.`) : d }
+  const need = Math.max(...st.frames.map((/** @type {string[]} */ f, /** @type {number} */ n) => tallOf(put(f, st.at?.[n] ?? st.at?.[0], shine))), ...st.rare.map((/** @type {string[]} */ f) => tallOf(put(f, st.at?.[0], shine)))), keep = need + need % 2
+  // a calm pet's small gesture (a look aside, a flick of the ears, a hop): a few frames of its own, each with where the body sits
+  const gesture = !rare && !a.demo && a.idle ? st.idle?.[a.idle] : undefined, k = gesture ? Math.min(a.idleN, gesture.frames.length - 1) : 0
+  const move = gesture && tallOf(put(/** @type {string[]} */ (gesture.frames[k]), gesture.at[k] ?? gesture.at[0], shine)) <= keep ? gesture : undefined
+  const at = move ? move.at[k] ?? move.at[0] : stands
+  const full = put(/** @type {string[]} */ (rare ? st.rare[0] : move ? move.frames[k] : st.frames[i]), at, glint)
+  // the Zs: beside the head of an animal drawn here. One of a pack sleeps as its pack drew it
+  const rows = lowest(name === 'sleep' && !sp.pack ? snore(full, i) : full, keep)
   const pal = /** @type {Record<string, string>} */ ({ ...sp.palette, ...coat?.palette, ...(st.tint ? sp.tints[st.tint] : null), ...(lit ? zoo.light : null) })
   // the coat's own outline: on a light theme, and in the apps, where the theme is not told
   const edge = coat ? { of: new Set(Object.values(coat.palette).map(hex)), to: hex(coat.edge) } : null
-  return { rows: /** @type {string[]} */ (rows), pal, edge }
+  return { rows, pal, edge, axis: padLeft(wear, glint, animal, body) + 1 + W / 2, under: at ? Math.max(0, full.length - (H + 2)) / 2 : 0 }
 }
 
 /** A text cut to the columns there are; one that fits is left as it is. */
@@ -1056,7 +1075,7 @@ const cut = (/** @type {string} */ t, /** @type {number} */ max) => cols(t) <= m
 const TOUCH = 'touch' // the key of the region over the pet's drawing that hears a click
 const BUBBLE_MIN = 14 // under this many columns of text there is no bubble: the pet alone
 const BUBBLE_MAX = 44 // columns of text in the speech bubble before it wraps: columns on screen, where a Chinese character takes two
-const PET_ROWS = 6 // the tallest frame with nothing under the feet (14x12 pixels), in text rows
+const EYES_UP = 3 // the text rows from the feet up to the eyes, where the bubble's tail points
 
 
 const hearts = (/** @type {number} */ n) => '♥'.repeat(n).padEnd(5, '♡') // affection: they fill and never empty
@@ -2014,7 +2033,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     const row = (/** @type {number} */ max) => { tally.last = 'row'; return Box({ children: [Text({ dimColor: true, children: [cut(open ? `${head}  ${told}` : head, max)] })] }) }
 
     const more = b.more
-    // The buttons, in two places. The pet's own (skin) is under the drawing, at its left. A cuddle has no button: it is a click
+    // The buttons, in two places. The pet's own (skin) is beside the drawing, at its left, on its lowest row. A cuddle has no button: it is a click
     // on the drawing where one can be heard (the terminal, below), and /pet pet everywhere.
     // No button of ours hides the band: the engine draws its own `[-]` at the right end of the band, which folds it, and a second
     // one beside it was one too many (/pet hide still puts the pet away until /pet show). The buttons of a phrase, of a question or of the parts are in a row under the bubble, which
@@ -2046,8 +2065,9 @@ export function register(/** @type {import('claude-code').On} */ on) {
     }
 
     // The Claude apps (desktop, mobile): the pet as an Svg, the frame its mood stands still on, drawn again when something changes
-    // and by no timer of its own. The picture's own column: the name and the stars above it, centred, and the skin button under it,
-    // at its left. Beside it the count of the other chats, the phrase while it is open, and the phrase's buttons under it.
+    // and by no timer of its own. The picture's own column: the name and the stars above it, centred on it; the skin button is at
+    // the picture's left, at its foot, so nothing is under the picture. Beside it the count of the other chats, the phrase while
+    // it is open, and the phrase's buttons under it.
     // A drawing past the Svg's limit, or an app without the element, keeps the row of text
     const count = board && p.chats ? board : ''
     const pic = (e.surface === 'desktop' || e.surface === 'mobile') && 'Svg' in ui ? still(v, a, p) : null
@@ -2056,11 +2076,11 @@ export function register(/** @type {import('claude-code').On} */ on) {
       tally.last = 'svg'
       const said = open ? [b.say, b.fix, more?.say, b.aside].flatMap((t, i) => t ? [Text({ ...(i ? { dimColor: true } : null), children: [t] })] : []) : []
       return Box({ flexDirection: 'row', gap: 2, alignItems: 'center', children: [
+        ...(own.length ? [Box({ key: 'own', alignSelf: 'flex-end', flexDirection: 'row', gap: 2, flexShrink: 0, children: own.map(k => k.el()) })] : []),
         // the picture's column does not shrink, and the text beside it does: a long line (the statistics of the birth, on a phone) wraps, and never takes the picture's room
         Box({ key: 'pic', flexDirection: 'column', alignItems: 'center', flexShrink: 0, children: [
           Box({ key: 'head', children: [Text({ dimColor: true, children: [bare] })] }),
           ui.Svg({ source: pic.source, alt: hatching ? p.name : `${p.name}, ${animalName(L, p.species)}`, width: pic.width, height: pic.height }),
-          ...(own.length ? [Box({ key: 'own', alignSelf: 'flex-start', flexDirection: 'row', gap: 2, children: own.map(k => k.el()) })] : []),
         ] }),
         Box({ key: 'beside', flexDirection: 'column', flexShrink: 1, children: [
           ...(count ? [Box({ key: 'count', children: [Text({ dimColor: true, children: [count] })] })] : []),
@@ -2074,64 +2094,83 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (!Raster) return next(e) // no cell grid on this surface: draw nothing
     const s = sprite(v, a, p)
     // The room the band has (`bodyColumns`, and `maxRows` where the engine gives it). The drawing is never squeezed: under its
-    // width, or its height, one row of text. What it has, at the right edge, is the pet's own column: the name and the stars
-    // above the drawing, centred on it; the drawing; the skin button under it, at its left. To the left of the column, on the top
-    // row, the count of the other chats; under that the bubble, its tail at the pet's eyes, and the phrase's buttons under it.
-    // With less room than everything needs, in this order: the bubble narrows and wraps, then goes; the count of the other chats
-    // goes (/pet chats tells it); the stars go and the name stays (the /pet card has them); the name is cut. With fewer rows than
-    // the column needs the skin button goes first (it has a command), then the name.
+    // width, or its height, one row of text. The band is as tall as the name's row and the drawing's rows, and no taller, asleep or
+    // awake: nothing of the pet is over the name or under the feet. At the right edge is the pet's own column: the name and the
+    // stars on the row above the drawing, centred on the pet's body (not on a balloon next to it, nor on the Zs of its sleep), and
+    // the drawing. The skin button is at the left of the drawing, on its lowest row. Further left the bubble, its tail towards
+    // the pet's eyes, and the phrase's buttons under it: within the band's height when they fit, from its top row when they do
+    // not; over the bubble, when a row is free there, the count of the other chats.
+    // With less room than everything needs, in this order: the skin button goes when the bubble needs its columns (/pet skin does
+    // the same); the bubble narrows and wraps, then goes; the count of the other chats goes (/pet chats tells it); the stars go
+    // and the name stays (the /pet card has them); the name is cut. With fewer rows than the name and the drawing need, the name goes.
     const room = Number(e.props.bodyColumns) > 0 ? Number(e.props.bodyColumns) : Infinity, high = Number(e.props.maxRows) > 0 ? Number(e.props.maxRows) : Infinity
     if (room < s.columns || high < s.rows) return row(room)
     tally.last = 'raster'
-    const gap = Math.max(0, PET_ROWS - s.rows) // a shorter frame is pushed down, so the feet (and the eyes) stay where they are
-    const named = high >= gap + s.rows + 1 // a row for the name over the drawing
+    const named = high >= s.rows + 1 // a row for the name over the drawing
     const label = !named ? '' : cols(bare) <= room ? bare : cut(p.name, room)
-    const wide = Math.max(s.columns, cols(label)) // the pet's column: as wide as the drawing, or as its name when that is longer
-    const mid = (/** @type {number} */ n) => Math.floor((wide - n) / 2) // what centres something of `n` columns in it
-    const beside = room - wide - 2 // what is left of the column, less the tail and a cell of margin
-    const wrapAt = Math.min(BUBBLE_MAX, beside - 4) // less the border and a cell of padding each side
+    const top = named ? 1 : 0 // the rows over the drawing
+    // the pet's column: the name's middle over the body's. A name longer than the drawing widens the column, and the drawing moves in under it
+    const half = Math.floor(cols(label) / 2), axis = Math.floor(s.axis), lead = label ? Math.max(0, half - axis) : 0, over = label ? lead + axis - half : 0
+    const wide = Math.max(lead + s.columns, over + cols(label))
+    const span = (/** @type {Key[]} */ list) => list.reduce((n, k) => n + cols(k.label), 0) + 2 * Math.max(0, list.length - 1)
+    const fit = (/** @type {Key[]} */ list, /** @type {number} */ max) => { while (list.length && span(list) > max) list.splice(list.reduce((at, k, i) => k.drop >= /** @type {Key} */ (list[at]).drop ? i : at, 0), 1) }
+    // what is between the bubble and the pet: the tail, one column, or as long as the skin button under it and the cell that keeps
+    // the button off the bubble; then a cell of margin
+    const wrapWith = (/** @type {number} */ link) => Math.min(BUBBLE_MAX, room - wide - Math.max(1, link) - 1 - 4) // less the border and a cell of padding each side
+    const skinWide = span(buttons(false).own) + 1
+    const skinned = skinWide > 1 && room >= wide + skinWide + 1 && !(open && wrapWith(skinWide) < BUBBLE_MIN && wrapWith(0) >= BUBBLE_MIN)
+    const link = skinned ? skinWide : 1
+    const beside = room - wide - link - 1 // what is left of the column
+    const wrapAt = wrapWith(link)
     // the speech bubble: each phrase is wrapped here, by its width on screen, and the border hugs the widest line
     const phrases = [{ rows: wrap(b.say, Math.max(1, wrapAt)), dim: false }, ...(b.fix ? [{ rows: wrap(b.fix, Math.max(1, wrapAt)), dim: true }] : []), ...(more ? [{ rows: wrap(more.say, Math.max(1, wrapAt)), dim: true }] : []), ...(b.aside ? [{ rows: wrap(b.aside, Math.max(1, wrapAt)), dim: true }] : [])]
-    const tall = Math.max(0, s.rows - PET_ROWS)
-    const top = named ? 1 : 0 // the rows over the drawing
     const under = dressing || (asking && !(a.noteLeft > 0 && a.note)) || !!(b.ask || b.link || more?.ask) // a row of buttons under the bubble
+    const boxed = 2 + phrases.reduce((n, ph) => n + ph.rows.length, 0), whole = boxed + (under ? 1 : 0) // the bubble's rows with its border, and with its buttons
     // shown when it is open, there is room for a line of BUBBLE_MIN columns, and it is not taller than the band may be
-    const bubbled = open && wrapAt >= BUBBLE_MIN && top + tall + 3 + phrases.reduce((n, ph) => n + ph.rows.length, 0) + (under ? 1 : 0) <= high
+    const bubbled = open && wrapAt >= BUBBLE_MIN && whole <= high
     const inside = phrases.map(ph => Text({ ...(ph.dim ? { dimColor: true } : null), children: [ph.rows.join('\n')] }))
     const width = Math.max(...phrases.flatMap(ph => ph.rows.map(cols))) + 4 // border and one cell of padding each side
     const { keys, own } = buttons(bubbled)
-    const span = (/** @type {Key[]} */ list) => list.reduce((n, k) => n + cols(k.label), 0) + 2 * Math.max(0, list.length - 1)
-    const fit = (/** @type {Key[]} */ list, /** @type {number} */ max) => { while (list.length && span(list) > max) list.splice(list.reduce((at, k, i) => k.drop >= /** @type {Key} */ (list[at]).drop ? i : at, 0), 1) }
-    // the pet's own button (skin), under the drawing from its left edge: only with a row for it and the columns it takes
-    if (high < top + gap + s.rows + 1) own.length = 0
-    fit(own, wide - mid(s.columns))
+    if (!skinned) own.length = 0
+    // the band's rows: 0 the name, then the drawing. The eyes are EYES_UP rows above the feet, and a thing under the feet (a skateboard) is under those
+    const tall = top + s.rows, eyes = top + Math.max(0, s.rows - 1 - EYES_UP - s.under), feet = tall - 1
     // A click on the pet cuddles it. The Raster is a leaf and takes no press, so an empty region of a surface module (touch.js) lies
     // over it, as large as the drawing, and posts the click (`ui.message`, below): the drawing under it is as it was. Not over the egg
     const Client = 'Client' in ui ? ui.Client : undefined
     const touch = Client && !hatching ? [Box({ position: 'absolute', top: 0, left: 0, children: [Client({ key: TOUCH, module: './touch.js', props: { columns: s.columns, rows: s.rows }, width: s.columns, height: s.rows })] })] : []
     const pet = Box({ key: 'pet', flexDirection: 'column', width: wide, flexShrink: 0, children: [
-      ...(named ? [Box({ key: 'head', marginLeft: mid(cols(label)), children: [Text({ dimColor: true, children: [label] })] })] : []),
-      Box({ marginTop: gap, marginLeft: mid(s.columns), children: [Raster({ key: s.key, columns: s.columns, rows: s.rows, cells: s.cells }), ...touch] }),
-      ...(own.length ? [Box({ key: 'own', flexDirection: 'row', gap: 2, marginLeft: mid(s.columns), children: own.map(k => k.el()) })] : []),
+      ...(named ? [Box({ key: 'head', marginLeft: over, children: [Text({ dimColor: true, children: [label] })] })] : []),
+      Box({ marginLeft: lead, children: [Raster({ key: s.key, columns: s.columns, rows: s.rows, cells: s.cells }), ...touch] }),
     ] })
+    // the pet's own button (skin): beside the drawing, at its left, on the row of the feet
+    const skinBox = (/** @type {number} */ down) => Box({ key: 'own', flexDirection: 'row', gap: 2, marginTop: down, marginLeft: 1, flexShrink: 0, children: own.map(k => k.el()) })
     // the count of the other chats: on the top row, left of the name, when the row has the room
     const counted = (/** @type {number} */ max) => count && named && cols(count) <= max ? [Text({ dimColor: true, children: [count] })] : []
 
-    if (!bubbled) // no bubble (closed, or no room for it): the pet's column, and the count beside its name
-      return Box({ flexDirection: 'row', width: '100%', justifyContent: 'flex-end', children: [Box({ key: 'count', marginRight: 2, children: counted(beside) }), pet] })
+    if (!bubbled) // no bubble (closed, or no room for it): the pet's column, the skin button at its left, and the count beside its name
+      return Box({ flexDirection: 'row', width: '100%', justifyContent: 'flex-end', children: [Box({ key: 'count', marginRight: 2, children: counted(beside - 1) }), ...(own.length ? [Box({ key: 'beside', marginRight: 1, flexShrink: 0, children: [skinBox(feet)] })] : []), pet] })
     fit(keys, beside)
     // bottom right, next to the prompt, where the old /buddy sat: text first, the pet's column at the edge.
-    // Rows: 0 the count and, over the drawing, the name; 1 free; 2 the bubble's top border; 3 its first line. The pet's eyes are 4
-    // rows above its feet, so a pet of PET_ROWS under its name has them on row 3, where the tail is; a shorter frame is pushed
-    // down to keep the feet (and the eyes) still, and under a taller one (a pet on its skateboard) the bubble and the tail come
-    // down with the eyes.
+    // The bubble's first line is on the row of the eyes, where the tail is, when the bubble and its buttons end by the row of the
+    // feet from there; a taller one starts higher, up to the band's top row, and the tail stays on one of its lines. Only a bubble
+    // taller than the name and the drawing makes the band taller.
+    // The count wants the top row: the bubble starts a row lower for it when it still ends by the feet, else the count is at the bubble's left
+    const high0 = Math.max(0, Math.min(eyes - 1, tall - whole)), start = high0 === 0 && counted(beside).length && whole + 1 <= tall ? 1 : high0
+    const aside = start === 0 ? counted(beside - Math.max(width, span(keys)) - 2) : []
+    const tail = Math.min(Math.max(eyes, start + 1), start + boxed - 2)
+    if (tail >= feet) own.length = 0 // the tail on the row of the feet: the button would be on it
     return Box({ flexDirection: 'row', width: '100%', justifyContent: 'flex-end', children: [
+      ...(aside.length ? [Box({ key: 'count', marginRight: 2, children: aside })] : []),
       Box({ flexDirection: 'column', alignItems: 'flex-end', children: [
-        Box({ key: 'count', height: 1 + top + tall, children: counted(beside) }),
+        ...(start > 0 ? [Box({ key: 'count', height: start, children: counted(beside) })] : []),
         Box({ key: 'bubble', flexDirection: 'column', width, flexShrink: 0, paddingX: 1, borderStyle: 'round', borderDimColor: true, children: inside }),
         ...(keys.length ? [Box({ key: 'keys', flexDirection: 'row', gap: 2, children: keys.map(k => k.el()) })] : []),
       ] }),
-      Box({ key: 'tail', marginTop: 2 + top + tall, marginRight: 1, children: [Text({ dimColor: true, children: ['─'] })] }),
+      // the tail, as long as what is between the bubble and the pet, and under it the skin button
+      Box({ key: 'beside', flexDirection: 'column', width: link, marginRight: 1, flexShrink: 0, children: [
+        Box({ key: 'tail', marginTop: tail, children: [Text({ dimColor: true, children: ['─'.repeat(link)] })] }),
+        ...(own.length ? [skinBox(feet - tail - 1)] : []),
+      ] }),
       pet,
     ] })
   })

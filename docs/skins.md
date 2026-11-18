@@ -118,7 +118,8 @@ Every animal can use these shared colours:
 | `S` | dark slate | | `n` | brown |
 | `h` | tan | | `q` | cyan |
 | `i` | off-white | | `x` | pale glint |
-| `N` | dark brown | | | |
+| `N` | dark brown | | `z` | eggshell cream |
+| `Z` | eggshell shade | | | |
 
 All of them but `W` and `r` are **fixed**: a tint or a coat never changes them. Things to wear are drawn with the fixed colours
 only, so a hat looks the same on every animal and under every coat.

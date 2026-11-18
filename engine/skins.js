@@ -419,13 +419,39 @@ export function dress(/** @type {string[]} */ rows, /** @type {[number, number, 
  * above the neck (the hood of the hoodie) gives way to a hat: with a thing on the head, its marks above the neck are not drawn.
  * The crown is no hat here: it sits inside the head, and the hood goes round it.
  */
-export function dressed(/** @type {string[]} */ rows, /** @type {[number, number] | undefined} */ at, /** @type {string[]} */ wear, /** @type {[number, number, string][]} */ glint, /** @type {string} */ animal, /** @type {'adult' | 'baby'} */ body) {
-  if (!wear.length && !glint.length) return rows
+/** The marks of what is worn and of the glint on one body, in the order they are drawn, and the rows a thing takes under the feet. */
+function worn(/** @type {string[]} */ wear, /** @type {[number, number, string][]} */ glint, /** @type {string} */ animal, /** @type {'adult' | 'baby'} */ body) {
   const sp = REG.species[animal], hat = wear.some(id => partOf(id) === 'head'), neck = Number(sp.anchors[body]?.neck)
   const marks = (/** @type {string} */ id) => { const all = marksFor(id, animal, body); return hat && partOf(id) === 'body' && neck >= 0 ? all.filter(m => m[0] >= neck) : all }
   // with a thing under the feet the ground is lower: the accessories stand on it, not at the feet
   const under = Math.max(0, ...wear.flatMap(id => marks(id).map(m => m[0] - (sp.size[1] - 1))))
-  return dress(rows, [...glint, ...wear.toReversed().flatMap(id => partOf(id) === 'accessory' ? marks(id).map(([r, c, ch]) => /** @type {[number, number, string]} */ ([r + under, c, ch])) : marks(id))], at, sp.size)
+  return [...glint, ...wear.toReversed().flatMap(id => partOf(id) === 'accessory' ? marks(id).map(([r, c, ch]) => /** @type {[number, number, string]} */ ([r + under, c, ch])) : marks(id))]
+}
+
+export function dressed(/** @type {string[]} */ rows, /** @type {[number, number] | undefined} */ at, /** @type {string[]} */ wear, /** @type {[number, number, string][]} */ glint, /** @type {string} */ animal, /** @type {'adult' | 'baby'} */ body) {
+  if (!wear.length && !glint.length) return rows
+  return dress(rows, worn(wear, glint, animal, body), at, REG.species[animal].size)
+}
+
+/** The columns `dressed` adds at the left of a frame for what is worn (a balloon, a lamp): where the body starts in it, so what is set over the pet can be centred on the body. */
+export function padLeft(/** @type {string[]} */ wear, /** @type {[number, number, string][]} */ glint, /** @type {string} */ animal, /** @type {'adult' | 'baby'} */ body) {
+  return Math.max(0, -Math.min(0, ...worn(wear, glint, animal, body).map(m => m[1])))
+}
+
+const SNORE = ['wwww', '..w.', '.w..', 'wwww'] // the Z of the sleep
+const SNORE_WIDE = 9 // the columns the sleep takes at the right of the head: one free, the small z of two, two free, the Z
+/**
+ * The Zs of the sleep, to the right of the head and never above it, so a pet asleep takes no row more than its body: a small z
+ * always, and the large one on every second frame. They stand on columns of their own, the same on both frames.
+ */
+export function snore(/** @type {string[]} */ rows, /** @type {number} */ n) {
+  const t = rows.findIndex(r => /[^.]/.test(r))
+  if (t < 0 || t + SNORE.length > rows.length) return rows
+  const edge = Math.max(...rows.slice(t, t + SNORE.length).map(r => r.replace(/\.+$/, '').length)) // the first free column beside the head
+  const g = rows.map(r => [...r.padEnd(Math.max(r.length, edge + SNORE_WIDE), '.')])
+  for (const c of [1, 2]) /** @type {string[]} */ (g[t + SNORE.length - 1])[edge + c] = 'w'
+  if (n % 2) SNORE.forEach((row, r) => [...row].forEach((ch, c) => { if (ch !== '.') /** @type {string[]} */ (g[t + r])[edge + 5 + c] = ch }))
+  return g.map(r => r.join(''))
 }
 
 /**

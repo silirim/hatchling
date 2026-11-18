@@ -1,7 +1,7 @@
 import { expect, mock, test as kitTest } from 'claude-code/testing'
 import { dayOf, RULES, SHOP, SOLD, EGGSHELL, FOUNDER_UNTIL } from '../engine/engine.js'
 import zoo from '../sprites/zoo.js'
-import { BUILTIN, REG, marksFor, dressed } from '../engine/skins.js'
+import { BUILTIN, REG, marksFor, dressed, snore } from '../engine/skins.js'
 import { open as diaryOpened, whole as diaryOf, bandOf, dated } from '../engine/diary.js'
 import { whole as workOf, opened as workOpened, turned as workTurned } from '../engine/work.js'
 import { picture, TEXT_X } from '../engine/share.js'
@@ -858,7 +858,7 @@ test('/pet demo shows every mood in turn, also while the pet sleeps, and the egg
   await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const look = async () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    const say = (await ui.findAll({ type: 'Text' })).map(x => x.text).filter(t => t && !/★ \d+$|^[─·]$/.test(t)).join(' | ')
+    const say = (await ui.findAll({ type: 'Text' })).map(x => x.text).filter(t => t && !/★ \d+$|^[─·]+$/.test(t)).join(' | ')
     const drawn = JSON.stringify(await ui.find({ type: 'Raster' }))
     await ui.unmount()
     return { say, drawn }
@@ -1190,6 +1190,7 @@ test('a pet born golden has the coat for nothing: on from the start, plain by ch
 const ROBOT = ['....DDDD....', '..BBBBBBBB..', '.BBBBBBBBBB.', '.BBkBBBBkBB.', '.BBBBBBBBBB.', '.BBBDDDDBBB.', '..BBBBBBBB..', '..DBBBBBBD..', '..BBBBBBBB..', '..DD....DD..']
 const PACK = { format: 1, id: 'example', name: 'Example', animals: { robot: { name: { en: 'robot', es: 'robot de lata' }, palette: { B: '#90a4ae', D: '#546e7a' }, states: { adult: { frames: [ROBOT] } } } }, items: { tophat: { part: 'head', name: { en: 'a top hat' }, fallback: [{ anchor: 'head', art: ['.uuuu.', '.RRRR.', 'uuuuuu'] }] } }, coats: { mint: { name: { en: 'a mint coat' }, ramp: ['#00796b', '#4db6ac', '#b2dfdb'] } } }
 const START = { cwd: '/w/hatchling', surface: 'terminal', isInteractive: true } as const
+const ZS = 8 // the columns the Zs of the sleep take at the right of a head that reaches the frame's edge
 
 test('a skin pack in the person\'s folder: what it brings is theirs at once, for no stars, in /pet skins, /pet animal and the skin menu with the pack\'s name', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
@@ -1518,24 +1519,25 @@ test('the shop: stars buy things to wear, the catalogue says what is owned, and 
   await cardOf($, 'wear cap')
   expect(await columns()).toBe(zoo.width + 2 + mug) // a cap with the mug: the mug still widens it
   await cardOf($, 'wear off mug')
-  expect(await columns()).toBe(zoo.width + 2)
+  expect(await columns()).toBe(zoo.width + 2 + ZS) // asleep: the Zs are beside the head, on columns of their own
 
-  // the feet: sneakers stay on the row of the feet, the skateboard lies under them. The frame is one text row taller for it, awake and
-  // asleep, the bubble comes down with the pet's eyes, and an accessory stands on the ground the board is on
+  // the feet: sneakers stay on the row of the feet, the skateboard lies under them. The frame is one text row taller for it, awake,
+  // the tail stays at the pet's eyes, and an accessory stands on the ground the board is on. Asleep the fox is curled up, four rows
+  // tall, and wears nothing: the Zs are at the right of its head, never over it, on the columns an accessory would take
   const size = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; const tail = (await ui.find({ type: 'Box', key: 'tail' }))?.props.marginTop ?? null; await ui.unmount(); return [r.columns, r.rows, tail] }
   await cardOf($, 'wear none')
-  expect(await size()).toEqual([zoo.width + 2, 6, 3]) // asleep with nothing on
+  expect(await size()).toEqual([zoo.width + 2 + ZS, 4, 1]) // asleep with nothing on
   await cardOf($, 'pet') // awake
   expect(await cardOf($, 'wear sneakers')).toBe('sneakers goes on, feet.\nMiro wears feet: sneakers.')
-  expect(await size()).toEqual([zoo.width + 2, 6, 3])
+  expect(await size()).toEqual([zoo.width + 2, 5, 2])
   const shod = await raster()
   expect(await cardOf($, 'wear skateboard')).toBe('a skateboard goes on, feet, in place of sneakers.\nMiro wears feet: a skateboard.')
-  expect(await size()).toEqual([zoo.width + 2, 7, 4])
+  expect(await size()).toEqual([zoo.width + 2, 6, 2])
   expect(await raster()).not.toBe(shod)
   await cardOf($, 'wear mug')
-  expect((await size()).slice(0, 2)).toEqual([zoo.width + 2 + mug, 7])
-  await k.clock.advance(6 * 60_000) // asleep: the board is not drawn, the frame keeps its size
-  expect((await size()).slice(0, 2)).toEqual([zoo.width + 2 + mug, 7])
+  expect((await size()).slice(0, 2)).toEqual([zoo.width + 2 + mug, 6])
+  await k.clock.advance(6 * 60_000) // asleep: the board is not drawn, the frame keeps its width and is as low as the fox curled up
+  expect((await size()).slice(0, 2)).toEqual([zoo.width + 2 + mug, 4])
   // on every animal, grown and small, neither reaches above the row of the feet: the face stays free
   for (const name of Object.keys(BUILTIN.species)) for (const body of ['adult', 'baby'] as const) {
     const rows = (id: string) => marksFor(id, name, body).map(m => m[0])
@@ -2625,7 +2627,9 @@ test('a calm pet moves a little: a gesture now and then, never two within 8 seco
     await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
     const shot = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; const open = !!(await ui.find({ type: 'Box', key: 'bubble' })); await ui.unmount(); return { cells: String(r.cells), rows: Number(r.rows), open } }
     /** One look every half second: the drawings seen, and when the drawing was not the still one. */
-    const watch = async (seconds: number, still: string) => { const moved: number[] = [], seen = new Set<string>(); for (let i = 0; i < seconds * 2; i++) { await k.clock.advance(500); const s = await shot(); seen.add(s.cells); if (s.rows !== rows) moved.push(i) } return { moved, seen } } // a gesture is drawn on the taller canvas; a blink is not, and is not counted
+    // a gesture is a drawing that is not the still one and has as many dark pixels: the eyes moved, or the ears. A blink has fewer (the eyes are shut), and is not counted
+    const dark = (cells: string) => [...new Uint32Array(Uint8Array.from(atob(cells), ch => ch.charCodeAt(0)).buffer)].filter((c, i) => i % 3 !== 0 && c === 0x1b1b1b).length
+    const watch = async (seconds: number, still: string) => { const moved: number[] = [], seen = new Set<string>(); for (let i = 0; i < seconds * 2; i++) { await k.clock.advance(500); const s = await shot(); seen.add(s.cells); expect(s.rows).toBe(rows); if (s.cells !== still && dark(s.cells) === dark(still)) moved.push(i) } return { moved, seen } } // and no gesture makes the drawing taller: the band keeps its height
     const still = (await shot()).cells, rows = (await shot()).rows
     // the greeting asks and holds the bubble: for half a minute, longer than any wait between two gestures, the pet does not move
     expect((await shot()).open).toBe(true)
@@ -2798,20 +2802,23 @@ async function drawnWidth($: any, props: object) {
   const ui = await $.ui.mount({ ...BAND, props: { hasSurvey: false, ...props }, surface: 'terminal' })
   const r = await ui.find({ type: 'Raster' }), bubble = await ui.find({ type: 'Box', key: 'bubble' }), tail = await ui.find({ type: 'Box', key: 'tail' })
   const found = await ui.findAll({ type: 'Button' }), buttons = found.map((x: any) => String(x.text))
-  const OWN = ['skin'] // the pet's own button: under the drawing; the others are under the bubble
+  const OWN = ['skin'] // the pet's own button: at the left of the drawing; the others are under the bubble
   const own = found.filter((x: any) => OWN.includes(String(x.key))).map((x: any) => String(x.text)), under = found.filter((x: any) => !OWN.includes(String(x.key))).map((x: any) => String(x.text))
   const texts = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text))
-  const headBox = await ui.find({ type: 'Box', key: 'head' }), petBox = await ui.find({ type: 'Box', key: 'pet' }), countBox = await ui.find({ type: 'Box', key: 'count' })
+  const headBox = await ui.find({ type: 'Box', key: 'head' }), petBox = await ui.find({ type: 'Box', key: 'pet' }), countBox = await ui.find({ type: 'Box', key: 'count' }), besideBox = await ui.find({ type: 'Box', key: 'beside' })
   await ui.unmount()
   const w = (t: string) => [...t].reduce((n: number, ch: string) => n + (/[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1), 0)
   const span = (list: string[]) => list.reduce((n: number, b: string) => n + w(b), 0) + 2 * Math.max(0, list.length - 1)
-  // the pet's own column: the name (with little room alone, with no star) over the drawing, the pet's own button under it
+  // the pet's own column: the name (with little room alone, with no star) over the drawing; the pet's own button is beside it, at its left
   const head = String((headBox?.children as any[] | undefined)?.find((x: any) => x.type === 'Text')?.children[0] ?? ''), keys = span(under)
   const count = String(((countBox?.children as any[] | undefined)?.[0] as any)?.children?.[0] ?? '') // the count of the other chats, left of the name
   const cols = r ? Number((r as any).props.columns) : 0, column = Number((petBox as any)?.props.width ?? 0)
-  if (r) expect([column >= cols, w(head) <= column, span(own) <= column], JSON.stringify({ column, cols, head, own })).toEqual([true, true, true]) // the drawing is never squeezed, and what is over and under it stays in its column
+  if (r) expect([column >= cols, w(head) <= column], JSON.stringify({ column, cols, head, own })).toEqual([true, true]) // the drawing is never squeezed, and the name over it stays in its column
   const lines = texts.flatMap((t: string) => t.split('\n')).map(w)
-  const total = !r ? Math.max(0, ...lines) : bubble ? Math.max(w(count), Number((bubble as any).props.width), keys) + 2 + column : (count ? w(count) + 2 : 0) + column
+  // between the bubble and the pet: the tail, as long as the skin button under it with its cell of margin, and a cell more; with no bubble, the button alone
+  const link = bubble ? Number((besideBox as any).props.width) + 1 : own.length ? span(own) + 2 : 0
+  const boxed = bubble ? Math.max(Number((bubble as any).props.width), keys) : 0, above = (countBox as any)?.props.height !== undefined // the count over the bubble, or at its left
+  const total = !r ? Math.max(0, ...lines) : bubble ? (above ? Math.max(w(count), boxed) : (count ? w(count) + 2 : 0) + boxed) + link + column : (count ? w(count) + 2 : 0) + link + column
   return { total, raster: !!r, bubble: !!bubble, buttons, own, head, count, texts }
 }
 
@@ -2853,7 +2860,7 @@ test('E18: the band fits the width it is given: the bubble narrows, then the but
   const b24 = await at(24)
   expect([b24.bubble, b24.raster, b24.head, b24.own, b24.total <= 24]).toEqual([false, true, 'Miro  ★ 2000', ['skin'], true]) // only the pet, with its name, its stars and its button
   const b16 = await at(16)
-  expect([b16.raster, b16.head, b16.own, b16.total <= 16]).toEqual([true, 'Miro  ★ 2000', ['skin'], true]) // the same: the name and the stars are over the drawing, and take no room beside it
+  expect([b16.raster, b16.head, b16.own, b16.total <= 16]).toEqual([true, 'Miro  ★ 2000', [], true]) // the name and the stars are over the drawing, and take no room beside it; the button, which is beside it, has none left (/pet skin)
   const b10 = await at(10)
   expect([b10.raster, b10.texts.length, b10.total <= 10]).toEqual([false, 1, true]) // one row of text, cut to the width
   // a band that may not be as tall as the drawing: the row of text too; one too low for the bubble: the pet alone
@@ -2865,7 +2872,7 @@ test('E18: the band fits the width it is given: the bubble narrows, then the but
   expect([free.bubble, free.buttons]).toEqual([true, ['skin']])
 })
 
-test('E19: the name and the stars are over the drawing, centred on it, and the skin button under it at its left: no row of buttons under a closed bubble, and no [-] of ours beside the engine\'s', async ($, on) => {
+test('E19: the name and the stars are on the row over the drawing, centred on the pet, and the skin button beside it at its left, on its lowest row: nothing under the drawing, no row of buttons under a closed bubble, and no [-] of ours beside the engine\'s', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
   k.disk.pet = { coins: 4, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['mug'] }
   await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
@@ -2874,13 +2881,16 @@ test('E19: the name and the stars are over the drawing, centred on it, and the s
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Box', key: 'bubble' })).toBeFalsy()
   expect(await ui.find({ type: 'Box', key: 'keys' })).toBeFalsy() // no row of buttons at all
-  // the pet's column: the name and the stars over the drawing, centred on it; the skin button under it, from its left edge
+  // the pet's column: the name and the stars on the row over the drawing, its middle over the middle of the pet's body, and the
+  // drawing: nothing under it. The skin button is beside the drawing, at its left, on its lowest row: the band is the name's row and the drawing's rows
   const column = (await ui.find({ type: 'Box', key: 'pet' }))!, parts = column.children as any[], raster = (await ui.find({ type: 'Raster' }))!.props
-  expect(parts.map(x => String(x.props.key ?? x.key ?? ''))).toEqual(['head', '', 'own'])
-  expect([parts[0].children[0].children[0], parts[2].children.map((x: any) => x.props.label)]).toEqual(['Miro  ★ 4', ['skin']])
-  const wide = Number(column.props.width), name = 'Miro  ★ 4'.length
-  expect(wide).toBe(Math.max(Number(raster.columns), name))
-  expect([parts[0].props.marginLeft, parts[1].props.marginLeft, parts[2].props.marginLeft]).toEqual([Math.floor((wide - name) / 2), Math.floor((wide - Number(raster.columns)) / 2), Math.floor((wide - Number(raster.columns)) / 2)])
+  expect(parts.map(x => String(x.props.key ?? x.key ?? ''))).toEqual(['head', ''])
+  expect(parts[0].children[0].children[0]).toBe('Miro  ★ 4')
+  const name = 'Miro  ★ 4'.length, body = 1 + zoo.width / 2 // the body's middle in the drawing: nothing stands at its left
+  expect([parts[0].props.marginLeft, parts[1].props.marginLeft, parts[1].props.marginTop ?? 0]).toEqual([body - Math.floor(name / 2), 0, 0]) // and no empty row between the name and the drawing
+  expect(Number(column.props.width)).toBe(Math.max(Number(raster.columns), body - Math.floor(name / 2) + name))
+  const own = (await ui.find({ type: 'Box', key: 'own' }))!
+  expect([(own.children as any[]).map((x: any) => x.props.label), own.props.marginTop]).toEqual([['skin'], Number(raster.rows)]) // under the name's row, as far down as the drawing's last row
   // the engine draws its own [-] at the right end of the band: none of ours, at any width, with the bubble open or closed, or two are seen
   for (const props of [{}, { bodyColumns: 200 }, { bodyColumns: 60 }, { bodyColumns: 30 }]) {
     const all = await $.ui.mount({ ...BAND, props: { hasSurvey: false, ...props }, surface: 'terminal' })
@@ -2890,16 +2900,15 @@ test('E19: the name and the stars are over the drawing, centred on it, and the s
   }
   const tree = JSON.stringify(await ui.drawn())
   await ui.unmount()
-  const order = ['Miro  ★ 4', '"Raster"', '"skin"'].map(x => tree.indexOf(x))
+  const order = ['"skin"', 'Miro  ★ 4', '"Raster"'].map(x => tree.indexOf(x))
   expect(order.every(i => i >= 0)).toBe(true)
-  expect([...order].sort((x, y) => x - y)).toEqual(order) // the name, the drawing, and then its button
-  // a band that may be only as tall as the drawing keeps the drawing: the skin button goes first (/pet skin does the same), then the name
+  expect([...order].sort((x, y) => x - y)).toEqual(order) // the button at the left, then the pet's column: the name, the drawing
+  // a band that may be only as tall as the drawing keeps the drawing and the button beside it: the name goes. A row more, and all is there
   const rows = Number(raster.rows)
-  const tight = await drawnWidth($, { bodyColumns: 100, maxRows: rows }), taller = await drawnWidth($, { bodyColumns: 100, maxRows: rows + 1 }), whole = await drawnWidth($, { bodyColumns: 100, maxRows: rows + 2 })
-  expect([tight.raster, tight.head, tight.buttons]).toEqual([true, '', []])
-  expect([taller.raster, taller.head, taller.buttons]).toEqual([true, 'Miro  ★ 4', []])
-  expect([whole.raster, whole.head, whole.buttons]).toEqual([true, 'Miro  ★ 4', ['skin']])
-  // narrower, the drawing keeps its columns and the name over it gives way: the stars first, then the name is cut
+  const tight = await drawnWidth($, { bodyColumns: 100, maxRows: rows }), taller = await drawnWidth($, { bodyColumns: 100, maxRows: rows + 1 })
+  expect([tight.raster, tight.head, tight.buttons]).toEqual([true, '', ['skin']])
+  expect([taller.raster, taller.head, taller.buttons]).toEqual([true, 'Miro  ★ 4', ['skin']])
+  // narrower, the drawing keeps its columns: the button beside it goes, and the name over it gives way: the stars first, then the name is cut
   const seen: string[] = []
   for (let bodyColumns = 60; bodyColumns >= 14; bodyColumns--) {
     const d = await drawnWidth($, { bodyColumns })
@@ -2908,7 +2917,7 @@ test('E19: the name and the stars are over the drawing, centred on it, and the s
     const what = [d.head, ...d.own].join(' ')
     if (seen.at(-1) !== what) seen.push(what)
   }
-  expect(seen).toEqual(['Miro  ★ 4 skin'])
+  expect(seen).toEqual(['Miro  ★ 4 skin', 'Miro  ★ 4']) // with no column left beside the drawing the button goes (/pet skin)
 })
 
 test('E23: the notice about the comments: on a surface with no buttons its line names the command; a cuddle over it leaves no button of the notice under the cuddle; with the band hidden it is not marked as said', async ($, on) => {
@@ -2951,17 +2960,18 @@ test('a pack animal with a larger body (an imported Codex pet): drawn at its own
   await cardOf($, 'animal pixel-duck')
   const raster = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; await ui.unmount(); const d = new Uint32Array(Uint8Array.from(atob(String(r.cells)), ch => ch.charCodeAt(0)).buffer); return { columns: Number(r.columns), rows: Number(r.rows), inks: new Set([...d].filter((_, i) => i % 3 !== 0)) } }
   await cardOf($, 'wear none')
-  expect(await raster()).toMatchObject({ columns: W, rows: H / 2 }) // bare, the body alone: 20 columns by 11 rows of text
+  const TALL = (H - 2) / 2 // the duck's two empty rows of pixels over its head are not drawn: the name sits on the head
+  expect(await raster()).toMatchObject({ columns: W + 2, rows: TALL }) // bare: the body with one spare column each side, as in every frame, 10 rows of text
   await cardOf($, 'wear shades')
   const worn = await raster()
-  expect([worn.columns, worn.rows, worn.inks.has(0x263238)]).toEqual([W + 2, (H + 2) / 2, true]) // with a thing on: one spare column each side and two rows above the head, and the sunglasses are drawn
+  expect([worn.columns, worn.rows, worn.inks.has(0x263238)]).toEqual([W + 2, TALL, true]) // with a thing on the face: as wide and as tall, and the sunglasses are drawn
   await cardOf($, 'wear mug'); await cardOf($, 'wear skateboard'); await cardOf($, 'wear cap')
   const all = await raster()
-  expect([all.columns > W + 2, all.rows, all.inks.has(0x26c6da), all.inks.has(0xab47bc), all.inks.has(0x42a5f5)]).toEqual([true, (H + 2) / 2 + 1, true, true, true]) // the mug beside it, the skateboard under it, the cap over it
+  expect([all.columns > W + 2, all.rows, all.inks.has(0x26c6da), all.inks.has(0xab47bc), all.inks.has(0x42a5f5)]).toEqual([true, TALL + 2, true, true, true]) // the mug beside it, the skateboard under it and the cap over it, a row of text each
   for (const bodyColumns of [40, 60, 80, 100]) { const d = await drawnWidth($, { bodyColumns }); expect([bodyColumns, d.total <= bodyColumns, d.raster], JSON.stringify(d)).toEqual([bodyColumns, true, true]) }
   expect((await drawnWidth($, { bodyColumns: 100, maxRows: 8 })).raster).toBe(false) // a band lower than the drawing: the row of text
-  await k.clock.advance(6 * 60_000) // asleep: it wears nothing, and the frame keeps its size
-  expect((await raster()).rows).toBe((H + 2) / 2 + 1)
+  await k.clock.advance(6 * 60_000) // asleep: it wears nothing, and the drawing is as tall as the duck asleep, as its pack drew it
+  expect((await raster()).rows).toBe(TALL)
 })
 
 test('E22: commands: capitals do not matter, a word that is no command says so in a line, /pet help lists the commands there are and only those, and a wrong argument is told', async ($, on) => {
@@ -3276,10 +3286,10 @@ test("the founder's eggshell: a pet hatched in time has it and wears it; the cat
   expect(await cardOf($, 'shop eggshell')).toBe('You already have half an eggshell. /pet wear eggshell puts it on.')
   expect([await cardOf($, 'wear eggshell'), await cardOf($, 'shop')]).toEqual([expect.stringMatching(/^half an eggshell comes off\./), expect.stringMatching(/^  eggshell +half an eggshell +–  head +yours$/m)])
   expect(await cardOf($, 'wear eggshell')).toMatch(/half an eggshell/)
-  // drawn: the white of the shell is over the head
+  // drawn: the cream of the shell is over the head, and the shade under its edge
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   const cells = new Uint32Array(Uint8Array.from(atob((await ui.find({ type: 'Raster' }))!.props.cells as string), c => c.charCodeAt(0)).buffer)
-  expect([...cells]).toContain(parseInt(zoo.common.i.slice(1), 16))
+  for (const key of ['z', 'Z'] as const) expect([...cells]).toContain(parseInt(zoo.common[key].slice(1), 16))
   await ui.unmount()
 })
 
@@ -3901,7 +3911,7 @@ test('the terminal drawing is the same, byte for byte', async ($, on) => {
     for (const item of ['shades', 'skateboard', 'golden']) await cardOf($, `wear ${item}`)
     seen.push(await shot())
   }
-  expect(seen).toEqual(['12x5 f3219565', '14x7 c736b204', '12x5 7a533345', '14x7 538509fc'])
+  expect(seen).toEqual(['14x4 3bf0b7cd', '14x5 2d6700d4', '14x4 14c61d65', '14x5 964adc8c']) // since 0.3.4 no empty row over the drawing, and a calm frame as wide as the others
 })
 
 test('before the first prompt of a chat the pet asks what the other plugins add with whole facts (the session\'s model and surfaces): no hook on the way is skipped for a missing one, and the briefox plugin\'s sentence is seen', async ($, on) => {
@@ -4783,6 +4793,7 @@ const occupied = (rows: string[]) => { // a drawing cut to what is in it, a char
   const x0 = Math.min(...xs), x1 = Math.max(...xs)
   return rows.slice(Math.min(...ys), Math.max(...ys) + 1).map(r => [...r.slice(x0, x1 + 1)].map(ch => ch === '.' ? ' ' : '#').join('')).join('\n')
 }
+const shorn = (cells: string) => cells.replace(/^( *\n)+/, '') // the empty rows over a drawing are not drawn: the name sits on it
 const glyphs = (rows: string[]) => { let out = ''; for (let r = 0; r < rows.length; r += 2) { for (let c = 0; c < rows[r]!.length; c++) out += rows[r]![c] !== '.' ? '▀' : rows[r + 1]![c] !== '.' ? '▄' : ' '; out += '\n' } return out }
 /** Every drawing a body of the fox has, in what it wears: as the terminal's glyphs and as the pixels of an Svg. */
 const bodyDrawings = (body: 'baby' | 'adult', wear: string[]) => {
@@ -4790,7 +4801,11 @@ const bodyDrawings = (body: 'baby' | 'adult', wear: string[]) => {
   for (const [name, st] of Object.entries(fox.states) as [string, any][]) {
     if (body === 'baby' ? !(name === 'baby' || name.startsWith('baby-')) : name === 'baby' || name.startsWith('baby-')) continue
     const all = [...st.frames.map((f: string[], i: number) => [f, st.at?.[i] ?? st.at?.[0]]), ...st.rare.map((f: string[]) => [f, st.at?.[0]]), ...Object.values(st.idle ?? {}).flatMap((g: any) => g.frames.map((f: string[], i: number) => [f, g.at[i] ?? g.at[0]]))]
-    for (const [f, at] of all) { const rows = dressed(f, at, name === 'crown' ? [] : wear, [], 'fox', body) as string[]; cells.add(glyphs(rows)); pixels.add(occupied(rows)) }
+    for (const [f, at] of all) {
+      // as the mod sets it: a calm frame on the canvas of the others, and asleep the Zs beside the head, the small one alone or with the large one
+      const worn = dressed(f, at, name === 'crown' ? [] : wear, [], 'fox', body) as string[], rows = worn.length === zoo.height ? worn.map(r => `.${r}.`) : worn
+      for (const shown of name.endsWith('sleep') ? [snore(rows, 0), snore(rows, 1)] : [rows]) { cells.add(shorn(glyphs(shown))); pixels.add(occupied(shown)) }
+    }
   }
   return { cells, pixels }
 }
@@ -4812,6 +4827,7 @@ test("a baby is drawn as the baby in what it wears on every path: calm, moving, 
     const [, w, h] = /viewBox="0 0 (\d+) (\d+)"/.exec(source)!, grid = Array.from({ length: Number(h) }, () => Array(Number(w)).fill(' '))
     for (const m of source.matchAll(/<rect x="(\d+)" y="(\d+)" width="(\d+)" height="1"/g)) for (let x = 0; x < Number(m[3]); x++) grid[Number(m[2])]![Number(m[1]) + x] = '#'
     const pixels = grid.map(row => row.join('')).join('\n')
+    cells = shorn(cells)
     if (!baby.cells.has(cells)) seen.push(`${when}: terminal${grown.cells.has(cells) ? ', the grown fox' : bare.cells.has(cells) ? ', no eggshell' : ''}\n${cells}`)
     if (!baby.pixels.has(pixels)) seen.push(`${when}: svg${grown.pixels.has(pixels) ? ', the grown fox' : bare.pixels.has(pixels) ? ', no eggshell' : ''}\n${pixels}`)
     return { said, keys, cells }

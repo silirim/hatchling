@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import zoo from '../sprites/zoo.js'
-import { validate, parse, compile, install, place, marksFor, coatOf, REG, BUILTIN, LIMITS, FORMAT, YOUNG } from './skins.js'
+import { validate, parse, compile, install, place, marksFor, coatOf, snore, REG, BUILTIN, LIMITS, FORMAT, YOUNG } from './skins.js'
 import { SHOP, COATS, WEARABLE, EGGSHELL, closetOf, wornOf, putOn, takeOff, turnSlot, view, initialState } from './engine.js'
 
 const EXAMPLE = readFileSync(new URL('../docs/skins-example.json', import.meta.url), 'utf8')
@@ -71,7 +71,7 @@ test('a pack that is not sound is refused whole, and told why: every way tried h
     ['a shared colour redefined', p => { p.animals.robot.palette.k = '#ffffff' }, /"k" is a shared colour/],
     ['a frame of the wrong size', p => { p.animals.robot.states.adult.frames[0].pop() }, /^animals\.robot\.states\.adult\.frames\[0\]: a frame is 10 rows of 12 pixels, or 12 rows of 14$/],
     ['a row of the wrong width', p => { p.animals.robot.states.adult.frames[0][2] += '.' }, /frames\[0\]: a frame is 10 rows/],
-    ['a pixel of no colour', p => { p.animals.robot.states.adult.frames[0][1] = '..BBBBZZBB..' }, /uses a colour key the palette lacks: "Z"$/],
+    ['a pixel of no colour', p => { p.animals.robot.states.adult.frames[0][1] = '..BBBBQQBB..' }, /uses a colour key the palette lacks: "Q"$/],
     ['no adult', p => { p.animals.robot.states = { baby: p.animals.robot.states.adult } }, /the "adult" state is missing/],
     ['a state there is not', p => { p.animals.robot.states.angry = p.animals.robot.states.adult }, /^animals\.robot\.states\.angry: not a state/],
     ['too many frames', p => { p.animals.robot.states.adult.frames = Array(9).fill(p.animals.robot.states.adult.frames[0]) }, /frames: must be a list of 1 to 8 frames$/],
@@ -369,8 +369,12 @@ test('the redraws of the second pass: brown boots with a darker sole, glasses th
     assert.equal(tint.k, '#1b1b1b', at)
     for (const [r, c] of eyes) for (const [dr, dc] of [[1, 0], [0, 1], [0, -1], [-1, 0]]) { const ch = base[r + (dr ?? 0)]?.[c + (dc ?? 0)]; if (ch && ch !== '.' && ch !== 'k') assert.ok(dark(tint[ch]) > 75, `${at}: ${ch} next to an eye`) }
   }
-  // the eggshell: on every animal, with the white of the egg and one of its spots, and a broken edge
-  assert.deepEqual(zoo.pack.items.eggshell.fallback[0]?.art, ['.iiii.', 'iihiii', 'i.ii.i'])
+  // the eggshell: on every animal, a cream that no fur has (a white shell on a white head was one blob), one of the egg's spots,
+  // and under its broken edge a line of shade, so it sits on the head
+  assert.deepEqual(zoo.pack.items.eggshell.fallback[0]?.art, ['.zzhz.', 'zzzzzz', 'ZzZZzZ'])
+  const furs = new Set(Object.values(zoo.pack.animals).flatMap(a => Object.values({ W: zoo.common.W, ...a.palette })))
+  assert.ok(!furs.has(zoo.common.z) && !furs.has(zoo.common.Z) && zoo.fixed.includes('z') && zoo.fixed.includes('Z'))
+  for (const [animal, d] of Object.entries(zoo.pack.items.eggshell.draw)) for (const body of ['adult', 'baby']) assert.deepEqual(d[body]?.art, ['.zzhz.', 'zzzzzz', 'ZzZZzZ'], `${animal} ${body}`)
 })
 
 test('every shipped animal has the baby\'s own drawing of the sleep and of each mood, the body the baby\'s and placed, so it wears as awake', () => {
@@ -382,6 +386,25 @@ test('every shipped animal has the baby\'s own drawing of the sleep and of each 
       // the baby's pixels, give or take the marks of the mood: far from the grown body's count
       const grown = sp.states[mood].frames[0].join('').replace(/\./g, '').length, own = st.frames[0].join('').replace(/\./g, '').length
       assert.ok(Math.abs(own - baby) < Math.abs(own - grown), `${id} baby-${mood} is drawn from the baby`)
+    }
+  }
+})
+
+test('the Zs of the sleep are beside the head, never over it: no shipped drawing of the sleep has them, and `snore` adds columns at the right and no row', () => {
+  for (const [id, sp] of Object.entries(BUILTIN.species)) for (const name of ['sleep', 'baby-sleep']) {
+    const st = sp.states[name]
+    assert.equal(st.frames.length, 2, `${id} ${name}`) // two frames all the same: the small z, then with the large one
+    for (const f of st.frames) {
+      const top = f.findIndex(r => /[^.]/.test(r)), wide = f[0].length
+      assert.ok(!f.join('').includes('w'), `${id} ${name}: a Z drawn in`)
+      const [small, large] = [snore(f, 0), snore(f, 1)]
+      for (const z of [small, large]) {
+        assert.deepEqual([z.length, z[0].length <= wide + 9, new Set(z.map(r => r.length)).size], [f.length, true, 1], `${id} ${name}`)
+        assert.equal(z.findIndex(r => /[^.]/.test(r)), top, `${id} ${name}: over the head`) // nothing above the topmost pixel of the pet
+        z.forEach((r, y) => { assert.equal(r.slice(0, wide).replace(/w/g, '.'), f[y].replace(/w/g, '.')); [...r].forEach((ch, x) => { if (ch === 'w' && f[y][x] !== 'w') assert.ok(f[y].slice(x - 1, x + 2).replace(/\./g, '') === '', `${id} ${name}: a Z on the body`) }) })
+      }
+      assert.equal(small[0].length, large[0].length) // as wide on both frames: the pet does not step aside
+      assert.ok(large.join('').split('w').length > small.join('').split('w').length)
     }
   }
 })

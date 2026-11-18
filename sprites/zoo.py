@@ -19,8 +19,9 @@ UNDER = 2  # rows an item may take under the feet: the adapter makes the frame t
 COMMON = {"k": "#1b1b1b", "W": "#f5f5f5", "r": "#f48fb1",                    # eyes, white, cheeks
           "y": "#ffd54f", "K": "#ffb300", "S": "#263238", "h": "#d4a056", "M": "#43a047", "w": "#81d4fa", "v": "#ab47bc", "R": "#ef5350",      # sparkle/crown, water, dizzy eyes, alarm
           "u": "#42a5f5", "n": "#795548", "N": "#4e342e", "q": "#26c6da", "i": "#eceff1",      # shop items: blue, brown, a sole's darker brown, cyan, white
-          "x": "#fff6cf"}                                                      # the glint on a golden coat
-FIXED = "kyvwRKShMunNqix"
+          "x": "#fff6cf",                                                      # the glint on a golden coat
+          "z": "#f4e3b8", "Z": "#a9793f"}                                      # the eggshell: a warm cream, never the white of a fur, and the shade under its edge
+FIXED = "kyvwRKShMunNqixzZ"
 LIGHT = {"y": "#f9a825", "w": "#29b6f6"}  # light terminals: the pale effects would vanish. White and what is as pale get a darker edge, drawn by the adapter
 SCARF = {"penguin": 5, "chick": 6, "cactus": 6}  # row of the adult's neck, 7 when not listed
 # the shop's items, in its order: the part each is worn on and its English name (engine/engine.js SHOP has the same, a test compares them)
@@ -139,7 +140,7 @@ LAPTOP = ["iiiiii.", "iqSSSi.", "iSqqSi.", "iiiiii.", "iiiiiii"]  # open: two li
 PARTYHAT = ["..yy..", ".qvqv.", "vqvqvq"]  # a striped cone, its tip yellow
 SANTA = ["..RRRR.", ".RRRRRi", "iiiiii."]  # leaning to the right, the bobble at its end, the white trim
 WIZARD = ["....vv..", "..vyvv..", "vvvvvvvv"]  # the bent tip, a star, the wide brim
-EGGSHELL = [".iiii.", "iihiii", "i.ii.i"]  # half the shell a pet hatched from: the egg's white and its spots, the broken edge down
+EGGSHELL = [".zzhz.", "zzzzzz", "ZzZZzZ"]  # half the shell a pet hatched from, a spot on it: cream, the broken edge down in teeth, and a line of shade under them
 RING = [(a, b) for a in (-1, 0, 1) for b in (-1, 0, 1) if a or b]
 HEM = {"cactus": 0}  # rows the hoodie goes down from the neck when not to the feet: the cactus keeps its pot
 HOOD = {"cactus": {"adult": 3, "baby": 4}}  # the last row of the head, for the hood, when the rows down to the neck are not all head
@@ -286,7 +287,6 @@ def derive(adult, eyes, cheeks, skin):
     top = min(r for r, _ in eyes)
     squat = rows(shut)
     squat = squat[:top - 1] + squat[top:7] + squat[8:] if top > 1 else squat[:top + 1] + squat[top + 2:7] + squat[8:]  # two rows shorter: curled up
-    z = [(0, 10, "w"), (0, 11, "w"), (0, 12, "w"), (0, 13, "w"), (1, 12, "w"), (2, 11, "w"), (3, 10, "w"), (3, 11, "w"), (3, 12, "w"), (3, 13, "w")]
     out = {
         "adult": {"at": [(2, 1)], "frames": [adult], "rare": [blink(adult, eyes, skin)]},
         "crown": {"at": [(2, 1)], "frames": [crown(adult)], "rare": [blink(crown(adult), eyes, skin)]},
@@ -297,7 +297,8 @@ def derive(adult, eyes, cheeks, skin):
         "stomach": {"at": [(2, 1)], "tint": "sick", "frames": [fx(rows(plain), [(1, 13, "w")]), fx(rows(plain), [(3, 13, "w")])], "rare": []},
         "loop": {"at": [(2, 1)], "frames": [fx(rows(wide), [(0, 13, "R"), (1, 13, "R"), (3, 13, "R")]), fx(rows(wide), [])], "rare": []},
         "ko": {"at": [(2, 1)], "tint": "ghost", "frames": [fx(rows(dash), [(0, c, "y") for c in range(5, 9)]), fx(rows(dash), [(1, c, "y") for c in range(5, 9)])], "rare": []},
-        "sleep": {"frames": [fx(squat, [(2, 7, "w"), (2, 8, "w")], dr=4), fx(squat, [(2, 7, "w"), (2, 8, "w")] + z, dr=4)], "rare": []},
+        # the Zs are not drawn here: the adapter sets them to the right of the head, on columns of their own, so sleep takes no row above it
+        "sleep": {"frames": [fx(squat, [], dr=4), fx(squat, [], dr=4)], "rare": []},
     }
     return out
 
@@ -308,14 +309,13 @@ def young(baby, eyes):
     base = grid(baby)
     wide, swirl, shut = [r[:] for r in base], [r[:] for r in base], [r[:] for r in base]
     for r, c in eyes: wide[r + 1][c] = "k"; swirl[r][c] = "v"; shut[r][inward(c)] = "k"
-    z = [(0, 10, "w"), (0, 11, "w"), (0, 12, "w"), (0, 13, "w"), (1, 12, "w"), (2, 11, "w"), (3, 10, "w"), (3, 11, "w"), (3, 12, "w"), (3, 13, "w")]
     return {
         "baby-bloated": {"at": [(2, 1)], "frames": [rows(bloated(baby, eyes, []))], "rare": []},
         "baby-cheer": {"at": [(2, 1), (1, 1)], "frames": [fx(baby, [(1, 0, "y"), (3, 13, "y")]), fx(baby, [(3, 0, "y"), (0, 13, "y")], dr=1)], "rare": []},
         "baby-dizzy": {"at": [(2, 0), (2, 2)], "frames": [fx(rows(swirl), [(0, 3, "y"), (1, 10, "y")], dc=0), fx(rows(swirl), [(0, 10, "y"), (1, 3, "y")], dc=2)], "rare": []},
         "baby-stomach": {"at": [(2, 1)], "tint": "sick", "frames": [fx(baby, [(1, 13, "w")]), fx(baby, [(3, 13, "w")])], "rare": []},
         "baby-loop": {"at": [(2, 1)], "frames": [fx(rows(wide), [(0, 13, "R"), (1, 13, "R"), (3, 13, "R")]), fx(rows(wide), [])], "rare": []},
-        "baby-sleep": {"at": [(2, 1)], "frames": [fx(rows(shut), []), fx(rows(shut), z)], "rare": []},
+        "baby-sleep": {"at": [(2, 1)], "frames": [fx(rows(shut), []), fx(rows(shut), [])], "rare": []},
     }
 
 
