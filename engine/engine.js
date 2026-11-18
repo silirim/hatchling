@@ -226,19 +226,21 @@ export const COATS = [
 /** Everything that can be bought: the things to wear, then the coats. */
 export const SOLD = [...SHOP, ...COATS]
 /**
- * The founder's keepsake: half the shell the pet hatched from, worn as a hat. Not sold. A pet born on or before FOUNDER_UNTIL has it
+ * The founder's keepsake: a small golden egg that sits beside the pet. Not sold. A pet born on or before FOUNDER_UNTIL has it
  * (`birth`), and who has it keeps it for ever. The one place the date is written: a local date of the person's machine.
  * The rule: 30 days after the day the repository went public, 17 November 2026.
  */
 export const FOUNDER_UNTIL = '2026-12-18'
-export const EGGSHELL = { id: 'eggshell', name: 'half an eggshell', slot: 'head', price: 0 }
+export const GOLDENEGG = { id: 'goldenegg', name: 'a golden egg', slot: 'accessory', price: 0 }
+/** The keepsake as it was until 0.3.4, half an eggshell worn as a hat: a pet that owns it owns the golden egg (`shared`, `reworn`). Not in any catalogue. */
+export const EGGSHELL_ID = 'eggshell'
 /** What a pet can own, in the order it is kept and told: the keepsake, then what is sold. */
-export const OWNABLE = [EGGSHELL, ...SOLD]
+export const OWNABLE = [GOLDENEGG, ...SOLD]
 /**
- * Everything a pet can have on: the crown, the founder's eggshell, then what is sold in its order, then what the person's skin packs bring (`extend`).
+ * Everything a pet can have on: the crown, the founder's golden egg, then what is sold in its order, then what the person's skin packs bring (`extend`).
  * @type {{ id: string, name: string, slot: string, price: number, pack?: string, names?: Record<string, string> }[]}
  */
-export const WEARABLE = [CROWN, EGGSHELL, ...SOLD]
+export const WEARABLE = [CROWN, GOLDENEGG, ...SOLD]
 /** The things and coats of the person's skin packs (engine/skins.js): theirs from the moment the pack is installed. Never bought, never kept in the pet. */
 let extra = /** @type {string[]} */ ([])
 /** Sets what the skin packs bring, in place of what they brought before. @param {{ id: string, name: string, slot: string, price: number, pack: string, names: Record<string, string> }[]} items */
@@ -305,13 +307,13 @@ export const founder = (born) => born > 0 && dateOf(born) <= FOUNDER_UNTIL
 
 /**
  * A pet with its birth known and what comes with it. One without a birth (a newborn, or a pet of a version before this one) takes
- * `known`, an earlier moment it is known to have lived at, else `now`: it was born by then. A founder's pet has the eggshell from
+ * `known`, an earlier moment it is known to have lived at, else `now`: it was born by then. A founder's pet has the golden egg from
  * then on; a pet born later never gets it, and one that has it keeps it whatever the date: nothing here takes it away.
  * @template {{ born: number, owned: string[] }} T @param {T} s @param {number} now @param {number} [known] @returns {T}
  */
 export function birth(s, now, known = 0) {
   const born = s.born > 0 ? s.born : known > 0 && known < now ? known : now
-  const owned = founder(born) && !s.owned.includes(EGGSHELL.id) ? [EGGSHELL.id, ...s.owned] : s.owned
+  const owned = founder(born) && !s.owned.includes(GOLDENEGG.id) ? [GOLDENEGG.id, ...s.owned] : s.owned
   return born === s.born && owned === s.owned ? s : { ...s, born, owned }
 }
 
@@ -705,6 +707,22 @@ export function card(s) {
 /** @typedef {{ variant: 'golden' | null, born: number, life: { input: number, cacheRead: number }, turn: number, coins: number, affection: number, days: number, day: number, lately: number[], dayTurns: number, dayCuddles: number, cuddledAt: number, giftAt: number, owned: string[], animals: string[], lastCheerAt: number }} Shared */
 
 const MAX_TIME = 8.64e15 // the last moment a date can hold
+
+/**
+ * What is kept for a pet whose choice still names the eggshell of before the golden egg: the eggshell is gone and its head left bare,
+ * and the golden egg is on when the pet has it and nothing else is beside it; else it is only owned. With a hat named after the eggshell
+ * the hat was on, not the eggshell: the egg is only owned. A choice that does not name the eggshell comes back as it is.
+ * @param {string[]} closet what the pet has now (`closetOf`) @param {string} wear
+ */
+export function reworn(closet, wear) {
+  const said = String(wear ?? '').split(/\s+/).filter(Boolean)
+  if (!said.includes(EGGSHELL_ID)) return wear
+  const rest = said.filter(id => id !== EGGSHELL_ID), others = closet.filter(id => id !== GOLDENEGG.id)
+  const wore = !said.slice(said.lastIndexOf(EGGSHELL_ID) + 1).some(id => closet.includes(id) && slotOf(id) === 'head') // no hat named after it
+  // without the egg, with no thing put on for want of a choice, and with nothing on the head the eggshell was on
+  const on = wornOf(others, [...rest, 'none'].join(' ')).filter(id => !wore || slotOf(id) !== 'head')
+  return kept(closet, wore && closet.includes(GOLDENEGG.id) && !on.some(id => slotOf(id) === GOLDENEGG.slot) ? inOrder([...on, GOLDENEGG.id]) : on)
+}
 const DEBT_MAX = 100_000 // how far under zero the stars are let go
 
 /**
@@ -720,7 +738,8 @@ export function shared(s) {
   const when = (/** @type {unknown} */ x, max = MAX_TIME) => { const v = Math.floor(n(x)); return v > 0 && v <= max ? v : 0 }
   const day = when(s?.day, MAX_TIME / 86_400_000), days = count(s?.days)
   const lately = [...new Set(Array.isArray(s?.lately) ? s.lately.map((/** @type {unknown} */ x) => when(x, MAX_TIME / 86_400_000)).filter((/** @type {number} */ x) => x > 0 && x <= day) : [])].sort((a, b) => a - b).slice(-RULES.daysKept)
-  const had = Array.isArray(s?.owned) ? s.owned : Object.keys(RULES.legacyUnlocks).filter(id => n(s?.efficientSessions) >= (RULES.legacyUnlocks[id] ?? Infinity))
+  // the eggshell of before the golden egg is the golden egg
+  const had = Array.isArray(s?.owned) ? s.owned.map((/** @type {unknown} */ id) => id === EGGSHELL_ID ? GOLDENEGG.id : id) : Object.keys(RULES.legacyUnlocks).filter(id => n(s?.efficientSessions) >= (RULES.legacyUnlocks[id] ?? Infinity))
   return {
     variant: s?.variant === 'golden' ? 'golden' : null,
     born: when(s?.born),

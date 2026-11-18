@@ -7,7 +7,7 @@
 // Every text in it must be as the cleaning of the pack loader leaves it (width.js `tidy`, and the cleaners built on it).
 // Pure: no file is read or written here (hooks/register.js does both).
 
-import { shared, stage, OWNABLE, WEARABLE, RULES, PLAIN } from './engine.js'
+import { shared, stage, OWNABLE, WEARABLE, RULES, PLAIN, GOLDENEGG, EGGSHELL_ID } from './engine.js'
 import { whole as diaryOf, dated } from './diary.js'
 import { memory as routineOf } from './routine.js'
 import { REG } from './skins.js'
@@ -41,7 +41,7 @@ const things = (/** @type {unknown} */ v) => String(v ?? '').split(/\s+/).filter
 const PREFS = /** @type {Record<string, (v: unknown) => boolean>} */ ({
   species: animal, born: animal, seed: v => count(v) && v !== 0, name: v => !!v && kept(cleanName)(v), stats: v => !!asStats(v),
   personality: kept(s => tidy(s, 120)), hatched: time, cuddles: count, cuddled: time,
-  wear: v => typeof v === 'string' && v.length <= LIMITS.text && things(v).join(' ') === v && things(v).every(wearable),
+  wear: v => typeof v === 'string' && v.length <= LIMITS.text && things(v).join(' ') === v && things(v).every(id => wearable(id) || id === EGGSHELL_ID), // the eggshell of a file of before the golden egg: the adapter turns the choice (engine.js `reworn`)
   lang: v => !!asLang(v), style: bool, hidden: bool, model: kept(asModel), voice: bool, voiceAsked: bool, asked: bool, chats: bool, callme: kept(cleanCall),
 })
 const DONE = /^[a-z][a-z0-9:-]{0,31}$/ // a milestone written in the diary: `first`, `cuddles10`, `grew:adult`
@@ -118,7 +118,7 @@ export function validate(raw) {
       if (!Object.hasOwn(file.prefs, k)) err(`prefs.${k}`, 'is missing')
       else if (ok(v)) continue
       else if ((k === 'species' || k === 'born') && typeof v === 'string') err(`prefs.${k}`, `the animal ${quote(v)} is not known here: if it comes from a skin pack, install the pack first`)
-      else if (k === 'wear' && typeof v === 'string' && things(v).some(id => !wearable(id))) err('prefs.wear', `${quote(things(v).find(id => !wearable(id)))} is not a thing or a coat known here: if it comes from a skin pack, install the pack first`)
+      else if (k === 'wear' && typeof v === 'string' && things(v).some(id => !wearable(id) && id !== EGGSHELL_ID)) err('prefs.wear', `${quote(things(v).find(id => !wearable(id) && id !== EGGSHELL_ID))} is not a thing or a coat known here: if it comes from a skin pack, install the pack first`)
       else err(`prefs.${k}`, 'not of the right kind, or out of range')
     }
   }
@@ -154,6 +154,8 @@ export function parse(text) {
   if (text.length > LIMITS.bytes) return { move: null, errors: [`file: larger than ${LIMITS.bytes / 1024} KiB`] }
   let raw
   try { raw = JSON.parse(text) } catch (e) { return { move: null, errors: [`file: not JSON (${tidy(String(/** @type {any} */ (e)?.message ?? e), 80)})`] } } // the message quotes the file's text
+  // a file of before the golden egg: the eggshell its pet owns is the golden egg here, as in a store (engine.js `shared`)
+  if (isObj(raw) && isObj(raw.pet) && Array.isArray(raw.pet.owned) && !raw.pet.owned.includes(GOLDENEGG.id)) raw.pet.owned = raw.pet.owned.map((/** @type {unknown} */ id) => id === EGGSHELL_ID ? GOLDENEGG.id : id)
   const errors = validate(raw)
   return { move: errors.length ? null : raw, errors }
 }

@@ -39,7 +39,7 @@ Right after it hatches the pet says who it is, and then, once, that its comments
 - **The crown** is not sold: a pet at its last stage has it.
 - **Coats** (`pastel`, `terminal`, `golden`) are a colour only. One pet in a hundred is born golden; `/pet wear <coat>` and `/pet wear plain` switch.
 - **The Santa hat** is sold from 1 to 31 December; once yours, it stays all year.
-- **The founder's eggshell** (`eggshell`, half the shell as a hat) is not sold: a pet hatched by 18 December 2026 has it, and keeps it for ever.
+- **The founder's golden egg** (`goldenegg`, a small golden egg beside the pet) is not sold: a pet hatched by 18 December 2026 has it, and keeps it for ever.
   It is a keepsake kept in the pet's file on your machine, not something anyone checks or enforces.
 - **Animals**: the one your pet was born as is yours. Each other common one (penguin, chick, dog, bunny, fox, cactus) is unlocked once with `/pet shop <animal>`; `/pet animal <name>` then switches freely. Name and character stay. A rare seventh is not sold.
 - **Skin packs**: more animals, things and coats from JSON files in `~/.claude/hatchling-skins/`. Data, never code; free. See [skins.md](skins.md).

@@ -8,7 +8,7 @@
 // The pet speaks English, Spanish, Portuguese or Simplified Chinese (engine/lang/): /pet lang picks, and a newborn takes the system's.
 
 import { atom, read, update } from 'claude-code'
-import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, EGGSHELL, FOUNDER_UNTIL, birth, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
+import { initialState, reduce, view, card, dayOf, sync, adopt, shared, whole, program, SHOP, SOLD, COATS, GOLDEN, PLAIN, OWNABLE, GOLDENEGG, EGGSHELL_ID, FOUNDER_UNTIL, birth, reworn, sells, WEARABLE, SLOTS as PARTS, RULES, wornOf, putOn, takeOff, turnSlot } from '../engine/engine.js'
 import { MODEL, MODEL_MAX, asModel, unavailable, tellGone, measuredHow, tally, due, left, reserve, settle as settled, average, system, summary, news, reply, clean, tooLong, pathy, notice, lastTurn, recap as recapOf, cleanRecap, RECAP_COST } from '../engine/voice.js'
 import { whole as diaryOf, open as diaryOpened, touch as diaryTouched, cuddled as diaryCuddled, bought as diaryBought, grew as diaryGrew, memory, saying, told, memories, page, dated, lasting } from '../engine/diary.js'
 import { marks, greeting, finished, folder, counts, listing, leftOf, WATCH, sight, seen, watched, namesOf } from '../engine/company.js'
@@ -1278,7 +1278,8 @@ async function share(/** @type {any} */ $, /** @type {boolean} */ write) {
   if (stored === none) return // an unreadable store is not an empty one: writing now would put this chat's copy over the shared pet
   const { pet: next, seen } = sync(cur, stored)
   const same = (/** @type {unknown} */ a, /** @type {unknown} */ b) => JSON.stringify(a) === JSON.stringify(b)
-  const kept = write && (same(next, seen) || await storeSet($, 'pet', next).then(() => true, () => false))
+  const shell = Array.isArray(/** @type {any} */ (stored)?.owned) && /** @type {any} */ (stored).owned.includes(EGGSHELL_ID) // a store of before the golden egg: written again as it is read, the eggshell the golden egg
+  const kept = write && ((same(next, seen) && !shell) || await storeSet($, 'pet', next).then(() => true, () => false))
   const base = kept ? next : seen ?? cur.base ?? shared(cur) // not written: this chat's changes are still to be counted
   if (same(shared(cur), next) && same(cur.base, base)) return
   cur = adopt(cur, next, base)
@@ -1325,7 +1326,7 @@ async function moveOut(/** @type {any} */ $, /** @type {boolean} */ backup) {
 /**
  * /pet import, once the person said yes: the pet of a checked file (engine/move.js `parse`) takes the place of the one here, in
  * the store and in this chat. Only the keys of the pet, of its choices and of the diary are written: the marks of the chats, the
- * pet's last lines and the day's count of comments stay as this computer has them. The eggshell follows the birth as ever
+ * pet's last lines and the day's count of comments stay as this computer has them. The golden egg follows the birth as ever
  * (`founding`). False when the store could not be written.
  */
 async function moveIn(/** @type {any} */ $, /** @type {import('../engine/move.js').Move} */ m) {
@@ -1362,24 +1363,28 @@ async function load(/** @type {any} */ $) {
   cur = reduce(/** @type {any} */ ({ ...initialState(plain ? 1 : undefined), ...born, ...(born && { base: born }) }), { type: 'sessionStart', t: lastActive })
   await update($, pet, () => cur)
   await founding($)
+  if (Array.isArray(stored?.owned) && stored.owned.includes(EGGSHELL_ID)) await share($, true).catch(() => {}) // a store of before the golden egg is written again at once (`share`)
   return true
 }
 
 /**
- * The pet's birth and the founder's eggshell (engine.js `birth`): a newborn is born now; a pet of a version before this one, which
- * kept no birth, at the first moment its diary knows, else now. Born in time, it has the eggshell from here on, and it goes on a
- * head that has nothing on and was not left bare by choice. Under the bench the rule is the same, on the bench's own store.
+ * The pet's birth and the founder's golden egg (engine.js `birth`): a newborn is born now; a pet of a version before this one, which
+ * kept no birth, at the first moment its diary knows, else now. Born in time, it has the golden egg from here on, and the egg goes
+ * beside a pet that has nothing there and was not left with nothing on by choice. Under the bench the rule is the same, on the
+ * bench's own store. A choice that still names the eggshell of before the golden egg is turned first (engine.js `reworn`).
  */
 async function founding(/** @type {any} */ $) {
-  const had = cur.owned.includes(EGGSHELL.id), first = cur.born || await bench($) ? 0 : Number(diaryOf(await storeGet($, 'diary').catch(() => null)).first) || 0 // read even in a headless run, which keeps no diary
+  const had = cur.owned.includes(GOLDENEGG.id), first = cur.born || await bench($) ? 0 : Number(diaryOf(await storeGet($, 'diary').catch(() => null)).first) || 0 // read even in a headless run, which keeps no diary
   const next = birth(cur, lastActive, first)
-  if (next === cur) return
-  cur = next
-  await update($, pet, () => cur)
-  await share($, true).catch(() => {})
-  if (had || !cur.owned.includes(EGGSHELL.id)) return
-  const p = await getPrefs($), said = p.wear.split(/\s+/), closet = card(cur).closet
-  if (!said.includes('none') && !said.includes('nohead') && !wornOf(closet, p.wear).some(id => partOf(id) === 'head')) await setPrefs($, { wear: putOn(closet, p.wear, EGGSHELL.id) })
+  if (next !== cur) {
+    cur = next
+    await update($, pet, () => cur)
+    await share($, true).catch(() => {})
+  }
+  const p = await getPrefs($), said = p.wear.split(/\s+/), closet = card(cur).closet, wear = reworn(closet, p.wear)
+  if (wear !== p.wear) return void await setPrefs($, { wear })
+  if (had || !cur.owned.includes(GOLDENEGG.id)) return
+  if (!said.includes('none') && !wornOf(closet, p.wear).some(id => partOf(id) === GOLDENEGG.slot)) await setPrefs($, { wear: putOn(closet, p.wear, GOLDENEGG.id) })
 }
 
 /** Every PEER_TICKS: the other chats, the reminders, the routine, the preferences another chat changed, the shared pet, a comment during a long turn. */
@@ -1845,7 +1850,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
     if (verb === 'shop' || verb === 'buy') {
       const mine = zooOf(c.animals, who)
       // only the id buys; a shown name is answered with the id it could be, an unknown word with the closest ids: one line, never the catalogue again
-      const got = pick(rest, [...asThings([...SOLD, EGGSHELL]), ...asAnimals(RULES.animals)]), arg = got.id, item = SOLD.find(i => i.id === arg)
+      const got = pick(rest, [...asThings([...SOLD, GOLDENEGG]), ...asAnimals(RULES.animals)]), arg = got.id, item = SOLD.find(i => i.id === arg)
       if (rest && !arg) return { text: meantLine(L, 'shop', got, after(say('shop.none', { arg: tidy(rest, 24) }), got.near.length ? '' : say('shop.see')).trim()) }
       // a thing sold in one month only: out of it the catalogue says the month where a thing owned says `yours`, and buying is refused with the reason
       const at = await $.clock.now(), monthOf = (/** @type {string} */ id) => sells(id, at) ? 0 : SHOP.find(i => i.id === id)?.month ?? 0
@@ -1858,7 +1863,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
         await setPrefs($, { species: arg, missing: '' })
         return { text: say('animal.done', { animal, price, left: cur.coins }) }
       }
-      if (arg === EGGSHELL.id) return { text: c.owned.includes(arg) ? say('buy.have', { item: itemName(L, EGGSHELL), id: arg }) : say('founder.not', { item: itemName(L, EGGSHELL), date: FOUNDER_UNTIL }) } // not sold: a founder's pet has it
+      if (arg === GOLDENEGG.id) return { text: c.owned.includes(arg) ? say('buy.have', { item: itemName(L, GOLDENEGG), id: arg }) : say('founder.not', { item: itemName(L, GOLDENEGG), date: FOUNDER_UNTIL }) } // not sold: a founder's pet has it
       if (item) { // /pet shop <item> buys; /pet buy is the same, kept for who learnt it
         const name = itemName(L, item)
         if (c.owned.includes(item.id)) return { text: say('buy.have', { item: name, id: item.id }) }
@@ -1886,8 +1891,8 @@ export function register(/** @type {import('claude-code').On} */ on) {
         '',
         ...COATS.map(row), // a coat is a colour, not a thing to wear: rows of their own
         '',
-        // the founder's eggshell, apart: no price, and whether it is the pet's
-        `  ${EGGSHELL.id.padEnd(12)}${pad(itemName(L, EGGSHELL), wide)}${'–'.padStart(3)}  ${pad(say(`part.${EGGSHELL.slot}`), place)}${say(!c.owned.includes(EGGSHELL.id) ? 'shop.founder' : wearing.includes(EGGSHELL.id) ? 'shop.worn' : 'shop.yours')}`,
+        // the founder's golden egg, apart: no price, and whether it is the pet's
+        `  ${GOLDENEGG.id.padEnd(12)}${pad(itemName(L, GOLDENEGG), wide)}${'–'.padStart(3)}  ${pad(say(`part.${GOLDENEGG.slot}`), place)}${say(!c.owned.includes(GOLDENEGG.id) ? 'shop.founder' : wearing.includes(GOLDENEGG.id) ? 'shop.worn' : 'shop.yours')}`,
         '',
         // the animals, apart: each with its price and whether it is the pet's own, the one shown marked
         ...sold.map(id => `  ${id.padEnd(12)}${pad(animalName(L, id), wide)}${(RULES.animals.includes(id) ? String(RULES.animalPrice) : '–').padStart(3)}  ${pad(say('part.animal'), place)}${!mine.includes(id) ? '' : say(id === who.species ? 'shop.shown' : 'shop.yours')}`.trimEnd()),
@@ -1925,7 +1930,7 @@ export function register(/** @type {import('claude-code').On} */ on) {
       // person's work. A mod cannot write bytes: Node writes the PNG (engine/share-save.js), and with no Node the picture is an SVG
       const worn = wornOf(c.closet, who.wear), animal = animalOf(who.species), stage = STATE[c.stage] ?? 'adult'
       const lines = shareLines({ name: who.name, animal: animalName('en', who.species), stage: text('en', `stage.${stage}`, {}, stage), peak: text('en', `peak.${extremes(who.stats).peak}`), stars: c.coins,
-        golden: worn.includes(GOLDEN.id), rare: !RULES.animals.includes(who.species) && !REG.species[animal].pack, founder: c.owned.includes(EGGSHELL.id) })
+        golden: worn.includes(GOLDEN.id), rare: !RULES.animals.includes(who.species) && !REG.species[animal].pack, founder: c.owned.includes(GOLDENEGG.id) })
       const pic = picture(portrait(animal, stage, worn), lines), dir = await configDir($, 'hatchling-share'), node = dir ? await nodePath($) : ''
       if (!dir) return { text: say('share.failed') }
       const file = sharePath(dir, who.name, 'png')

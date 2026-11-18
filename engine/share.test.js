@@ -85,7 +85,7 @@ test('the file of a picture is in the folder whatever the name of the pet', () =
 })
 
 test('with no Node the same picture is an SVG; with Node, share-save.js writes the bytes it is given and only a PNG', () => {
-  const pic = picture(portrait('penguin', 'baby', ['eggshell']), shareLines({ ...MIRO, name: 'Bru', animal: 'penguin', stage: 'baby', golden: false }))
+  const pic = picture(portrait('penguin', 'baby', ['goldenegg']), shareLines({ ...MIRO, name: 'Bru', animal: 'penguin', stage: 'baby', golden: false }))
   const drawn = svg(pic), fills = new Set([...drawn.matchAll(/fill="(#[0-9a-f]{6})"/g)].map(m => m[1]))
   assert.match(drawn, /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="800" height="420"/)
   assert.deepEqual([...fills].sort(), [...new Set(pic.px)].map(c => pic.colours[c]).sort())

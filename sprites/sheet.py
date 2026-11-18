@@ -13,7 +13,7 @@ from pathlib import Path
 
 from cover import FONT, HIDE, NIGHT, SAND, load, rgb, write_png
 
-NEW = ("balloon", "glasses", "eyepatch", "duck", "partyhat", "boots", "santa", "hoodie", "wand", "laptop", "wizard", "pastel", "terminal", "eggshell")
+NEW = ("balloon", "glasses", "eyepatch", "duck", "partyhat", "boots", "santa", "hoodie", "wand", "laptop", "wizard", "pastel", "terminal", "goldenegg")
 DAY, INK = "#fafafa", "#3c3c4c"  # the ground and the labels of --light
 PALE, RIM, BRIGHT = 175, 0.6, 190  # the edge on a light terminal, as hooks/register.js draws it
 GAP, TEXT = 2, 2  # empty pixels of a sprite between two cells; the scale of the labels

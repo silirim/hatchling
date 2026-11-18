@@ -145,3 +145,11 @@ test('the routine the pet learned is in the file: the days and the choice of off
   assert.match(fault(x => { x.routine.off = 'no' }), /^routine\.off: /)
 })
 
+test('a file of before the golden egg: the eggshell its pet owns is read as the golden egg, and the choice that names it is left to the adapter', () => {
+  const old = /** @type {any} */ (good())
+  old.pet.owned = ['eggshell', ...old.pet.owned]; old.prefs.wear = 'eggshell golden'
+  const r = parse(JSON.stringify(old))
+  assert.deepEqual([r.errors, r.move?.pet.owned, r.move?.prefs.wear], [[], ['goldenegg', 'sombrero', 'golden'], 'eggshell golden']) // engine.js `reworn` turns the choice
+  // what is exported never names the eggshell
+  assert.deepEqual([pack({ pet: { owned: ['eggshell'] }, prefs: { ...PREFS, wear: 'eggshell sombrero' }, diary: DIARY, now: T }).pet.owned, pack({ pet: { owned: ['eggshell'] }, prefs: { ...PREFS, wear: 'eggshell sombrero' }, diary: DIARY, now: T }).prefs.wear], [['goldenegg'], 'sombrero'])
+})

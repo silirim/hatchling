@@ -20,9 +20,9 @@ COMMON = {"k": "#1b1b1b", "W": "#f5f5f5", "r": "#f48fb1",                    # e
           "y": "#ffd54f", "K": "#ffb300", "S": "#263238", "h": "#d4a056", "M": "#43a047", "w": "#81d4fa", "v": "#ab47bc", "R": "#ef5350",      # sparkle/crown, water, dizzy eyes, alarm
           "u": "#42a5f5", "n": "#795548", "N": "#4e342e", "q": "#26c6da", "i": "#eceff1",      # shop items: blue, brown, a sole's darker brown, cyan, white
           "x": "#fff6cf",                                                      # the glint on a golden coat
-          "z": "#f4e3b8", "Z": "#a9793f"}                                      # the eggshell: a warm cream, never the white of a fur, and the shade under its edge
+          "z": "#f4e3b8", "Z": "#a9793f"}                                      # a warm cream and its shade: the eggshell of 0.3.4, kept for the packs drawn with them
 FIXED = "kyvwRKShMunNqixzZ"
-LIGHT = {"y": "#f9a825", "w": "#29b6f6"}  # light terminals: the pale effects would vanish. White and what is as pale get a darker edge, drawn by the adapter
+LIGHT = {"y": "#f9a825", "K": "#e68a00", "w": "#29b6f6"}  # light terminals: the pale effects would vanish. White and what is as pale get a darker edge, drawn by the adapter
 SCARF = {"penguin": 5, "chick": 6, "cactus": 6}  # row of the adult's neck, 7 when not listed
 # the shop's items, in its order: the part each is worn on and its English name (engine/engine.js SHOP has the same, a test compares them)
 ITEMS = {"shades": ("face", "sunglasses"), "mug": ("accessory", "a coffee mug"), "balloon": ("accessory", "a balloon"), "glasses": ("face", "round glasses"),
@@ -31,7 +31,7 @@ ITEMS = {"shades": ("face", "sunglasses"), "mug": ("accessory", "a coffee mug"),
          "santa": ("head", "a Santa hat"), "headphones": ("head", "headphones"), "hoodie": ("body", "a hoodie"), "backpack": ("accessory", "a backpack"),
          "wand": ("accessory", "a magic wand"), "skateboard": ("feet", "a skateboard"), "suitcase": ("accessory", "a suitcase"), "laptop": ("accessory", "a laptop"),
          "sombrero": ("head", "a sombrero"), "wizard": ("head", "a wizard's hat"),
-         "eggshell": ("head", "half an eggshell")}  # the last one is not sold: the founder's keepsake (engine/engine.js EGGSHELL)
+         "goldenegg": ("accessory", "a golden egg")}  # the last one is not sold: the founder's keepsake (engine/engine.js GOLDENEGG)
 WEAR = list(ITEMS)
 
 # name: (rarity weight, own palette, adult, adult eyes, adult cheeks, skin behind a closed eye, baby, baby eyes)
@@ -135,12 +135,12 @@ SUITCASE = ["..nnn..", "..n.n..", "nnnnnnn", "KKKKKKK", "nnnnnnn", "nnnnnnn"]  #
 BALLOON = [".RRR.", "RiRRR", "RRRRR", ".RRR.", "..R..", "..i..", ".i...", "..i..", "..i..", ".i..."]  # its shine, the knot, the string down to the ground
 DUCK = ["...yy.", "...ykK", "y.yyy.", "yyyyy.", ".yyy.."]  # looking right: the eye, the beak, the tail up
 WAND = ["..y..", ".yxy.", "..y..", "..i..", ".i...", ".i...", "i...."]  # the star with its pale heart, the stick leaning
+GOLDENEGG = ["..yy..", ".yxyy.", "yxyyyK", "yxyyyK", "yyyyKK", "yyyKKK", ".KKKK."]  # the founder's keepsake: small and whole, narrower at its top, the gold of the crown, the golden coat's glint on its upper left, amber down its right and under it. No new colour: a pack may use any key that is not shared
 LAPTOP = ["iiiiii.", "iqSSSi.", "iSqqSi.", "iiiiii.", "iiiiiii"]  # open: two lines of text on a dark screen, the base a pixel longer
 # the hats that sit on the head: two rows above it and one over its top row
 PARTYHAT = ["..yy..", ".qvqv.", "vqvqvq"]  # a striped cone, its tip yellow
 SANTA = ["..RRRR.", ".RRRRRi", "iiiiii."]  # leaning to the right, the bobble at its end, the white trim
 WIZARD = ["....vv..", "..vyvv..", "vvvvvvvv"]  # the bent tip, a star, the wide brim
-EGGSHELL = [".zzhz.", "zzzzzz", "ZzZZzZ"]  # half the shell a pet hatched from, a spot on it: cream, the broken edge down in teeth, and a line of shade under them
 RING = [(a, b) for a in (-1, 0, 1) for b in (-1, 0, 1) if a or b]
 HEM = {"cactus": 0}  # rows the hoodie goes down from the neck when not to the feet: the cactus keeps its pot
 HOOD = {"cactus": {"adult": 3, "baby": 4}}  # the last row of the head, for the hood, when the rows down to the neck are not all head
@@ -232,7 +232,7 @@ def wear(base, eyes, neck, hem=H - 2, head=None, strap="S"):
         "suitcase": art(SUITCASE, H - len(SUITCASE), W),
         "skateboard": [(H, c, "v") for c in range(W)] + [(H + 1, c, "K") for c in (2, 3, 8, 9)],  # the deck as wide as the body, two wheels
         "sombrero": [(top - 2, c, "R") for c in range(4, 8)] + [(top - 1, c, "h") for c in range(1, 11)],
-        "eggshell": art(EGGSHELL, top - 2, 3),
+        "goldenegg": art(GOLDENEGG, H - len(GOLDENEGG), beside),
     }
     return {k: marks[k] for k in WEAR}
 
@@ -513,7 +513,7 @@ def fallbacks():
         "boots": [piece("feet", [".nn..nn.", "NNN..NNN"])],
         "santa": [piece("head", SANTA, 0, 1)],
         "hoodie": [piece("neck", ["uuuuuuuu", "uuiuuiuu"])],
-        "eggshell": [piece("head", EGGSHELL, 0, 1)],
+        "goldenegg": [piece("right", GOLDENEGG)],
         "wand": [piece("right", WAND, 0, -1)],
         "laptop": [piece("right", LAPTOP)],
         "wizard": [piece("head", WIZARD, 0, 1)],

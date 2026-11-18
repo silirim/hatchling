@@ -194,7 +194,7 @@ export default {
   'item.wand': '魔法棒',
   'item.laptop': '笔记本电脑',
   'item.wizard': '巫师帽',
-  'item.eggshell': '半个蛋壳',
+  'item.goldenegg': '金蛋',
   'shop.founder': '仅限创始宠物',
   'founder.not': '{item}不出售：它是 {date} 之前孵化的宠物的纪念品。',
   'share.saved': "已保存宠物图片：{path}",

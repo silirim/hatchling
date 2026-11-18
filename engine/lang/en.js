@@ -207,7 +207,7 @@ export default {
   'item.wand': 'a magic wand',
   'item.laptop': 'a laptop',
   'item.wizard': "a wizard's hat",
-  'item.eggshell': 'half an eggshell',
+  'item.goldenegg': 'a golden egg',
   'shop.founder': 'founders only',
   'founder.not': '{item} is not sold: it is the keepsake of the pets hatched by {date}.',
   'share.saved': "Saved a picture of the pet: {path}",

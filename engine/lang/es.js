@@ -194,7 +194,7 @@ export default {
   'item.wand': 'una varita mágica',
   'item.laptop': 'un portátil',
   'item.wizard': 'un sombrero de mago',
-  'item.eggshell': 'media cáscara de huevo',
+  'item.goldenegg': 'un huevo de oro',
   'shop.founder': 'solo fundadores',
   'founder.not': '{item} no se vende: es el recuerdo de las mascotas nacidas hasta el {date}.',
   'share.saved': "Guardé una imagen de la mascota: {path}",

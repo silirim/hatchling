@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initialState, reduce, view, card, dayOf, shared, merge, RULES, SHOP, SOLD, COATS, GOLDEN, SLOTS, WEARABLE, EGGSHELL, FOUNDER_UNTIL, founder, birth, sells, closetOf, wornOf, putOn, takeOff, turnSlot } from './engine.js'
+import { whole, initialState, reduce, view, card, dayOf, shared, merge, RULES, SHOP, SOLD, COATS, GOLDEN, SLOTS, WEARABLE, GOLDENEGG, EGGSHELL_ID, reworn, FOUNDER_UNTIL, founder, birth, sells, closetOf, wornOf, putOn, takeOff, turnSlot } from './engine.js'
 import { existsSync } from 'node:fs'
 import { bubble, CHEERS, ISSUES, CALM, DOCS } from './catalog.js'
 
@@ -425,7 +425,7 @@ test('the skin: one thing on each part, a new one takes the part of the old, and
 
 test('the crown is a thing of the head: on by itself once the pet is fully grown, off under a hat or by choice, and never sold', () => {
   assert.ok(!SHOP.some(i => i.id === 'crown'))
-  assert.deepEqual(WEARABLE.map(i => i.id), ['crown', 'eggshell', ...SHOP.map(i => i.id), 'pastel', 'terminal', 'golden'])
+  assert.deepEqual(WEARABLE.map(i => i.id), ['crown', 'goldenegg', ...SHOP.map(i => i.id), 'pastel', 'terminal', 'golden'])
   assert.deepEqual([closetOf(['cap'], 'healthy'), closetOf(['cap'], 'bloom')], [['cap'], ['crown', 'cap']])
   // a pet's own view and card carry it only at the last stage
   const grown = { ...initialState(1), owned: ['cap'], days: RULES.bloomAt.days, affection: RULES.bloomAt.affection }
@@ -506,29 +506,52 @@ test('the Santa hat is sold in December only, by the clock of the machine; who h
   assert.deepEqual([later.owned, view(later, at(2027, 7, 1)).closet, wornOf(view(later, at(2027, 7, 1)).closet, 'santa'), shared(later).owned], [['santa'], ['santa'], ['santa'], ['santa']])
 })
 
-test("the founder's eggshell: a pet born on or before FOUNDER_UNTIL has it, one born after never, and who has it keeps it", () => {
+test("the founder's golden egg: a pet born on or before FOUNDER_UNTIL has it, one born after never, and who has it keeps it", () => {
   const at = (/** @type {number[]} */ ...d) => new Date(d[0] ?? 0, (d[1] ?? 1) - 1, d[2] ?? 1, d[3] ?? 12, d[4] ?? 0, d[5] ?? 0).getTime() // the machine's own clock
   const [y, m, d] = FOUNDER_UNTIL.split('-').map(Number), last = at(y ?? 0, m, d, 23, 59, 59), after = at(y ?? 0, m, (d ?? 0) + 1, 0, 0, 0)
   assert.equal(FOUNDER_UNTIL, '2026-12-18') // launch (18 November 2026) + 30 days
   assert.deepEqual([at(2026, 11, 15), at(y ?? 0, m, d, 0), last, after, at(2027, 6, 1), 0].map(founder), [true, true, true, false, false, false]) // the whole last day, by the local date
-  assert.ok(!SOLD.includes(EGGSHELL) && !SHOP.some(i => i.id === 'eggshell') && EGGSHELL.slot === 'head' && EGGSHELL.price === 0) // never sold
+  assert.ok(!SOLD.includes(GOLDENEGG) && !SHOP.some(i => i.id === 'goldenegg') && GOLDENEGG.slot === 'accessory' && GOLDENEGG.price === 0) // never sold, and beside the pet
   // a newborn: born now, and a founder's when now is in time
   const early = birth(initialState(1), last), late = birth(initialState(1), after)
-  assert.deepEqual([early.born, early.owned, late.born, late.owned], [last, ['eggshell'], after, []])
-  assert.deepEqual(wornOf(card(early).closet, ''), ['eggshell']) // with nothing else it is on by itself
+  assert.deepEqual([early.born, early.owned, late.born, late.owned], [last, ['goldenegg'], after, []])
+  assert.deepEqual(wornOf(card(early).closet, ''), ['goldenegg']) // with nothing else it is on by itself
   // a pet of before this version kept no birth: its first start is taken, or an earlier moment that is known (its diary's first)
   const old = { ...initialState(1), owned: ['cap'] }
-  assert.deepEqual([birth(old, last).owned, birth(old, after).owned, birth(old, after, last).owned, birth(old, after, last).born], [['eggshell', 'cap'], ['cap'], ['eggshell', 'cap'], last])
+  assert.deepEqual([birth(old, last).owned, birth(old, after).owned, birth(old, after, last).owned, birth(old, after, last).born], [['goldenegg', 'cap'], ['cap'], ['goldenegg', 'cap'], last])
   assert.equal(birth(old, last, after).born, last) // a moment after now is not known
   // the birth, once known, is the rule's ground whatever the clock says later; and nothing changes twice
   assert.deepEqual(birth(late, last).owned, [])
   assert.equal(birth(early, after), early)
   // owned, it survives the date: the store's reading keeps it, a merge keeps it, a buy refuses it, and it is still worn
   const kept = shared({ ...early, coins: 500 })
-  assert.deepEqual([kept.owned, kept.born, shared({ owned: ['eggshell', 'cap'] }).owned], [['eggshell'], last, ['eggshell', 'cap']])
-  assert.deepEqual(merge(shared(late), shared(late), kept).owned, ['eggshell'])
+  assert.deepEqual([kept.owned, kept.born, shared({ owned: ['goldenegg', 'cap'] }).owned], [['goldenegg'], last, ['goldenegg', 'cap']])
+  assert.deepEqual(merge(shared(late), shared(late), kept).owned, ['goldenegg'])
   assert.deepEqual([merge(shared(late), shared(late), kept).born, merge(kept, kept, shared({ ...kept, born: 0 })).born], [last, last]) // the earliest birth known
-  const later = reduce({ ...initialState(1), ...kept }, { type: 'buy', id: 'eggshell', t: at(2030, 1, 1) })
-  assert.deepEqual([later.owned, later.coins, wornOf(card(birth(later, at(2030, 1, 1))).closet, 'eggshell')], [['eggshell'], 500, ['eggshell']])
-  assert.deepEqual(wornOf(card({ ...later, owned: ['eggshell', 'cap'] }).closet, putOn(['eggshell', 'cap'], 'eggshell', 'cap')), ['cap']) // a hat takes its place, as any thing of the head
+  const later = reduce({ ...initialState(1), ...kept }, { type: 'buy', id: 'goldenegg', t: at(2030, 1, 1) })
+  assert.deepEqual([later.owned, later.coins, wornOf(card(birth(later, at(2030, 1, 1))).closet, 'goldenegg')], [['goldenegg'], 500, ['goldenegg']])
+  assert.deepEqual(wornOf(card({ ...later, owned: ['goldenegg', 'cap'] }).closet, putOn(['goldenegg', 'cap'], 'goldenegg', 'cap')), ['cap', 'goldenegg']) // beside the pet: a hat goes on with it
+  assert.deepEqual(wornOf(['goldenegg', 'mug'], putOn(['goldenegg', 'mug'], 'goldenegg', 'mug')), ['mug']) // another thing beside the pet takes its place
+})
+
+test('the eggshell of before the golden egg: who owns it owns the golden egg, and a choice that names it is turned', () => {
+  // read from a store, from a chat's memory, in a merge: the eggshell is the golden egg, once, in its place
+  assert.deepEqual([shared({ owned: [EGGSHELL_ID, 'cap'] }).owned, shared({ owned: ['cap', EGGSHELL_ID, 'goldenegg'] }).owned, shared({ owned: ['cap'] }).owned], [['goldenegg', 'cap'], ['goldenegg', 'cap'], ['cap']])
+  assert.deepEqual(whole({ owned: [EGGSHELL_ID], born: 5 }).owned, ['goldenegg'])
+  assert.deepEqual(merge(shared({ owned: [EGGSHELL_ID] }), shared({}), shared({ owned: ['mug'] })).owned, ['goldenegg', 'mug'])
+  assert.ok(![...WEARABLE, ...SOLD].some(i => i.id === EGGSHELL_ID)) // out of every catalogue
+  // it was worn: the head is bare, and the golden egg is on when nothing else is beside the pet
+  const egg = ['goldenegg', 'scarf', 'cap', 'mug']
+  assert.deepEqual([reworn(egg, 'eggshell'), reworn(egg, 'eggshell scarf'), reworn(['goldenegg'], 'eggshell')], ['goldenegg', 'scarf goldenegg', 'goldenegg'])
+  assert.deepEqual([reworn(egg, 'eggshell scarf mug'), wornOf(egg, reworn(egg, 'eggshell scarf mug'))], ['scarf mug', ['scarf', 'mug']]) // the mug stays: only owned
+  assert.equal(reworn(egg, 'eggshell cap'), 'cap') // a hat named after it was the one on: only owned
+  assert.deepEqual(wornOf(egg, reworn(egg, 'cap eggshell')), ['goldenegg'])
+  // a crowned pet that wore it: the head stays bare, not crowned again; a golden one keeps its coat, or the plain one it picked
+  assert.deepEqual([reworn(['crown', ...egg], 'eggshell'), wornOf(['crown', ...egg], reworn(['crown', ...egg], 'eggshell'))], ['goldenegg nohead', ['goldenegg']])
+  assert.deepEqual([reworn([...egg, 'golden'], 'eggshell plain'), reworn([...egg, 'golden'], 'eggshell golden')], ['goldenegg plain', 'goldenegg golden'])
+  // not owned any more (a file that names it, a pet that has none): gone, and nothing put on in its place
+  assert.deepEqual([reworn(['cap'], 'eggshell'), wornOf(['cap'], reworn(['cap'], 'eggshell'))], ['none', []])
+  // a choice that does not name it is left as it is, also the one of a newborn, which wears the golden egg by itself
+  for (const wear of ['', 'none', 'cap mug', 'goldenegg scarf']) assert.equal(reworn(egg, wear), wear)
+  assert.deepEqual([wornOf(['goldenegg'], ''), reworn(egg, reworn(egg, 'eggshell scarf'))], [['goldenegg'], 'scarf goldenegg'])
 })

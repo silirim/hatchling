@@ -2,13 +2,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { pick, bare } from './pick.js'
-import { SOLD, SHOP, COATS, WEARABLE, EGGSHELL, PLAIN, RULES } from './engine.js'
+import { SOLD, SHOP, COATS, WEARABLE, GOLDENEGG, PLAIN, RULES } from './engine.js'
 import { REG } from './skins.js'
 import { LANGS, text } from './lang/index.js'
 
 /** The shop as the mod hands it over: each id with every name it is shown under. */
 const shop = () => [
-  ...[...SOLD, EGGSHELL].map(i => ({ id: i.id, names: Object.keys(LANGS).map(l => text(l, `item.${i.id}`)) })),
+  ...[...SOLD, GOLDENEGG].map(i => ({ id: i.id, names: Object.keys(LANGS).map(l => text(l, `item.${i.id}`)) })),
   ...RULES.animals.map(id => ({ id, names: Object.keys(LANGS).map(l => text(l, `animal.${id}`)) })),
 ]
 const got = (/** @type {string} */ typed) => pick(typed, shop())

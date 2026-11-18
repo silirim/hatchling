@@ -3,8 +3,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import zoo from '../sprites/zoo.js'
-import { validate, parse, compile, install, place, marksFor, coatOf, snore, REG, BUILTIN, LIMITS, FORMAT, YOUNG } from './skins.js'
-import { SHOP, COATS, WEARABLE, EGGSHELL, closetOf, wornOf, putOn, takeOff, turnSlot, view, initialState } from './engine.js'
+import { validate, parse, compile, install, place, marksFor, coatOf, snore, portrait, REG, BUILTIN, LIMITS, FORMAT, YOUNG } from './skins.js'
+import { SHOP, COATS, WEARABLE, GOLDENEGG, closetOf, wornOf, putOn, takeOff, turnSlot, view, initialState } from './engine.js'
 
 const EXAMPLE = readFileSync(new URL('../docs/skins-example.json', import.meta.url), 'utf8')
 /** A copy of the example pack, changed. @param {(p: any) => void} [change] */
@@ -19,7 +19,7 @@ test('the shipped drawings are a pack of the same format and pass the same check
   const asMine = validate(zoo.pack, { taken })
   assert.ok(asMine.length > 0 && asMine.every(e => /taken already|unknown field "weight"|more$/.test(e)), asMine.join('\n'))
   assert.deepEqual(Object.keys(BUILTIN.species), ['penguin', 'chick', 'dog', 'bunny', 'fox', 'cactus', 'axolotl'])
-  assert.deepEqual(Object.entries(BUILTIN.items).map(([id, i]) => [id, i.slot]), [...SHOP, EGGSHELL].map(i => [i.id, i.slot])) // what is sold, then the founder's eggshell
+  assert.deepEqual(Object.entries(BUILTIN.items).map(([id, i]) => [id, i.slot]), [...SHOP, GOLDENEGG].map(i => [i.id, i.slot])) // what is sold, then the founder's golden egg
   assert.deepEqual(Object.keys(BUILTIN.coats), COATS.map(i => i.id))
   for (const sp of Object.values(BUILTIN.species)) { assert.equal(sp.pack, ''); assert.ok(sp.weight > 0); assert.ok(sp.states.sleep.at === undefined && sp.states.adult.at.length) }
   assert.ok(JSON.stringify(zoo).length < LIMITS.bytes) // the real drawings fit the size a pack may have
@@ -292,9 +292,9 @@ test('security: a text of a pack follows the rule of every text from outside: no
 test('every thing of the shop is drawn by hand for every animal of the shipped pack, the hidden one too, adult and baby', () => {
   install([])
   const animals = Object.keys(zoo.pack.animals)
-  assert.deepEqual([Object.keys(zoo.pack.items), animals.length], [[...SHOP, EGGSHELL].map(i => i.id), 7])
+  assert.deepEqual([Object.keys(zoo.pack.items), animals.length], [[...SHOP, GOLDENEGG].map(i => i.id), 7])
   for (const [id, item] of Object.entries(zoo.pack.items)) {
-    assert.equal(item.part, [...SHOP, EGGSHELL].find(i => i.id === id)?.slot, id)
+    assert.equal(item.part, [...SHOP, GOLDENEGG].find(i => i.id === id)?.slot, id)
     assert.ok(item.fallback.length > 0, id) // and by its anchors on an animal of a pack
     assert.deepEqual(Object.keys(item.draw), animals, id)
     for (const animal of animals) for (const body of /** @type {const} */ (['adult', 'baby'])) {
@@ -369,12 +369,22 @@ test('the redraws of the second pass: brown boots with a darker sole, glasses th
     assert.equal(tint.k, '#1b1b1b', at)
     for (const [r, c] of eyes) for (const [dr, dc] of [[1, 0], [0, 1], [0, -1], [-1, 0]]) { const ch = base[r + (dr ?? 0)]?.[c + (dc ?? 0)]; if (ch && ch !== '.' && ch !== 'k') assert.ok(dark(tint[ch]) > 75, `${at}: ${ch} next to an eye`) }
   }
-  // the eggshell: on every animal, a cream that no fur has (a white shell on a white head was one blob), one of the egg's spots,
-  // and under its broken edge a line of shade, so it sits on the head
-  assert.deepEqual(zoo.pack.items.eggshell.fallback[0]?.art, ['.zzhz.', 'zzzzzz', 'ZzZZzZ'])
-  const furs = new Set(Object.values(zoo.pack.animals).flatMap(a => Object.values({ W: zoo.common.W, ...a.palette })))
-  assert.ok(!furs.has(zoo.common.z) && !furs.has(zoo.common.Z) && zoo.fixed.includes('z') && zoo.fixed.includes('Z'))
-  for (const [animal, d] of Object.entries(zoo.pack.items.eggshell.draw)) for (const body of ['adult', 'baby']) assert.deepEqual(d[body]?.art, ['.zzhz.', 'zzzzzz', 'ZzZZzZ'], `${animal} ${body}`)
+  // the founder's golden egg: on every animal and body the same small whole egg, narrower at its top, in three golds (the gold, one
+  // highlight, one darker shade), standing on the ground at the pet's right with an empty column between them
+  const EGG = ['..yy..', '.yxyy.', 'yxyyyK', 'yxyyyK', 'yyyyKK', 'yyyKKK', '.KKKK.']
+  assert.deepEqual(zoo.pack.items.goldenegg.fallback, [{ anchor: 'right', art: EGG }])
+  assert.deepEqual([...new Set(EGG.join(''))].sort(), ['.', 'K', 'x', 'y'])
+  for (const [animal, d] of Object.entries(zoo.pack.items.goldenegg.draw)) for (const body of /** @type {const} */ (['adult', 'baby'])) {
+    assert.deepEqual([d[body]?.art, d[body].at[0] + EGG.length], [EGG, zoo.height], `${animal} ${body}`) // on the ground
+    const frames = Object.values(zoo.pack.animals[/** @type {keyof typeof zoo.pack.animals} */ (animal)].states).flatMap(st => /** @type {string[][]} */ ([...st.frames, ...st.rare]))
+    const reach = Math.max(...frames.flatMap(f => f.map(row => row.length))) // the widest frame of the pet, its effects too
+    assert.ok(d[body].at[1] > zoo.width && d[body].at[1] >= reach - 1, `${animal} ${body}: the egg and the body never share a pixel`)
+    const { rows } = portrait(animal, body, ['goldenegg']), bare = portrait(animal, body, []).rows
+    assert.deepEqual([rows.slice(-bare.length).map(r => r.slice(1, 1 + zoo.width)), rows.every(r => r[1 + zoo.width] === '.')], [bare, true], `${animal} ${body}: the body as with nothing on, and an empty column before the egg`)
+  }
+  // on a light theme the gold and its shade are darker, the shade still the darker of the two
+  const lum = (/** @type {string} */ h) => [1, 3, 5].reduce((n, i, k) => n + parseInt(h.slice(i, i + 2), 16) * /** @type {number} */ ([0.299, 0.587, 0.114][k]), 0)
+  for (const pal of [zoo.common, { ...zoo.common, ...zoo.light }]) assert.ok(lum(pal.x) > lum(pal.y) && lum(pal.y) > lum(pal.K) + 15, JSON.stringify([pal.x, pal.y, pal.K]))
 })
 
 test('every shipped animal has the baby\'s own drawing of the sleep and of each mood, the body the baby\'s and placed, so it wears as awake', () => {
