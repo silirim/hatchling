@@ -54,7 +54,11 @@ A line is shown only if it is at most 60 columns wide and names no file or path.
 
 ## Where we left off
 
-When you come back to a chat after a pause, the pet says once where the work got to and what is left: `yesterday: parser tests are green, the README is still to do. shall we go on?`
+When you come back to a chat after a pause, the pet says once where the work got to and what is left: `where we left off, yesterday: the tests pass now, the guide is still to write. shall we go on?`
+
+- The line starts with a fixed label in the pet's language (`where we left off`, `donde lo dejamos`, `onde paramos`, `上次做到这里`) and when it was, so you can tell what it is.
+- It is written for someone who has forgotten the details: plain everyday words for what was done and what is left, not the wording of the last reply. The model is asked for no identifiers, no file names, no names of variables, functions or commands, and no numbers unless the line makes no sense without one.
+- It is in the pet's language (`/pet lang`), whatever language the chat is in.
 
 - A pause is 30 minutes after a turn ended with no new prompt. In a chat left open the line comes when they pass; in a chat closed and resumed, at the start.
 - One recap per pause while the chat stays open. A chat closed and resumed gets one at each resume, also for a pause already recapped: the line was in memory only and went with the chat. It stays in the bubble until your next prompt, and the time word is worked out when it is drawn, so it is still right the day after.
@@ -62,7 +66,7 @@ When you come back to a chat after a pause, the pet says once where the work got
 - It counts in the day's 40 lines and in the tokens like any other line. It is a larger request than a comment: about 1,300 to 2,000 tokens in and 570 to 750 out, measured on three recaps on 16 November 2026.
 - Nothing of it is kept on disk: not what is sent, not the line. The chat's mark keeps only the time of the pause it was made for, so that an open chat is not asked twice.
 - A turn that was interrupted is told as stopped midway, not as finished.
-- It may be up to 120 columns wide and may name a file. The model is asked for 100 characters at most; a longer line is cut at the last whole word that fits and ends with an ellipsis, never thrown away. If the call fails, takes more than 20 seconds or answers nothing with a word in it, the pet stays silent.
+- It may be up to 120 columns wide, the label and the time not counted. The model is asked for one or two complete sentences that fit in 100 characters; a longer line is never thrown away: it stops after the last sentence that fits, or with no sentence end at the last comma, semicolon or colon in its second half, closed with a full stop, so nothing dangles. Only a line with neither is cut at the last whole word and ends with an ellipsis. A line that names a file all the same is still shown. If the call fails, takes more than 20 seconds or answers nothing with a word in it, the pet stays silent.
 - With comments off no recap is made and nothing is read.
 
 ## Talking to the pet

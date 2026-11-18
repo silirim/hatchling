@@ -3540,8 +3540,9 @@ test('the recap: 30 minutes after a turn with no new prompt the pet says once wh
   const ask = k.recaps()[0]
   expect(ask).toMatchObject({ model: 'haiku', maxTokens: 80, effort: 'low', timeoutMs: 20000 })
   expect(ask.system).toMatch(/^You are Miro, a small pixel fox /) // what a comment gets: the character and the language
-  expect(ask.system).toMatch(/where the work got to and what is left to do, then ask in a few words whether to go on.*Do not say when it was/)
-  expect(ask.system).toMatch(/One or two short sentences, all on one line, never more than 100 characters\. Plain English\./)
+  expect(ask.system).toMatch(/has forgotten the details\..*in plain everyday words.*what was done and what is left to do, then ask in a few words whether to go on\. Do not repeat the wording of that text: no identifiers, no file names.*Do not say when it was.*do not announce that this is a recap/)
+  expect(ask.system).toMatch(/One or two short complete sentences, all on one line, that fit in 100 characters: say less rather than be cut off\. Always in English, also when the text you are shown is in another language\./)
+  expect(ask.prompt).toMatch(/\nNow your one line, in English: in plain everyday words what was done, what is left, and whether to go on\. Complete sentences that fit, no names from the code, no word about when it was\.$/)
   // the person's last prompt, its first 300 characters on one line; the assistant's text of the last turn, the newest kept; 16,000 in all
   expect(ask.prompt).toMatch(/\nThe person's last request began:\nfix the parser 1{285}\n/)
   expect(ask.prompt).toMatch(/\nWhat the assistant wrote in that turn ended:\n2+ The parser tests are green; the README is still to do\.\n\nThat turn ended by itself\.\n/)
@@ -3549,10 +3550,10 @@ test('the recap: 30 minutes after a turn with no new prompt the pet says once wh
   expect(sent).toBe(RULES.recapChars)
   expect(ask.prompt).not.toMatch(/TOOL INPUT|TOOL OUTPUT|OLDER ANSWER|older request|First I look/) // text blocks of the last turn only, and the oldest of them gave way
   // shown with when it was, worked out at the drawing: it stays, and the time moves on
-  expect(await k.said()).toContain(`30 min ago: ${LINE}`)
+  expect(await k.said()).toContain(`where we left off, 30 min ago: ${LINE}`)
   await k.clock.advance(6 * 60_000)
   await k.settle()
-  expect(await k.said()).toContain(`36 min ago: ${LINE}`) // still there, asleep or not
+  expect(await k.said()).toContain(`where we left off, 36 min ago: ${LINE}`) // still there, asleep or not
   expect(k.recaps().length).toBe(1) // once per pause
   // counted in the day and in the tokens as any line; neither the input nor the line is in the store
   expect(k.disk.voice).toMatchObject({ today: 2, lines: 2, todayTokens: 640 })
@@ -3640,7 +3641,7 @@ test('the recap of a chat closed and resumed: asked at each start of the process
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.settle()
   expect(k.recaps().length).toBe(1)
-  expect(await k.said()).toContain(`yesterday: ${LINE}`)
+  expect(await k.said()).toContain(`where we left off, yesterday: ${LINE}`)
   expect(k.disk['chat.me']).toMatchObject({ at: NOW - 24 * 3_600_000, recap: NOW - 24 * 3_600_000 })
   expect(JSON.stringify(k.disk)).not.toMatch(/Parser tests|README|fix the/)
   // a reload of the mod, the same process: the same pause, no second recap, and the line is still there
@@ -3648,7 +3649,7 @@ test('the recap of a chat closed and resumed: asked at each start of the process
   await k.clock.advance(PAUSE + 2 * 60_000) // past the time a pause takes
   await k.settle()
   expect(k.recaps().length).toBe(1)
-  expect(await k.said()).toContain(`yesterday: ${LINE}`)
+  expect(await k.said()).toContain(`where we left off, yesterday: ${LINE}`)
   // closed with no prompt and resumed, a new process: the line was in memory only and is lost, so it is asked again, once
   await $.session.end({ reason: 'exit', sessionId: 'me' } as any)
   expect(k.disk['chat.me']).toMatchObject({ closed: true, left: NOW - 24 * 3_600_000 })
@@ -3656,7 +3657,7 @@ test('the recap of a chat closed and resumed: asked at each start of the process
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.settle()
   expect(k.recaps().length).toBe(2)
-  expect(await k.said()).toContain(`yesterday: ${LINE}`)
+  expect(await k.said()).toContain(`where we left off, yesterday: ${LINE}`)
   await k.clock.advance(2 * 60_000) // no turn was made: no pause is counted from this start
   await k.settle()
   expect(k.recaps().length).toBe(2)
@@ -3699,7 +3700,7 @@ test('a chat closed keeps in its mark when its last turn was and whether it was 
   expect(k.recaps()[0].prompt).toMatch(/That turn was cut short/)
 })
 
-test('the recap one character too long is shown cut at the last whole word, with an ellipsis: paid for, never thrown away', { timeoutMs: 60_000 }, async ($, on) => {
+test('the recap one character too long, with no sentence or clause to stop at, is shown cut at the last whole word, with an ellipsis: paid for, never thrown away', { timeoutMs: 60_000 }, async ($, on) => {
   const k = recapKit($, on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.turn()
@@ -3709,7 +3710,19 @@ test('the recap one character too long is shown cut at the last whole word, with
   await k.clock.advance(PAUSE + 60_000)
   await k.settle()
   expect(k.recaps().length).toBe(1)
-  expect(await k.said()).toContain(`31 min ago: ${'word '.repeat(23).trim()}\u2026`)
+  expect(await k.said()).toContain(`where we left off, 31 min ago: ${'word '.repeat(23).trim()}\u2026`)
+})
+
+test('the recap too long stops after the last sentence that fits: nothing dangles and there is no ellipsis', { timeoutMs: 60_000 }, async ($, on) => {
+  const k = recapKit($, on)
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await k.turn()
+  k.v.reply = { isAnswered: true, text: `The flaky tests pass now and nothing was saved. ${'word '.repeat(23)}and a tail.`, usage: USAGE }
+  await k.clock.advance(PAUSE + 60_000)
+  await k.settle()
+  const said = (await k.said()).join(' | ')
+  expect(said).toContain('where we left off, 31 min ago: The flaky tests pass now and nothing was saved.')
+  expect(said).not.toMatch(/saved\. word|…/)
 })
 
 test('the recap is part of the comments: off, no call and nothing read from the session', { timeoutMs: 60_000 }, async ($, on) => {
@@ -4733,15 +4746,15 @@ test('back after a pause with the comments on: the recap comes first and the wel
   await k.turn()
   k.v.reply = { isAnswered: true, text: LINE, usage: USAGE }
   await k.clock.advance(35 * 60_000); await k.settle()
-  expect((await bubbleOf($)).join(' | ')).toBe(`35 min ago: ${LINE}`)
+  expect((await bubbleOf($)).join(' | ')).toBe(`where we left off, 35 min ago: ${LINE}`)
   await k.clock.advance(25 * 60_000 + 11_000); await k.settle()
   const both = await bubbleOf($)
-  expect(both[0]).toBe(`60 min ago: ${LINE}`)
+  expect(both[0]).toBe(`where we left off, 60 min ago: ${LINE}`)
   expect(['hour', 'lunch', 'long', 'morning'].flatMap(kind => wordings('en', `back.${kind}`))).toContain(both[1]) // whichever the hour of the machine makes it
   expect(k.v.calls.every((c: any) => !/routine|finish|coffee/.test(JSON.stringify(c)))).toBe(true) // nothing of the routine goes to the model
   // the reminder fell due while the person was away: it waits for them, as ever, and the two lines stay
   await k.clock.advance(3 * 60_000)
-  expect(await bubbleOf($)).toEqual([`63 min ago: ${LINE}`, both[1]])
+  expect(await bubbleOf($)).toEqual([`where we left off, 63 min ago: ${LINE}`, both[1]])
   // the person is back and sends a prompt: the recap and the welcome had their time, and now the reminder is said. None was lost
   await k.turn()
   expect((await bubbleOf($)).join(' | ')).not.toContain(LINE)

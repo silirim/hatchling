@@ -59,7 +59,7 @@ export default {
   'ago.h': '{n} 小时前',
   'ago.days': '{n} 天前',
   'recap.yesterday': '昨天',
-  'recap.say': '{when}：{line}', // the recap of the comments: when the work was left, then the line the small model wrote
+  'recap.say': '上次做到这里，{when}：{line}', // the recap of the comments: a fixed label that says what it is, when the work was left, then the line the small model wrote
   'greet.resume.done': '这里有场对话，{ago}结束了一轮。接着来吗？',
   'greet.resume.mid': '这里有场对话，{ago}停在了半路。接着来吗？',
   'greet.back': '欢迎回来，见到你真好',

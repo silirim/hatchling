@@ -59,7 +59,7 @@ export default {
   'ago.h': 'hace {n} h',
   'ago.days': 'hace {n} días',
   'recap.yesterday': 'ayer',
-  'recap.say': '{when}: {line}', // the recap of the comments: when the work was left, then the line the small model wrote
+  'recap.say': 'donde lo dejamos, {when}: {line}', // the recap of the comments: a fixed label that says what it is, when the work was left, then the line the small model wrote
   'greet.resume.done': 'un chat de aquí terminó su turno {ago}. ¿lo retomas?',
   'greet.resume.mid': 'un chat de aquí se paró a medio turno {ago}. ¿lo retomas?',
   'greet.back': 'has vuelto, qué alegría verte',
