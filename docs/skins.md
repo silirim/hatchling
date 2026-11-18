@@ -142,6 +142,10 @@ only, so a hat looks the same on every animal and under every coat.
 **States.** `baby`, `adult`, `crown` are the three stages of growth. `sleep` is the pet asleep. `cheer`, `dizzy`, `stomach`,
 `loop`, `bloated`, `sad`, `ko` are moods (`/pet demo` shows the ones in use). A state you do not draw is drawn as `adult`.
 
+A pet not yet grown is small in every state. `baby-sleep`, `baby-cheer`, `baby-dizzy`, `baby-stomach`, `baby-loop` and
+`baby-bloated` are the baby's own drawings of the sleep and of the moods; an animal with a `baby` and without one of them is
+drawn as its `baby` there, never as the adult. An animal with no `baby` is the adult at every age.
+
 ```
 State = {
   "frames": [Frame, ...],       1 to 8; a mood with more than one is animated, two frames a second
@@ -155,7 +159,7 @@ State = {
 A `Frame` is either 10 rows of 12 pixels (the body alone) or 12 rows of 14 (one spare column each side and two rows above the
 head, for sparkles, a hop, a halo). An animal with its own `size` of w by h draws its frames w by h, or w+2 by h+2. `at` says where the body is on the larger one, row then column, each 0 to 2; the smaller
 frame always sits at `[2, 1]`, which is also the default. Things to wear are drawn from `at`, so they follow the body when it
-moves. `sleep` has no `at`: asleep the pet wears nothing.
+moves. `sleep` has no `at`: asleep the grown pet is curled up and wears nothing. `baby-sleep` has one: a baby asleep keeps what it wears.
 
 **Anchors** tell where things go on a body that the thing's pack never saw:
 

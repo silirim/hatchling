@@ -64,7 +64,7 @@ export function whole(raw) {
     out.days[k] = { start: d.start, end: time(d.end) && d.end >= d.start ? d.end : d.start, ...(typeof d.coffee === 'boolean' && { coffee: d.coffee, ...(time(d.coffeeAt) && { coffeeAt: d.coffeeAt }) }), ...(time(d.finish) && { finish: d.finish }) }
   }
   if (typeof r.day !== 'string' || !DATE.test(r.day)) return { ...out, seen: time(r.seen) ? r.seen : 0 }
-  const q = r.q && KINDS.includes(r.q.kind) && time(r.q.at) && Array.isArray(r.q.opts) ? { kind: r.q.kind, at: r.q.at, opts: r.q.opts.filter((/** @type {unknown} */ o) => typeof o === 'string' && /^[a-z0-9]{1,8}$/.test(o)).slice(0, 4), ...(time(r.q.time) && { time: r.q.time }) } : null
+  const q = r.q && KINDS.includes(r.q.kind) && time(r.q.at) && Array.isArray(r.q.opts) ? { kind: r.q.kind, at: r.q.at, opts: r.q.opts.filter((/** @type {unknown} */ o) => typeof o === 'string' && /^[a-z0-9]{1,8}$/.test(o)).slice(0, 5), ...(time(r.q.time) && { time: r.q.time }) } : null
   return {
     ...out, day: r.day, asked: Number.isInteger(r.asked) && r.asked > 0 ? Math.min(r.asked, 99) : 0, qAt: time(r.qAt) ? r.qAt : 0,
     done: Array.isArray(r.done) ? DONE.filter(x => r.done.includes(x)) : [], until: time(r.until) ? r.until : 0,
@@ -106,10 +106,11 @@ export function usual(r, now) {
   return { days: days.length, ...(start !== undefined && { start }), ...(finish !== undefined && { finish: Math.round(finish / 5) * 5 }), finishDays: fin.length, ...(cups.length && yes * 2 !== cups.length && { coffee: yes * 2 > cups.length }), coffeeDays: cups.length }
 }
 
-/** The hours offered for the finish time: three whole hours from 17, or from the first that is 45 minutes away, none past 23; then `later`. @param {number} now */
+/** The hours offered for the finish time: three whole hours from 17, or from the first that is 45 minutes away, none past 23; then
+ * `other`, for a time that is none of them (the adapter puts `/pet until ` in the prompt box to complete), and `later`. @param {number} now */
 function hours(now) {
   const first = Math.max(17, Math.ceil((minutes(now) + 45) / 60))
-  return [...[first, first + 1, first + 2].filter(h => h <= 23).map(String), 'later']
+  return [...[first, first + 1, first + 2].filter(h => h <= 23).map(String), 'other', 'later']
 }
 
 /** The warning due now for a finish time: the last of LIMITS.warnMin whose moment has come, '' before the first and once the time is LIMITS.warnLateMs behind. @param {number} until @param {number} now */
@@ -164,7 +165,7 @@ export function next(was, now, { busy = false, lines = true } = {}) {
       const u = usual(r, now), t = u.finish !== undefined && u.finishDays >= LIMITS.usualDays ? moment(now, u.finish) : 0
       if (t > now + 45 * MIN) return ask('usual', ['yes', 'no'], 'finish', t)
       const opts = hours(now)
-      if (opts.length >= 2) return ask('finish', opts, 'finish')
+      if (opts.length >= 3) return ask('finish', opts, 'finish') // an hour at least, beside `other` and `later`
       take('finish') // too late in the day to ask
     }
     else return { r, changed: changed() }
@@ -189,6 +190,7 @@ export function answer(was, choice, now) {
   const r0 = today(was, now), q = r0.q && now - r0.q.at < LIMITS.questionMs && r0.q.at <= now ? r0.q : null, c = String(choice).trim().toLowerCase().replace(/^(\d{1,2})(:00|h)$/, '$1')
   if (!q) return { r: r0, ok: false, opts: [], reply: 'answer.none', time: 0 }
   if (!q.opts.includes(c)) return { r: r0, ok: false, opts: q.opts, reply: 'answer.what', time: 0 }
+  if (q.kind === 'finish' && c === 'other') return { r: r0, ok: true, opts: [], reply: 'answer.other', time: 0 } // the question stays: /pet until <time> answers it
   const r = { ...r0, q: null }, d = /** @type {Day} */ (r.days[r.day] ?? { start: now, end: now }), day = (/** @type {Partial<Day>} */ more) => ({ ...r.days, [r.day]: { ...d, ...more } })
   const until = (/** @type {number} */ t) => ({ r: { ...r, until: t, days: day({ finish: t }), done: r.done.filter(x => !/^w\d/.test(x)) }, ok: true, opts: [], reply: setReply(t, now), time: t })
   if (q.kind === 'usual') {

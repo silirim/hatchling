@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import zoo from '../sprites/zoo.js'
-import { validate, parse, compile, install, place, marksFor, coatOf, REG, BUILTIN, LIMITS, FORMAT } from './skins.js'
+import { validate, parse, compile, install, place, marksFor, coatOf, REG, BUILTIN, LIMITS, FORMAT, YOUNG } from './skins.js'
 import { SHOP, COATS, WEARABLE, EGGSHELL, closetOf, wornOf, putOn, takeOff, turnSlot, view, initialState } from './engine.js'
 
 const EXAMPLE = readFileSync(new URL('../docs/skins-example.json', import.meta.url), 'utf8')
@@ -371,4 +371,17 @@ test('the redraws of the second pass: brown boots with a darker sole, glasses th
   }
   // the eggshell: on every animal, with the white of the egg and one of its spots, and a broken edge
   assert.deepEqual(zoo.pack.items.eggshell.fallback[0]?.art, ['.iiii.', 'iihiii', 'i.ii.i'])
+})
+
+test('every shipped animal has the baby\'s own drawing of the sleep and of each mood, the body the baby\'s and placed, so it wears as awake', () => {
+  for (const [id, sp] of Object.entries(BUILTIN.species)) {
+    const baby = sp.states.baby.frames[0].join('').replace(/\./g, '').length
+    for (const mood of YOUNG) {
+      const st = sp.states[`baby-${mood}`]
+      assert.ok(st && st.frames.length >= 1 && Array.isArray(st.at), `${id} baby-${mood}`)
+      // the baby's pixels, give or take the marks of the mood: far from the grown body's count
+      const grown = sp.states[mood].frames[0].join('').replace(/\./g, '').length, own = st.frames[0].join('').replace(/\./g, '').length
+      assert.ok(Math.abs(own - baby) < Math.abs(own - grown), `${id} baby-${mood} is drawn from the baby`)
+    }
+  }
 })

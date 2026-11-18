@@ -21,12 +21,12 @@ test('a day runs from 04:00 to 04:00 by the local clock, and times read in 24 ho
   assert.deepEqual([clock(18 * 60 + 30), clock(1470), clock(9 * 60 + 5), hhmm(at(17, 7, 3))], ['18:30', '00:30', '09:05', '07:03'])
 })
 
-test('the finish time is asked once a day, ten minutes after the first use, with three hours and later; never during a turn', () => {
+test('the finish time is asked once a day, ten minutes after the first use, with three hours, other and later; never during a turn', () => {
   let r = begun(17, 9)
   assert.equal(next(r, at(17, 9, 5)).ask, undefined) // too soon
   assert.equal(next(r, at(17, 9, 10), { busy: true }).ask, undefined) // a turn runs
   const n = next(r, at(17, 9, 10))
-  assert.deepEqual(n.ask, { kind: 'finish', at: at(17, 9, 10), opts: ['17', '18', '19', 'later'] })
+  assert.deepEqual(n.ask, { kind: 'finish', at: at(17, 9, 10), opts: ['17', '18', '19', 'other', 'later'] })
   assert.deepEqual([n.r.asked, n.r.q?.kind, n.changed], [1, 'finish', true])
   assert.equal(next(n.r, at(17, 9, 12)).ask, undefined) // one question at a time
   // answered with an hour: the finish time of today, remembered in the day
@@ -39,8 +39,8 @@ test('the finish time is asked once a day, ten minutes after the first use, with
   for (const h of [10, 12, 15, 20]) assert.notEqual(next(touch(later.r, at(17, h)), at(17, h, 30)).ask?.kind, 'finish')
   assert.equal(next(touch(a.r, at(18, 9)), at(18, 9, 15)).ask?.kind, 'finish')
   // late in the day the hours offered are the ones still ahead; too late, nothing is asked
-  assert.deepEqual(next(begun(17, 18, 30), at(17, 18, 45)).ask?.opts, ['20', '21', '22', 'later'])
-  assert.deepEqual(next(begun(17, 21), at(17, 21, 10)).ask?.opts, ['22', '23', 'later'])
+  assert.deepEqual(next(begun(17, 18, 30), at(17, 18, 45)).ask?.opts, ['20', '21', '22', 'other', 'later'])
+  assert.deepEqual(next(begun(17, 21), at(17, 21, 10)).ask?.opts, ['22', '23', 'other', 'later'])
   assert.equal(next(begun(17, 22), at(17, 22, 20)).ask, undefined) // no whole hour is left
   assert.equal(next(begun(17, 23), at(17, 23, 30)).ask, undefined)
 })
@@ -48,7 +48,7 @@ test('the finish time is asked once a day, ten minutes after the first use, with
 test('an answer that is none of the question\'s, or with no question up, changes nothing', () => {
   const n = next(begun(17, 9), at(17, 9, 10))
   const bad = answer(n.r, 'maybe', at(17, 9, 11))
-  assert.deepEqual([bad.ok, bad.reply, bad.opts, bad.r.q?.kind], [false, 'answer.what', ['17', '18', '19', 'later'], 'finish'])
+  assert.deepEqual([bad.ok, bad.reply, bad.opts, bad.r.q?.kind], [false, 'answer.what', ['17', '18', '19', 'other', 'later'], 'finish'])
   assert.deepEqual([answer(n.r, 'yes', at(17, 9, 11)).ok, answer(begun(17, 9), 'yes', at(17, 9, 11)).reply], [false, 'answer.none'])
 })
 
@@ -169,7 +169,7 @@ test('after three answered days the usual time is proposed: yes takes it, no bri
   const yes = answer(q.r, 'yes', at(17, 9, 11))
   assert.deepEqual([yes.reply, yes.time, yes.r.until], ['until.set', at(17, 18), at(17, 18)])
   const no = answer(q.r, 'no', at(17, 9, 11))
-  assert.deepEqual([no.ok, no.reply, no.ask, no.r.asked], [true, '', { kind: 'finish', at: at(17, 9, 11), opts: ['17', '18', '19', 'later'] }, 1])
+  assert.deepEqual([no.ok, no.reply, no.ask, no.r.asked], [true, '', { kind: 'finish', at: at(17, 9, 11), opts: ['17', '18', '19', 'other', 'later'] }, 1])
   assert.equal(answer(no.r, '19', at(17, 9, 12)).r.until, at(17, 19))
   // a day that starts after the usual time is asked plainly
   assert.equal(next(touch(learned(3), at(17, 17, 40)), at(17, 17, 50)).ask?.kind, 'finish')
@@ -269,4 +269,17 @@ test('a finish time set near: the warning says the minutes really left, rounded 
     assert.ok(/10/.test(String(table['until.set.10'])) && !/30/.test(String(table['until.set.10'])), lang)
     assert.ok(!/\b(30|10)\b/.test(String(table['until.set.0']).replace('{time}', '')), lang)
   }
+})
+
+test('the finish time, other: a time that is none of the hours offered; the question stays up until /pet until gives it, also one before 17', () => {
+  const n = next(begun(17, 9), at(17, 9, 10))
+  assert.deepEqual(n.ask?.opts, ['17', '18', '19', 'other', 'later'])
+  const other = answer(n.r, 'other', at(17, 9, 11))
+  assert.deepEqual([other.ok, other.reply, other.time, other.r.q?.kind, other.r.until], [true, 'answer.other', 0, 'finish', n.r.until])
+  const noon = setUntil(other.r, '12:00', at(17, 9, 12))
+  assert.deepEqual([noon.ok, noon.time, noon.r.until, noon.r.q], [true, at(17, 12), at(17, 12), null])
+  // kept whole: a question with five answers is read back with all five
+  assert.deepEqual(whole(JSON.parse(JSON.stringify(n.r))).q?.opts, ['17', '18', '19', 'other', 'later'])
+  // each language has the button and the two lines
+  for (const lang of Object.keys(LANGS)) for (const key of ['btn.other', 'ask.how.until', 'answer.other']) assert.equal(typeof (/** @type {any} */ (LANGS)[lang][key]), 'string', `${lang} ${key}`)
 })

@@ -17,7 +17,8 @@ const W0 = zoo.width, H0 = zoo.height, SIDE = zoo.side, UNDER = zoo.under
 const ID = /^[a-z][a-z0-9-]{1,23}$/
 const HEX = /^#[0-9a-f]{6}$/i
 const KEY = /^[A-Za-z0-9]$/
-export const STATES = ['baby', 'adult', 'crown', 'sad', 'bloated', 'cheer', 'dizzy', 'stomach', 'loop', 'ko', 'sleep']
+export const YOUNG = ['bloated', 'cheer', 'dizzy', 'stomach', 'loop', 'sleep'] // the moods a baby has a drawing of its own for, as `baby-<mood>`: a pet not yet grown is drawn small in every one of them
+export const STATES = ['baby', 'adult', 'crown', 'sad', 'bloated', 'cheer', 'dizzy', 'stomach', 'loop', 'ko', 'sleep', ...YOUNG.map(name => `baby-${name}`)]
 const CALM = ['baby', 'adult', 'crown'] // the states that may hold gestures
 const BODIES = ['adult', 'baby']
 /** The parts a thing of a pack may be worn on. A coat is not a thing: it has its own list. */

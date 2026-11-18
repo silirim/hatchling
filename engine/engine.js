@@ -662,6 +662,7 @@ const PRIORITY = /** @type {IssueKind[]} */ (['cold', 'loop', 'stomach', 'dizzy'
  * `talk` is the companion's line still on screen; `calm` says no warning holds the bubble, so that line can be the main one.
  * `happy` is the only other humour there is: content after a cuddle or a day of much use, calm otherwise. Never sad.
  * `context` is what the chat weighs now: the tokens the last request of the main thread re-read, 0 while there is none yet.
+ * `stage` is how far the pet has grown, whatever its mood: a pet asleep or cheering is still that small or that grown.
  * @param {ReturnType<typeof initialState>} s
  * @param {number} now
  */
@@ -675,7 +676,7 @@ export function view(s, now) {
   const animate = !cheer || now - cheer.at < RULES.cheerShowMs
   const said = s.session.talk
   const talk = said && (said.until === undefined || now < said.until) ? said : null
-  return { talk, calm: calm(s, now), mood, happy, hearts: hearts(s.affection), coins: s.coins, issue, cheer, animate, context: s.session.context, long: isLong(s.session), lean: s.session.lean, wait: !!s.session.leanWait, turn: s.turn, variant: s.variant, owned: s.owned, animals: s.animals, closet: closetOf(s.owned, stage(s)) }
+  return { talk, calm: calm(s, now), mood, happy, hearts: hearts(s.affection), coins: s.coins, issue, cheer, animate, context: s.session.context, long: isLong(s.session), lean: s.session.lean, wait: !!s.session.leanWait, turn: s.turn, variant: s.variant, owned: s.owned, animals: s.animals, stage: stage(s), closet: closetOf(s.owned, stage(s)) }
 }
 
 /**

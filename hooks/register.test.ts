@@ -1,7 +1,7 @@
 import { expect, mock, test as kitTest } from 'claude-code/testing'
 import { dayOf, RULES, SHOP, SOLD, EGGSHELL, FOUNDER_UNTIL } from '../engine/engine.js'
 import zoo from '../sprites/zoo.js'
-import { BUILTIN, REG, marksFor } from '../engine/skins.js'
+import { BUILTIN, REG, marksFor, dressed } from '../engine/skins.js'
 import { open as diaryOpened, whole as diaryOf, bandOf, dated } from '../engine/diary.js'
 import { whole as workOf, opened as workOpened, turned as workTurned } from '../engine/work.js'
 import { picture, TEXT_X } from '../engine/share.js'
@@ -408,7 +408,7 @@ test('the companion: a greeting from the marks, a mark of its own with nothing o
   await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   let b = await band()
   expect(b.texts).toContain('Miro: a chat here stopped mid-turn 20 min\nago. pick it up?')
-  expect(b.buttons).toEqual(['skin', 'pet', 'resume']) // (a newborn of these days has the founder's eggshell, so a skin to turn) the pet's own in the row of the name, the phrase's under the bubble
+  expect(b.buttons).toEqual(['resume', 'skin']) // (a newborn of these days has the founder's eggshell, so a skin to turn) the phrase's under the bubble, the pet's own under the drawing
   await b.ui.press({ key: 'fix' })
   expect(filled).toBe('/resume')
   await b.ui.unmount()
@@ -451,7 +451,7 @@ test('the companion: a greeting from the marks, a mark of its own with nothing o
   await $.turn.complete({ answer: '', reason: 'answer' } as any)
   b = await band()
   expect(b.texts).toContain('long chat: shall we put our thoughts in\norder?')
-  expect(b.buttons).toEqual(['skin', 'pet', 'outline'])
+  expect(b.buttons).toEqual(['outline', 'skin'])
   await b.ui.press({ key: 'fix' })
   expect(filled).toMatch(/^Write an outline of this chat that I can paste into a new one\..*where we are.*where we need to get to.*still missing/)
   await b.ui.unmount()
@@ -527,10 +527,10 @@ test('the phrase sits in a speech bubble: advice inside, keys outside, tail at t
   // 51 characters of advice wrap at 44 columns: the longest line is "A note only. Fix asks the agent to use what", 43, plus border and padding
   expect(bubble.props.width).toBe(47)
   expect((await ui.find({ type: 'Text', text: /^\w+  ★ \d+$/ }))).toBeTruthy()
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'fix'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['fix'])
   expect(await ui.find({ type: 'Link', text: 'guide' })).toBeTruthy()
   // the tail sits on the bubble's first line, where the pet's eyes are
-  expect((await ui.find({ type: 'Box', key: 'tail' }))!.props.marginTop).toBe(2)
+  expect((await ui.find({ type: 'Box', key: 'tail' }))!.props.marginTop).toBe(3)
   await ui.unmount()
 
   // no Raster, no bubble in the apps: the pet is an Svg there, the phrase a text beside it
@@ -581,6 +581,8 @@ function home(on: any, config: object, prefs?: object, now = Date.UTC(2026, 10, 
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   return Object.assign(k, { clock }) // the same object the handlers read: a test may replace `state` or `disk.pet`
 }
+/** A click on the pet's drawing in the terminal: the button down and up inside the region that lies over it. */
+const clickPet = async (ui: any) => { await ui.pointer({ type: 'down', x: 1, y: 1, button: 'left', in: 'touch' }); await ui.pointer({ type: 'up', x: 1, y: 1, button: 'left', in: 'touch' }) }
 const cardOf = async ($: any, args = '') => String((await $.command.run({ command: 'pet', args } as any) as any).text)
 
 test('a pet is born with a name and a character of its own: on the card and in the greeting, kept over /clear, a new animal and a rename', async ($, on) => {
@@ -619,14 +621,14 @@ test('a pet is born with a name and a character of its own: on the card and in t
     expect(said.some(t => /^I am [A-Z][a-z]+, a [a-z]+$/.test(t))).toBe(true)
     expect(said.some(t => /^WIT \d+ · CURIOSITY \d+ · CALM \d+ · RIGOR \d+ · WARMTH \d+ · [A-Z].+\.$/.test(t.replace(/\n/g, ' ')))).toBe(true)
     expect(k.toasts.at(-1)).toMatch(/^[A-Z][a-z]+ has hatched: \/pet shows its card\.$/) // and in a toast, for a band with no room for the bubble
-    expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin', 'pet'])
+    expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin'])
     expect(prefsOf(k.disk)).toMatchObject({ voice: true, voiceAsked: false }) } // the notice and its button wait under the line: not said yet
   await ui.unmount()
   await k.clock.advance(20_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   // then, once, the notice: the comments are on, what they cost and what stops them, with one button; marked as said only now, in sight
   expect((await ui.findAll({ type: 'Text' })).map(x => x.text)).toContain('Comments are on: a small model writes them\non your tokens, about 650 in and 75 out a\nline (measured in November 2026), at most 40\nlines a day. /pet comments off stops them.')
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['turn off'])
   expect([prefsOf(k.disk).voice, prefsOf(k.disk).voiceAsked]).toEqual([true, true])
   expect(k.toasts.at(-1)).toBe('Hatchling: Comments are on: a small model writes them on your tokens, about 650 in and 75 out a line (measured in November 2026), at most 40 lines a day. /pet comments off stops them.') // in a toast too, for a band with no room for the bubble
   await ui.press({ key: 'voice-off' })
@@ -1016,13 +1018,13 @@ async function drawn($: any) {
   return { ui, said, buttons, hearts }
 }
 
-test('cuddles: /pet pet and the pet button count them with the time of the last; hearts rise for a couple of seconds with a line in its character; the first three of a day bring stars and affection', async ($, on) => {
+test('cuddles: /pet pet and a click on the drawing of the pet count them with the time of the last; hearts rise for a couple of seconds with a line in its character; the first three of a day bring stars and affection', async ($, on) => {
   // rigor is the peak and warmth the second: the rigorous one speaks most lines, the warm one some
   const k = home(on, {}, { species: 'bunny', born: 'bunny', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true })
   await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const t0 = Date.UTC(2026, 10, 12, 12)
   let b = await drawn($)
-  expect(b.buttons).toContain('pet')
+  expect(b.buttons).not.toContain('pet') // no button for it: a click on the drawing is the cuddle
   expect(b.hearts).toBe(0)
   expect(prefsOf(k.disk)).toMatchObject({ stats: [20, 50, 40, 90, 70] })
   expect(await cardOf($)).not.toMatch(/petted/)
@@ -1031,7 +1033,7 @@ test('cuddles: /pet pet and the pet button count them with the time of the last;
   expect(await cardOf($)).toMatch(/♡♡♡♡♡ calm$/m)
 
   // the button: counted, hearts on the drawing, a line in the bubble. Rigor 90 and warmth 70 share the voice: this one is the warm one's
-  await b.ui.press({ key: 'pet' })
+  await clickPet(b.ui)
   await b.ui.unmount()
   expect(prefsOf(k.disk)).toMatchObject({ cuddles: 1, cuddled: t0 })
   b = await drawn($)
@@ -1522,13 +1524,13 @@ test('the shop: stars buy things to wear, the catalogue says what is owned, and 
   // asleep, the bubble comes down with the pet's eyes, and an accessory stands on the ground the board is on
   const size = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const r = (await ui.find({ type: 'Raster' }))!.props; const tail = (await ui.find({ type: 'Box', key: 'tail' }))?.props.marginTop ?? null; await ui.unmount(); return [r.columns, r.rows, tail] }
   await cardOf($, 'wear none')
-  expect(await size()).toEqual([zoo.width + 2, 6, 2]) // asleep with nothing on
+  expect(await size()).toEqual([zoo.width + 2, 6, 3]) // asleep with nothing on
   await cardOf($, 'pet') // awake
   expect(await cardOf($, 'wear sneakers')).toBe('sneakers goes on, feet.\nMiro wears feet: sneakers.')
-  expect(await size()).toEqual([zoo.width + 2, 6, 2])
+  expect(await size()).toEqual([zoo.width + 2, 6, 3])
   const shod = await raster()
   expect(await cardOf($, 'wear skateboard')).toBe('a skateboard goes on, feet, in place of sneakers.\nMiro wears feet: a skateboard.')
-  expect(await size()).toEqual([zoo.width + 2, 7, 3])
+  expect(await size()).toEqual([zoo.width + 2, 7, 4])
   expect(await raster()).not.toBe(shod)
   await cardOf($, 'wear mug')
   expect((await size()).slice(0, 2)).toEqual([zoo.width + 2 + mug, 7])
@@ -1767,7 +1769,7 @@ for (const [version, held] of Object.entries(RELOADS)) test(`a reload over the s
   await $.turn.complete({ answer: '', reason: 'answer' } as any)
   await band()
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  await ui.press({ key: 'pet' })
+  await clickPet(ui)
   await ui.press({ key: 'skin' })
   await ui.unmount()
   await cardOf($, 'pet')
@@ -2005,7 +2007,7 @@ test('comments are on as installed: a pet never told gets the notice once, with 
   expect(await cardOf($)).toMatch(/\ncomments on: model haiku, about 500 tokens in and 20 out a line, 0 of 40 lines today, 0 tokens today, 5200 in all\. \/pet comments off stops them$/m)
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await desk.findAll({ type: 'Text' })).map(x => x.text)).toContain(N.replace(/\n/g, ' ')) // the apps wrap it themselves
-  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off']) // one button
+  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['turn off']) // one button
   await desk.unmount()
   // a slash command and a reload leave it up; the next prompt sent takes it away, with the comments on
   await $.prompt.submit({ text: '/pet', command: { name: 'pet', args: '' }, wait: false, origin: 'user' } as any)
@@ -2054,7 +2056,7 @@ test('the notice: "turn off" turns the comments off and keeps the choice; no mod
   const k = voiceKit($, on, { voiceAsked: false })
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['turn off'])
   await ui.press({ key: 'voice-off' })
   await ui.unmount()
   expect(prefsOf(k.disk)).toMatchObject({ voice: false, voiceAsked: true })
@@ -2130,8 +2132,8 @@ test('a newborn takes the language of the system when it is one of ours, LC_ALL 
   await ui.unmount()
   await k.clock.advance(29_500) // hatched, and it said who it is
   const asked = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await asked.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/^\S+  ★ 0 · Los comentarios están activos: los escribe\nun modelo pequeño con tus tokens/)
-  expect((await asked.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['acariciar', 'apagar'])
+  expect((await asked.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/^Los comentarios están activos: los escribe\nun modelo pequeño con tus tokens.* ─ \S+  ★ 0$/s)
+  expect((await asked.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['apagar'])
   await asked.press({ key: 'voice-off' })
   expect(k.toasts.at(-1)).toBe('Hatchling se queda callado. /pet comments on lo cambia.')
   await asked.unmount()
@@ -2211,14 +2213,14 @@ test('the bubble in Chinese: wrapped and bordered by width on screen, two column
   const hello = await bubble()
   expect(hello.lines).toEqual(['Miro: 今天的第一场对话。又开始了'])
   expect(hello.width).toBe(6 + 26 + 4)
-  expect(hello.buttons).toEqual(['装扮', '摸摸']) 
+  expect(hello.buttons).toEqual(['装扮']) 
   // a note: the advice is 17 characters and a stop, 36 columns, one line; in letters it would be 18
   await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
   await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
   const note = await bubble()
   expect(note.lines).toEqual(['重复读取，内容没变：a.txt', '只是提醒。按钮会让助手用已有的内容。'])
   expect(note.width).toBe(36 + 4)
-  expect(note.buttons).toEqual(['装扮', '摸摸', '修复'])
+  expect(note.buttons).toEqual(['修复', '装扮'])
   expect(note.link).toBe('指南')
   // a line of 26 characters is 52 columns: it wraps after 22, and the border hugs 44
   elsewhere(k.disk, { voiceAsked: false })
@@ -2580,29 +2582,29 @@ test('the bubble is not always there: a phrase stays about 12 seconds, longer wi
   // a question waits for its answer: still there after a minute, gone when the person writes the next prompt
   await k.clock.advance(60_000)
   let b = await look()
-  expect([b.open, b.keys]).toEqual([true, ['pet', 'fix']])
+  expect([b.open, b.keys]).toEqual([true, ['fix']])
   expect(b.texts.join(' ')).toMatch(/pick it up\?/)
   await k.turn()
   await k.clock.advance(1_000)
   b = await look()
   // nothing new to say: the plain line of a calm chat does not open the bubble
   expect(b.open).toBe(false)
-  expect(b.texts).toEqual(['Miro  ★ 4', '·']) // the name and the stars, the dot before the buttons, and no phrase
-  expect(b.keys).toEqual(['pet']) // the pet's own buttons stay
+  expect(b.texts).toEqual(['Miro  ★ 4']) // the name and the stars, and no phrase: this pet has nothing to wear, so no button of its own and no dot before it
+  expect(b.keys).toEqual([]) // the pet's own buttons stay
   expect((await look('desktop')).texts).toEqual(['Miro  ★ 4']) // in the apps too: the name and the stars, and no phrase
 
   // a phrase with a button of its own (a re-read, with its fix and its guide): there after 19 seconds, gone after 31
   await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
   await $.tool.call({ tool: 'Read', file_path: '/a.txt' })
   b = await look()
-  expect([b.open, b.keys]).toEqual([true, ['pet', 'fix']])
+  expect([b.open, b.keys]).toEqual([true, ['fix']])
   expect(b.texts.join(' ')).toMatch(/re-read/)
   expect((await look('desktop')).texts.join('  ')).toMatch(/^Miro  ★ 4  .*re-read/)
   await k.clock.advance(19_000)
   expect((await look()).open).toBe(true)
   await k.clock.advance(12_000)
   b = await look()
-  expect([b.open, b.keys, b.texts]).toEqual([false, ['pet'], ['Miro  ★ 4', '·']])
+  expect([b.open, b.keys, b.texts]).toEqual([false, [], ['Miro  ★ 4']]) // with nothing to wear there is no button of the pet's own, and no dot before them
   // the same phrase is not new: it stays away
   await k.clock.advance(5_000)
   expect((await look()).open).toBe(false)
@@ -2796,21 +2798,21 @@ async function drawnWidth($: any, props: object) {
   const ui = await $.ui.mount({ ...BAND, props: { hasSurvey: false, ...props }, surface: 'terminal' })
   const r = await ui.find({ type: 'Raster' }), bubble = await ui.find({ type: 'Box', key: 'bubble' }), tail = await ui.find({ type: 'Box', key: 'tail' })
   const found = await ui.findAll({ type: 'Button' }), buttons = found.map((x: any) => String(x.text))
-  const OWN = ['skin', 'pet'] // the pet's own buttons: in the row of the name; the others are under the bubble
+  const OWN = ['skin'] // the pet's own button: under the drawing; the others are under the bubble
   const own = found.filter((x: any) => OWN.includes(String(x.key))).map((x: any) => String(x.text)), under = found.filter((x: any) => !OWN.includes(String(x.key))).map((x: any) => String(x.text))
   const texts = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text))
-  const ui0head = ui.find({ type: 'Box', key: 'head' }), besideBox = await ui.find({ type: 'Box', key: 'beside' })
-  await ui0head
+  const headBox = await ui.find({ type: 'Box', key: 'head' }), petBox = await ui.find({ type: 'Box', key: 'pet' }), countBox = await ui.find({ type: 'Box', key: 'count' })
   await ui.unmount()
-  const w = (t: string) => [...t].reduce((n: number, ch: string) => n + (/[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1), 0)
+  const w = (t: string) => [...t].reduce((n: number, ch: string) => n + (/[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1), 0)
   const span = (list: string[]) => list.reduce((n: number, b: string) => n + w(b), 0) + 2 * Math.max(0, list.length - 1)
-  const headBox = await ui0head, head = String((headBox?.children as any[] | undefined)?.find((x: any) => x.type === 'Text')?.children[0] ?? texts.find((t: string) => t.includes('★')) ?? ''), keys = span(under) // the row of the name: with little room it may be the name alone, with no star
-  const row = w(head) + (own.length ? 5 + span(own) : 0) // the row of the name: the head, the dot with two cells each side, the pet's own buttons
-  const cols = r ? Number((r as any).props.columns) : 0
-  const aside = !!r && !bubble && !!besideBox // the row of the name is beside the drawing
+  // the pet's own column: the name (with little room alone, with no star) over the drawing, the pet's own button under it
+  const head = String((headBox?.children as any[] | undefined)?.find((x: any) => x.type === 'Text')?.children[0] ?? ''), keys = span(under)
+  const count = String(((countBox?.children as any[] | undefined)?.[0] as any)?.children?.[0] ?? '') // the count of the other chats, left of the name
+  const cols = r ? Number((r as any).props.columns) : 0, column = Number((petBox as any)?.props.width ?? 0)
+  if (r) expect([column >= cols, w(head) <= column, span(own) <= column], JSON.stringify({ column, cols, head, own })).toEqual([true, true, true]) // the drawing is never squeezed, and what is over and under it stays in its column
   const lines = texts.flatMap((t: string) => t.split('\n')).map(w)
-  const total = !r ? Math.max(0, ...lines) : bubble ? Math.max(row, Number((bubble as any).props.width), keys) + 2 + cols : !texts.includes(head) ? cols : aside ? row + 1 + cols : Math.max(row, cols)
-  return { total, raster: !!r, bubble: !!bubble, buttons, own, aside, head, texts }
+  const total = !r ? Math.max(0, ...lines) : bubble ? Math.max(w(count), Number((bubble as any).props.width), keys) + 2 + column : (count ? w(count) + 2 : 0) + column
+  return { total, raster: !!r, bubble: !!bubble, buttons, own, head, count, texts }
 }
 
 test('E18: the band fits the width it is given: the bubble narrows, then the buttons go, then only the pet, then one row of text', async ($, on) => {
@@ -2834,8 +2836,8 @@ test('E18: the band fits the width it is given: the bubble narrows, then the but
   await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
   const wide = await drawnWidth($, { bodyColumns: 100 }), narrow = await drawnWidth($, { bodyColumns: 40 })
   expect([wide.bubble, narrow.bubble]).toEqual([true, true])
-  expect([wide.head, narrow.head, narrow.own]).toEqual(['Miro  ★ 2000', 'Miro', ['skin', 'pet']]) // in the row of the name the stars gave way, the pet's buttons are all there
-  expect(narrow.texts.join(' ').replace(/\s+/g, ' ')).toBe(wide.texts.join(' ').replace(/\s+/g, ' ').replace('Miro ★ 2000', 'Miro'))
+  expect([wide.head, narrow.head, narrow.own]).toEqual(['Miro  ★ 2000', 'Miro  ★ 2000', ['skin']]) // the row of the name has room for the stars and the pet's button
+  expect(narrow.texts.join(' ').replace(/\s+/g, ' ')).toBe(wide.texts.join(' ').replace(/\s+/g, ' '))
   expect(narrow.texts.join('\n').split('\n').length).toBeGreaterThan(wide.texts.join('\n').split('\n').length)
   // the skin menu open, in English and in Chinese
   let ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await ui.press({ key: 'skin' }); await k.clock.advance(1); await ui.unmount()
@@ -2849,9 +2851,9 @@ test('E18: the band fits the width it is given: the bubble narrows, then the but
   const b34 = await at(34)
   expect([b34.bubble, b34.raster, b34.total <= 34]).toEqual([true, true, true])
   const b24 = await at(24)
-  expect([b24.bubble, b24.raster, b24.head, b24.own, b24.total <= 24]).toEqual([false, true, 'Miro', ['skin', 'pet'], true]) // only the pet, with its name and its buttons: the stars gave way to them
+  expect([b24.bubble, b24.raster, b24.head, b24.own, b24.total <= 24]).toEqual([false, true, 'Miro  ★ 2000', ['skin'], true]) // only the pet, with its name, its stars and its button
   const b16 = await at(16)
-  expect([b16.raster, b16.head, b16.own, b16.total <= 16]).toEqual([true, 'Miro', ['skin'], true]) // the name over the drawing: beside it there is no room
+  expect([b16.raster, b16.head, b16.own, b16.total <= 16]).toEqual([true, 'Miro  ★ 2000', ['skin'], true]) // the same: the name and the stars are over the drawing, and take no room beside it
   const b10 = await at(10)
   expect([b10.raster, b10.texts.length, b10.total <= 10]).toEqual([false, 1, true]) // one row of text, cut to the width
   // a band that may not be as tall as the drawing: the row of text too; one too low for the bubble: the pet alone
@@ -2860,10 +2862,10 @@ test('E18: the band fits the width it is given: the bubble narrows, then the but
   expect([low.raster, enough.raster, enough.bubble]).toEqual([false, true, true])
   // with no width given (an engine that does not say) everything is drawn as before
   const free = await drawnWidth($, {})
-  expect([free.bubble, free.buttons]).toEqual([true, ['skin', 'pet']])
+  expect([free.bubble, free.buttons]).toEqual([true, ['skin']])
 })
 
-test('E19: with the bubble closed the buttons skin and pet are in the row of the name, beside the pet: no row of buttons under it, and no [-] of ours beside the engine\'s', async ($, on) => {
+test('E19: the name and the stars are over the drawing, centred on it, and the skin button under it at its left: no row of buttons under a closed bubble, and no [-] of ours beside the engine\'s', async ($, on) => {
   const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
   k.disk.pet = { coins: 4, affection: 4, days: 1, day: dayOf(Date.UTC(2026, 10, 12, 12)), owned: ['mug'] }
   await $.session.start({ cwd: '/w/hatchling', surface: 'terminal', isInteractive: true })
@@ -2872,39 +2874,41 @@ test('E19: with the bubble closed the buttons skin and pet are in the row of the
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Box', key: 'bubble' })).toBeFalsy()
   expect(await ui.find({ type: 'Box', key: 'keys' })).toBeFalsy() // no row of buttons at all
-  const row = (await ui.find({ type: 'Box', key: 'head' }))!
-  expect((row.children as any[]).map(x => [x.type, x.type === 'Text' ? x.children[0] : x.props.label])).toEqual([['Text', 'Miro  ★ 4'], ['Text', '·'], ['Button', 'skin'], ['Button', 'pet']]) // Miro  ★ 4  ·  skin  pet
-  expect([row.props.flexDirection, row.props.gap]).toEqual(['row', 2])
+  // the pet's column: the name and the stars over the drawing, centred on it; the skin button under it, from its left edge
+  const column = (await ui.find({ type: 'Box', key: 'pet' }))!, parts = column.children as any[], raster = (await ui.find({ type: 'Raster' }))!.props
+  expect(parts.map(x => String(x.props.key ?? x.key ?? ''))).toEqual(['head', '', 'own'])
+  expect([parts[0].children[0].children[0], parts[2].children.map((x: any) => x.props.label)]).toEqual(['Miro  ★ 4', ['skin']])
+  const wide = Number(column.props.width), name = 'Miro  ★ 4'.length
+  expect(wide).toBe(Math.max(Number(raster.columns), name))
+  expect([parts[0].props.marginLeft, parts[1].props.marginLeft, parts[2].props.marginLeft]).toEqual([Math.floor((wide - name) / 2), Math.floor((wide - Number(raster.columns)) / 2), Math.floor((wide - Number(raster.columns)) / 2)])
   // the engine draws its own [-] at the right end of the band: none of ours, at any width, with the bubble open or closed, or two are seen
   for (const props of [{}, { bodyColumns: 200 }, { bodyColumns: 60 }, { bodyColumns: 30 }]) {
     const all = await $.ui.mount({ ...BAND, props: { hasSurvey: false, ...props }, surface: 'terminal' })
     expect(JSON.stringify(await all.drawn())).not.toContain('[-]')
-    expect((await all.findAll({ type: 'Button' })).map((x: any) => String(x.key))).toEqual(['skin', 'pet'])
+    expect((await all.findAll({ type: 'Button' })).map((x: any) => String(x.key))).toEqual(['skin'])
     await all.unmount()
   }
   const tree = JSON.stringify(await ui.drawn())
   await ui.unmount()
-  const order = ['Miro  ★ 4', '"skin"', '"pet"', '"Raster"'].map(x => tree.indexOf(x))
+  const order = ['Miro  ★ 4', '"Raster"', '"skin"'].map(x => tree.indexOf(x))
   expect(order.every(i => i >= 0)).toBe(true)
-  expect([...order].sort((x, y) => x - y)).toEqual(order) // the name, its buttons, and then the drawing: one row with the pet
-  // a band exactly as tall as the drawing loses nothing: the buttons are beside the pet, not under it
-  const tight = await drawnWidth($, { bodyColumns: 100, maxRows: 6 })
-  expect([tight.raster, tight.bubble, tight.buttons]).toEqual([true, false, ['skin', 'pet']])
-  // narrower, the row of the name gives way: the stars first, and only then one button at a time, pet, then skin, which
-  // stay as long as there is room for them beside the name; the name stays
-  // (under the width where the name and the stars fit beside the drawing the row goes above it, where it has the whole width again)
+  expect([...order].sort((x, y) => x - y)).toEqual(order) // the name, the drawing, and then its button
+  // a band that may be only as tall as the drawing keeps the drawing: the skin button goes first (/pet skin does the same), then the name
+  const rows = Number(raster.rows)
+  const tight = await drawnWidth($, { bodyColumns: 100, maxRows: rows }), taller = await drawnWidth($, { bodyColumns: 100, maxRows: rows + 1 }), whole = await drawnWidth($, { bodyColumns: 100, maxRows: rows + 2 })
+  expect([tight.raster, tight.head, tight.buttons]).toEqual([true, '', []])
+  expect([taller.raster, taller.head, taller.buttons]).toEqual([true, 'Miro  ★ 4', []])
+  expect([whole.raster, whole.head, whole.buttons]).toEqual([true, 'Miro  ★ 4', ['skin']])
+  // narrower, the drawing keeps its columns and the name over it gives way: the stars first, then the name is cut
   const seen: string[] = []
   for (let bodyColumns = 60; bodyColumns >= 14; bodyColumns--) {
     const d = await drawnWidth($, { bodyColumns })
-    expect([bodyColumns, d.total <= bodyColumns, d.head.startsWith('Miro')], JSON.stringify(d)).toEqual([bodyColumns, true, true])
+    expect([bodyColumns, d.total <= bodyColumns, (d.raster ? d.head : d.texts[0]!).startsWith('Miro')], JSON.stringify(d)).toEqual([bodyColumns, true, true])
     if (!d.raster) break // under the width of the drawing: one row of text
-    const what = `${d.aside ? 'beside' : 'above'}: ${[d.head, ...d.own].join(' ')}`
+    const what = [d.head, ...d.own].join(' ')
     if (seen.at(-1) !== what) seen.push(what)
   }
-  expect(seen).toEqual([
-    'beside: Miro  ★ 4 skin pet', 'beside: Miro skin pet', 'beside: Miro skin', 'beside: Miro  ★ 4', // with no button left the stars are back
-    'above: Miro  ★ 4 skin pet', 'above: Miro skin pet',
-  ])
+  expect(seen).toEqual(['Miro  ★ 4 skin'])
 })
 
 test('E23: the notice about the comments: on a surface with no buttons its line names the command; a cuddle over it leaves no button of the notice under the cuddle; with the band hidden it is not marked as said', async ($, on) => {
@@ -2917,22 +2921,22 @@ test('E23: the notice about the comments: on a surface with no buttons its line 
   expect(prefsOf(k.disk).voiceAsked).toBe(true)
   const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await desk.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/Comments are on: /) // the apps have the button
-  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
+  expect((await desk.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['turn off'])
   await desk.unmount()
   const code = await $.ui.mount({ ...BAND, surface: 'vscode' }) // one line, no buttons: it names the command
   expect((await code.findAll({ type: 'Text' })).map(x => x.text).join(' ')).toMatch(/Comments are on: .*\/pet comments off stops them\.$/)
   await code.unmount()
   let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['turn off'])
   await ui.unmount()
   await cardOf($, 'pet') // a cuddle: its line is over the notice for 5 seconds
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.findAll({ type: 'Text' })).map(x => x.text).join(' ')).not.toMatch(/Comments are on/)
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin', 'pet'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['skin'])
   await ui.unmount()
   await k.clock.advance(6_000)
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off']) // the notice is back, with its button
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['turn off']) // the notice is back, with its button
   await ui.unmount()
 })
 
@@ -3022,7 +3026,7 @@ test('which chat needs me: beside the name how many other chats work, wait or as
   let verdict = 'ask'
   on('tool.check', () => ({ decision: verdict }) as any)
   await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
-  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)), c = await ui.find({ type: 'Box', key: 'count' }); await ui.unmount(); const count = String(((c?.children as any[] | undefined)?.[0] as any)?.children?.[0] ?? ''), name = t.find(x => x.includes('★')) ?? ''; return count ? `${name}  ·  ${count}` : name } // the name over the drawing, and the count of the other chats left of it
   const bubble = async () => (await k.texts()).join(' ').replace(/\s+/g, ' ')
   // only this chat: nothing beside the name and the stars
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
@@ -3046,10 +3050,10 @@ test('which chat needs me: beside the name how many other chats work, wait or as
     const d = await drawnWidth($, { bodyColumns })
     expect([bodyColumns, d.total <= bodyColumns], JSON.stringify(d)).toEqual([bodyColumns, true])
     if (!d.raster) break // under the width of the drawing: one row of text
-    const what = `${d.own.join(' ')}|${d.head.includes('wait for you') ? 'count' : d.head.includes('★') ? 'stars' : d.head === 'Miro' ? 'name' : 'cut'}`
+    const what = `${d.own.join(' ')}|${d.count.includes('wait for you') ? 'count' : d.head.includes('★') ? 'stars' : d.head === 'Miro' ? 'name' : 'cut'}`
     if (gave.at(-1) !== what) gave.push(what)
   }
-  expect(gave).toEqual(['pet|count', 'pet|stars', 'pet|name', '|stars', 'pet|stars', 'pet|name']) // beside the drawing, then over it, where the row has the whole width again
+  expect(gave).toEqual(['|count', '|stars']) // the count gives way first, then the stars stay as long as the drawing has its room: this pet has nothing to wear, so no button of its own
   // the one that may wait for an OK is told first, with its folder's name and nothing else of it
   expect(await bubble()).toContain('the chat in api may be waiting for your OK')
   expect(await bubble()).not.toMatch(/secret-client/)
@@ -3123,7 +3127,7 @@ test('/pet chats: the row of the chat the person is in says only "here", in the 
   k.disk.pet = { owned: [] }
   const MIN = 60_000
   await $.session.start({ cwd: '/w/desk', surface: 'terminal', isInteractive: true })
-  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)), c = await ui.find({ type: 'Box', key: 'count' }); await ui.unmount(); const count = String(((c?.children as any[] | undefined)?.[0] as any)?.children?.[0] ?? ''), name = t.find(x => x.includes('★')) ?? ''; return count ? `${name}  ·  ${count}` : name } // the name over the drawing, and the count of the other chats left of it
   const mine = async () => (await cardOf($, 'chats')).split('\n')[1]
   // its own turn ended: this chat waits for the person, and is still "here", with no state and no time; nothing is counted
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
@@ -3950,7 +3954,7 @@ test('in the desktop and mobile apps the pet is an Svg with its phrase and butto
     expect(fills(source).has(REG.species.fox!.palette['1'])).toBe(true) // the fox's own orange
     expect(d.texts[0]).toBe('Miro  ★ 0')
     expect(d.texts.join(' ')).toMatch(/re-read.*a\.txt/)
-    expect(d.keys).toEqual(['skin', 'pet', 'fix']) // the pet's own after its name, the phrase's under it
+    expect(d.keys).toEqual(['skin', 'fix']) // the pet's own after its name, the phrase's under it
     k.filled = ''
     await d.ui.press({ key: 'fix' })
     expect(k.filled).toMatch(/already in context/)
@@ -4006,7 +4010,7 @@ test('in the apps a newborn is drawn as an Svg from the egg on: whole, cracked, 
     return { svg, texts, boxes, keys }
   }
   const seen: string[] = []
-  for (const [wait, said, keys] of [[0, /^an egg\. something moves inside$/, []], [6_500, /^the shell is cracking$/, []], [2_000, /^I am \w+, a \w+$/, ['skin', 'pet']], [20_500, /^Comments are on: /, ['pet', 'voice-off']]] as const) {
+  for (const [wait, said, keys] of [[0, /^an egg\. something moves inside$/, []], [6_500, /^the shell is cracking$/, []], [2_000, /^I am \w+, a \w+$/, ['skin']], [20_500, /^Comments are on: /, ['voice-off']]] as const) {
     await k.clock.advance(wait)
     const shots = []
     for (const surface of ['mobile', 'desktop']) {
@@ -4156,7 +4160,7 @@ test('/pet import over a newborn whose notice about the comments is up: the choi
   await $.session.start(START)
   await k.clock.advance(29_500) // hatched, and it said who it is
   let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['pet', 'turn off'])
+  expect((await ui.findAll({ type: 'Button' })).map(x => x.text)).toEqual(['turn off'])
   await ui.unmount()
   m.files['/t/miro.json'] = text
   expect(await cardOf($, 'import /t/miro.json yes')).toMatch(/^Miro moved in\./)
@@ -4333,15 +4337,15 @@ test('reminders: a timed one that falls due while the notice about the comments 
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.clock.advance(29_500) // hatched, and it said who it is
   const buttons = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const b = (await ui.findAll({ type: 'Button' })).map((x: any) => x.text); await ui.unmount(); return b }
-  expect(await buttons()).toEqual(['pet', 'turn off'])
+  expect(await buttons()).toEqual(['turn off'])
   expect(await cardOf($, 'remind in 1m check the build')).toBe('Reminder 1 kept, in 1 min: check the build')
-  expect(await buttons()).toEqual(['pet', 'turn off']) // a command is no answer: the notice waits
+  expect(await buttons()).toEqual(['turn off']) // a command is no answer: the notice waits
   await k.clock.advance(70_000)
   expect(await bubbleOf($)).toEqual(['remember: check the build', '/pet remind done 1 when it is done'])
   expect(k.disk.reminders[0].told).toBe(true)
   await k.clock.advance(RULES.remindShowMs + 1_000)
   expect((await bubbleOf($)).join(' ')).toMatch(/Comments are on: /)
-  expect(await buttons()).toEqual(['pet', 'turn off'])
+  expect(await buttons()).toEqual(['turn off'])
 })
 
 test('reminders: back after a pause the pet says them again at the next prompt; none under the bench band, and none while the band is hidden', async ($, on) => {
@@ -4366,7 +4370,7 @@ test('the watcher: after /clear the old id of this chat is not another chat that
   const row = (sessionId: string, cwd: string, status: string) => ({ pid: 1, cwd, kind: 'interactive', startedAt: 5, sessionId, name: `${cwd.split('/').pop()}-5a`, status })
   let sessions: object[] = [row('me', '/w/here', 'busy')]
   on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify(sessions), stderr: '' } }) as any)
-  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)), c = await ui.find({ type: 'Box', key: 'count' }); await ui.unmount(); const count = String(((c?.children as any[] | undefined)?.[0] as any)?.children?.[0] ?? ''), name = t.find(x => x.includes('★')) ?? ''; return count ? `${name}  ·  ${count}` : name } // the name over the drawing, and the count of the other chats left of it
   const others = async () => (await cardOf($, 'chats')).split('\n').slice(1, -1).filter(l => !/this chat/.test(l)).map(l => l.trim())
   await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
@@ -4406,7 +4410,7 @@ test('the watcher: claude agents --json adds the chats that run without Hatchlin
   let printed = () => JSON.stringify(sessions)
   on('process.run', (_: any, e: any) => { ran.push(e); return { value: { exitCode: 0, stdout: printed(), stderr: '' } } as any })
   on('ui.notify', (_: any, e: any) => { notes.push(e); return { value: { isSent: true, channel: 'terminal_bell' } } as any })
-  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)); await ui.unmount(); return t.find(x => x.includes('★')) ?? '' }
+  const head = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const t = (await ui.findAll({ type: 'Text' })).map((x: any) => String(x.text)), c = await ui.find({ type: 'Box', key: 'count' }); await ui.unmount(); const count = String(((c?.children as any[] | undefined)?.[0] as any)?.children?.[0] ?? ''), name = t.find(x => x.includes('★')) ?? ''; return count ? `${name}  ·  ${count}` : name } // the name over the drawing, and the count of the other chats left of it
   sessions = [row('me', '/w/here', 'busy'), row('s1', '/home/me/work/vodmax', 'busy', { name: '\x1b[31mrelease\x07 notes\n' }), row('s2', '/home/me/work/notes', 'idle'), row('s3', '/home/me/secret-client/api', 'waiting', { waitingFor: 'approve Bash: rm -rf /srv --token=hunter2' })]
   await $.session.start({ cwd: '/w/here', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'go', wait: false, origin: 'user' } as any)
@@ -4574,15 +4578,21 @@ test('the day\'s questions: the finish time ten minutes after the first use, nev
   await $.turn.complete({ answer: '', reason: 'answer' } as any)
   await k.pass(11_000)
   expect(await k.said()).toBe('what time do you finish today?')
-  expect(await k.buttons()).toEqual(['pet', '17:00', '18:00', '19:00', 'later'])
-  expect(k.disk.routine).toMatchObject({ asked: 1, q: { kind: 'finish', opts: ['17', '18', '19', 'later'] } })
+  expect(await k.buttons()).toEqual(['17:00', '18:00', '19:00', 'other', 'later'])
+  expect(k.disk.routine).toMatchObject({ asked: 1, q: { kind: 'finish', opts: ['17', '18', '19', 'other', 'later'] } })
   // where there are no buttons the row says how to answer
-  { const ui = await $.ui.mount({ ...BAND, surface: 'vscode' }); expect((await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join(' ')).toMatch(/what time do you finish today\? Answer with \/pet answer <17\|18\|19\|later>\.$/); await ui.unmount() }
+  { const ui = await $.ui.mount({ ...BAND, surface: 'vscode' }); expect((await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join(' ')).toMatch(/what time do you finish today\? Answer with \/pet answer <17\|18\|19\|later>\. Another time: \/pet until HH:MM\.$/); await ui.unmount() }
   // a prompt does not answer it nor send it away: it waits its 30 minutes
   await $.prompt.submit({ text: 'more', wait: false, origin: 'user' } as any)
   await $.turn.complete({ answer: '', reason: 'answer' } as any)
   expect(await k.said()).toBe('what time do you finish today?')
-  expect(await cardOf($, 'answer maybe')).toBe('This question takes one of: 17, 18, 19, later.')
+  expect(await cardOf($, 'answer maybe')).toBe('This question takes one of: 17, 18, 19, other, later.')
+  // `other`, for a time that is none of the hours: the button puts /pet until in the prompt box to complete, sends nothing, and the question stays
+  await k.press('answer-other')
+  expect([k.filled, await k.said(), await k.buttons()]).toEqual(['/pet until ', 'what time do you finish today?', ['17:00', '18:00', '19:00', 'other', 'later']])
+  expect(k.disk.routine).toMatchObject({ asked: 1, q: { kind: 'finish' } })
+  expect(await cardOf($, 'answer other')).toBe('Type the time: /pet until HH:MM.') // typed, it says the same
+  expect([(await k.buttons()).length, k.disk.routine.q?.kind]).toEqual([5, 'finish'])
   await k.press('answer-18')
   expect(await k.said()).toBe('Until 18:00, then. I will say it 30 and 10 minutes before, and at the time. /pet until off drops it.') // what it says back, for a while
   expect(k.disk.routine).toMatchObject({ until: dayAt(17, 18), q: null, days: { '2026-11-17': { finish: dayAt(17, 18) } } })
@@ -4593,7 +4603,7 @@ test('the day\'s questions: the finish time ten minutes after the first use, nev
   expect(await k.said()).not.toMatch(/coffee/)
   await k.pass(90_000)
   expect(await k.said()).toBe('had your coffee yet?')
-  expect(await k.buttons()).toEqual(['pet', 'yes', 'no'])
+  expect(await k.buttons()).toEqual(['yes', 'no'])
   expect(await cardOf($, 'no')).toBe('Noted. I will remind you once, in a while.')
   expect(await k.said()).not.toMatch(/coffee/)
   expect(k.disk.routine).toMatchObject({ asked: 2, q: null, days: { '2026-11-17': { coffee: false } } })
@@ -4603,7 +4613,7 @@ test('the day\'s questions: the finish time ten minutes after the first use, nev
   expect(await k.said()).toBe('had your coffee yet?')
   k.disk.routine = { ...k.disk.routine, q: null, days: { '2026-11-17': { ...k.disk.routine.days['2026-11-17'], coffee: true, coffeeAt: k.clock.now() } } } // /pet yes, typed there
   await k.pass(11_000)
-  expect([/coffee/.test(await k.said()), await k.buttons()]).toEqual([false, ['skin', 'pet']])
+  expect([/coffee/.test(await k.said()), await k.buttons()]).toEqual([false, ['skin']])
   // nothing else is asked that day, and no model was asked for any of it (the kit's would throw)
   for (let i = 0; i < 2; i++) { await k.pass(6 * 60_000); await cardOf($, 'pet'); expect(k.disk.routine.asked).toBe(2) } // past the wait between two questions, twice; the rest of the day is engine/routine.test.js
 })
@@ -4616,7 +4626,7 @@ test('a question nobody answers goes after 30 minutes; /pet routine off stops th
   await k.pass(29 * 60_000)
   expect(await k.said()).toBe('what time do you finish today?')
   await k.pass(70_000)
-  expect([/finish/.test(await k.said()), await k.buttons(), k.disk.routine.q]).toEqual([false, ['skin', 'pet'], null]) // gone, quietly
+  expect([/finish/.test(await k.said()), await k.buttons(), k.disk.routine.q]).toEqual([false, ['skin'], null]) // gone, quietly
   expect(await cardOf($, 'answer 18')).toBe('No question is open.')
   // /pet until says the time all the same; and what was learned is shown
   expect(await cardOf($, 'until 18:30')).toBe('Until 18:30, then. I will say it 30 and 10 minutes before, and at the time. /pet until off drops it.')
@@ -4632,7 +4642,7 @@ test('a question nobody answers goes after 30 minutes; /pet routine off stops th
   // off: the coffee question, due now, never comes
   expect(await cardOf($, 'routine off')).toMatch(/^Questions off: the pet asks nothing about your day\./)
   for (let i = 0; i < 2; i++) { await k.pass(60_000); await cardOf($, 'pet') } // due now, and looked at every 10 seconds
-  expect([k.disk.routine.asked, k.disk.routine.off, await k.buttons()]).toEqual([1, true, ['skin', 'pet']])
+  expect([k.disk.routine.asked, k.disk.routine.off, await k.buttons()]).toEqual([1, true, ['skin']])
   expect(await cardOf($, 'routine')).toMatch(/\nQuestions off\. \/pet routine on brings them back/)
   expect(await cardOf($, 'routine on')).toBe('Questions on: at most 3 a day, one at a time.')
   expect(await cardOf($, 'routine clear')).toBe("Forgotten: the days, the usual times and today's answers.")
@@ -4666,10 +4676,10 @@ test('after three answered days the usual time is proposed with yes and no; no b
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await k.pass(10 * 60_000 + 11_000)
   expect(await k.said()).toBe('¿hoy a las 18:30, como siempre?')
-  expect(await k.buttons()).toEqual(['acariciar', 'sí', 'no'])
+  expect(await k.buttons()).toEqual(['sí', 'no'])
   await k.press('answer-no')
   expect(await k.said()).toBe('¿a qué hora terminas hoy?')
-  expect(await k.buttons()).toEqual(['acariciar', '17:00', '18:00', '19:00', 'más tarde'])
+  expect(await k.buttons()).toEqual(['17:00', '18:00', '19:00', 'otra', 'más tarde'])
   expect(k.disk.routine.asked).toBe(1)
   expect(await cardOf($, 'answer later')).toBe('Más tarde, entonces. /pet until 20:30 cuando lo sepas.')
   expect(k.disk.routine.until).toBe(0)
@@ -4713,7 +4723,7 @@ test('the welcome back: after an hour with nothing done the line is in the bubbl
   expect(wordings('en', 'back.hour')).toContain(await k.said()) // and stays, asleep or not; the coffee reminder, due since 10:00, waits for the person
   expect(k.disk.routine.done).not.toContain('again')
   // the person presses a button: the welcome goes, and now the reminder about the coffee is said
-  await k.press('pet')
+  { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); await clickPet(ui); await ui.unmount() }
   expect(wordings('en', 'back.hour')).not.toContain(await k.said())
   await k.pass(RULES.cuddleShowMs + 11_000)
   expect(wordings('en', 'cup.no')).toContain(await k.said())
@@ -4763,3 +4773,110 @@ test('back after a pause with the comments on: the recap comes first and the wel
   expect((await bubbleOf($)).join(' | ')).toMatch(/^remember: call the plumber/)
 })
 
+
+// The owner's report (18 November 2026, terminal on Windows, 0.1.0 and 0.3.2, with screenshots): Liboro, a baby fox with the
+// founder's eggshell, was drawn as the grown fox with nothing on whenever it slept (also with a question of the routine up, and
+// under the reply to its answer), and as itself only when calm. The moods and the sleep had one drawing each, made from the grown
+// body, the sleep bare. Here every path that draws is held to the baby's own drawings, in what it wears, in the terminal and as an Svg
+const occupied = (rows: string[]) => { // a drawing cut to what is in it, a character a pixel: what an Svg of it holds
+  const ys = rows.flatMap((r, y) => /[^.]/.test(r) ? [y] : []), xs = rows.flatMap(r => [...r].flatMap((ch, x) => ch !== '.' ? [x] : []))
+  const x0 = Math.min(...xs), x1 = Math.max(...xs)
+  return rows.slice(Math.min(...ys), Math.max(...ys) + 1).map(r => [...r.slice(x0, x1 + 1)].map(ch => ch === '.' ? ' ' : '#').join('')).join('\n')
+}
+const glyphs = (rows: string[]) => { let out = ''; for (let r = 0; r < rows.length; r += 2) { for (let c = 0; c < rows[r]!.length; c++) out += rows[r]![c] !== '.' ? '▀' : rows[r + 1]![c] !== '.' ? '▄' : ' '; out += '\n' } return out }
+/** Every drawing a body of the fox has, in what it wears: as the terminal's glyphs and as the pixels of an Svg. */
+const bodyDrawings = (body: 'baby' | 'adult', wear: string[]) => {
+  const fox = REG.species.fox, cells = new Set<string>(), pixels = new Set<string>()
+  for (const [name, st] of Object.entries(fox.states) as [string, any][]) {
+    if (body === 'baby' ? !(name === 'baby' || name.startsWith('baby-')) : name === 'baby' || name.startsWith('baby-')) continue
+    const all = [...st.frames.map((f: string[], i: number) => [f, st.at?.[i] ?? st.at?.[0]]), ...st.rare.map((f: string[]) => [f, st.at?.[0]]), ...Object.values(st.idle ?? {}).flatMap((g: any) => g.frames.map((f: string[], i: number) => [f, g.at[i] ?? g.at[0]]))]
+    for (const [f, at] of all) { const rows = dressed(f, at, name === 'crown' ? [] : wear, [], 'fox', body) as string[]; cells.add(glyphs(rows)); pixels.add(occupied(rows)) }
+  }
+  return { cells, pixels }
+}
+test("a baby is drawn as the baby in what it wears on every path: calm, moving, asleep, asleep under a question, under the reply to its answer, in every mood; in the terminal and as an Svg", { timeoutMs: 60_000 }, async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Liboro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en', wear: 'eggshell' })
+  k.disk.pet = { variant: null, coins: 17, affection: 6, days: 1, day: dayOf(EARLY), born: EARLY, owned: ['eggshell'], animals: [] } // as 0.1.0 wrote it: hatched in time, a day old
+  on('prompt.submit', (_: any, e: any) => ({ text: e.text }) as any)
+  on('turn.complete', () => ({ text: '' }) as any)
+  const baby = bodyDrawings('baby', ['eggshell']), grown = bodyDrawings('adult', ['eggshell']), bare = bodyDrawings('baby', [])
+  for (const set of ['cells', 'pixels'] as const) { expect([...baby[set]].filter(d => grown[set].has(d))).toEqual([]); expect([...baby[set]].filter(d => bare[set].has(d))).toEqual([]) } // nothing below passes by chance
+  const seen: string[] = []
+  const look = async (when: string) => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }), r = (await ui.find({ type: 'Raster' }))!.props, said = (await ui.findAll({ type: 'Text' })).map((x: any) => x.text).join(' | '), keys = (await ui.findAll({ type: 'Button' })).map((x: any) => x.text)
+    await ui.unmount()
+    const d = new Uint32Array(Uint8Array.from(atob(String(r.cells)), ch => ch.charCodeAt(0)).buffer)
+    let cells = ''; for (let i = 0; i < d.length; i += 3) { cells += String.fromCodePoint(d[i]!).replace('♥', ' '); if ((i / 3 + 1) % Number(r.columns) === 0) cells += '\n' }
+    const app = await $.ui.mount({ ...BAND, surface: 'desktop' }), source = String((await app.find({ type: 'Svg' }))!.props.source)
+    await app.unmount()
+    const [, w, h] = /viewBox="0 0 (\d+) (\d+)"/.exec(source)!, grid = Array.from({ length: Number(h) }, () => Array(Number(w)).fill(' '))
+    for (const m of source.matchAll(/<rect x="(\d+)" y="(\d+)" width="(\d+)" height="1"/g)) for (let x = 0; x < Number(m[3]); x++) grid[Number(m[2])]![Number(m[1]) + x] = '#'
+    const pixels = grid.map(row => row.join('')).join('\n')
+    if (!baby.cells.has(cells)) seen.push(`${when}: terminal${grown.cells.has(cells) ? ', the grown fox' : bare.cells.has(cells) ? ', no eggshell' : ''}\n${cells}`)
+    if (!baby.pixels.has(pixels)) seen.push(`${when}: svg${grown.pixels.has(pixels) ? ', the grown fox' : bare.pixels.has(pixels) ? ', no eggshell' : ''}\n${pixels}`)
+    return { said, keys, cells }
+  }
+  await $.session.start(START)
+  expect(await cardOf($)).toMatch(/^Liboro, Hatchling the fox, baby /)
+  await look('the first drawing of the chat, under the greeting')
+  await $.prompt.submit({ text: 'hello', wait: false, origin: 'user' } as any) // the first use of the day: the question about the finish time comes ten minutes after
+  await $.turn.complete({ answer: '', reason: 'answer' } as any)
+  const calm = new Set<string>()
+  for (let i = 0; i < 120; i++) { await k.clock.advance(500); calm.add((await look(`calm, ${i / 2} s`)).cells) } // a blink, a gesture or two
+  expect(calm.size).toBeGreaterThan(1)
+  await k.clock.advance(4 * 60_000 + 30_000)
+  const asleep = await look('asleep')
+  expect(asleep.said).toContain('zzz')
+  await k.clock.advance(6 * 60_000)
+  const asked = await look('asleep, a question of the routine up') // (a) of the report
+  expect(asked.said).toContain('what time do you finish today?')
+  for (let i = 0; i < 8; i++) { await k.clock.advance(500); await look(`asleep under the question, frame ${i}`) }
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await ui.press({ key: 'answer-later' })
+  await ui.unmount()
+  const replied = await look('the reply to the answer') // (b) of the report
+  expect(replied.said).not.toContain('what time do you finish today?')
+  for (let i = 0; i < 20; i++) { await k.clock.advance(500); await look(`after the answer, ${i / 2} s`) }
+  await $.command.run({ command: 'pet', args: 'pet' } as any) // (c): awake, with its hearts
+  await look('after a cuddle')
+  await k.clock.advance(20_000)
+  // every mood, as /pet demo shows them on this pet: the stages of the row apart, which show what it will grow into
+  await $.command.run({ command: 'pet', args: 'demo' } as any)
+  const DEMO = ['egg', 'seedling', 'healthy', 'bloom', 'cheer', 'dizzy', 'stomach', 'loop', 'bloated', 'sleep']
+  for (const mood of DEMO) for (let i = 0; i < 10; i++) { await k.clock.advance(500); if (!['egg', 'healthy', 'bloom'].includes(mood)) await look(`/pet demo ${mood}, frame ${i}`) }
+  expect(seen).toEqual([])
+})
+
+test("a click on the pet is the cuddle: no pet button on any surface; in the terminal a region over the drawing hears the click, the drawing under it unchanged; not over the egg, and not for a press that ends outside", async ($, on) => {
+  const k = home(on, {}, { species: 'fox', born: 'fox', seed: 7, name: 'Miro', stats: [20, 50, 40, 90, 70], asked: true, lang: 'en' })
+  await $.session.start(START)
+  await k.clock.advance(60_000)
+  for (const surface of ['terminal', 'desktop', 'mobile', 'vscode'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect((await ui.findAll({ type: 'Button' })).map((x: any) => String(x.key))).not.toContain('pet')
+    expect(!!(await ui.find({ type: 'Client' }))).toBe(surface === 'terminal') // an Svg takes no press, and a Button holds only text: in the apps the cuddle is /pet pet
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const raster = (await ui.find({ type: 'Raster' }))!.props, region = (await ui.find({ type: 'Client' }))!.props as any
+  expect([region.key, region.width, region.height]).toEqual(['touch', raster.columns, raster.rows]) // as large as the drawing, over it
+  expect(JSON.stringify(await ui.drawn({ in: 'touch' }))).not.toMatch(/"Text"|"Button"/) // and empty: nothing is drawn over the pet
+  const cuddles = () => Number(prefsOf(k.disk).cuddles ?? 0)
+  await (ui as any).pointer({ type: 'down', x: 1, y: 1, button: 'left', in: 'touch' }); await (ui as any).pointer({ type: 'up', x: -3, y: 1, button: 'left', in: 'touch' }) // dragged off the pet: no cuddle
+  await (ui as any).pointer({ type: 'down', x: 1, y: 1, button: 'right', in: 'touch' }); await (ui as any).pointer({ type: 'up', x: 1, y: 1, button: 'right', in: 'touch' }) // nor the right button
+  expect(cuddles()).toBe(0)
+  await clickPet(ui)
+  expect(cuddles()).toBe(1)
+  await ui.unmount()
+  expect(await cardOf($, 'pet')).toMatch(/petted 2 times/) // the command stays, and is the way where no click is heard
+  expect(await cardOf($, 'help')).toMatch(/^  \/pet pet +a cuddle; a click on the pet does it too, in a terminal that reports clicks$/m)
+})
+
+test("no click on the egg: a newborn that hatches has no region over its drawing until it is out", async ($, on) => {
+  const k = home(on, {})
+  await $.session.start(START)
+  const region = async () => { const ui = await $.ui.mount({ ...BAND, surface: 'terminal' }); const there = !!(await ui.find({ type: 'Client' })); await ui.unmount(); return there }
+  expect(await region()).toBe(false)
+  await k.clock.advance(9_000)
+  expect(await region()).toBe(true)
+})

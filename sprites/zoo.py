@@ -271,7 +271,7 @@ def fx(base, marks, dr=2, dc=1):
 
 def derive(adult, eyes, cheeks, skin):
     """The states drawn from the adult. `at` is where the body's corner sits on the effect canvas in each frame (the first also stands
-    for the frames after it): what the adapter needs to draw a shop item over the state. Asleep the pet is curled up and wears nothing.
+    for the frames after it): what the adapter needs to draw a shop item over the state. Asleep the grown pet is curled up and wears nothing (the baby: `young`).
     The crown is drawn here, as a state: the adapter shows it while the crown is what the head has on."""
     plain = grid(adult)
     for r, c in cheeks: plain[r][c] = skin
@@ -300,6 +300,23 @@ def derive(adult, eyes, cheeks, skin):
         "sleep": {"frames": [fx(squat, [(2, 7, "w"), (2, 8, "w")], dr=4), fx(squat, [(2, 7, "w"), (2, 8, "w")] + z, dr=4)], "rare": []},
     }
     return out
+
+
+def young(baby, eyes):
+    """The moods and the sleep of the baby, drawn from the baby as `derive` draws the adult's from the adult: a pet not yet grown is
+    itself in every mood. Asleep it is not curled up, only its eyes are shut, so it keeps what it wears (`at`)."""
+    base = grid(baby)
+    wide, swirl, shut = [r[:] for r in base], [r[:] for r in base], [r[:] for r in base]
+    for r, c in eyes: wide[r + 1][c] = "k"; swirl[r][c] = "v"; shut[r][inward(c)] = "k"
+    z = [(0, 10, "w"), (0, 11, "w"), (0, 12, "w"), (0, 13, "w"), (1, 12, "w"), (2, 11, "w"), (3, 10, "w"), (3, 11, "w"), (3, 12, "w"), (3, 13, "w")]
+    return {
+        "baby-bloated": {"at": [(2, 1)], "frames": [rows(bloated(baby, eyes, []))], "rare": []},
+        "baby-cheer": {"at": [(2, 1), (1, 1)], "frames": [fx(baby, [(1, 0, "y"), (3, 13, "y")]), fx(baby, [(3, 0, "y"), (0, 13, "y")], dr=1)], "rare": []},
+        "baby-dizzy": {"at": [(2, 0), (2, 2)], "frames": [fx(rows(swirl), [(0, 3, "y"), (1, 10, "y")], dc=0), fx(rows(swirl), [(0, 10, "y"), (1, 3, "y")], dc=2)], "rare": []},
+        "baby-stomach": {"at": [(2, 1)], "tint": "sick", "frames": [fx(baby, [(1, 13, "w")]), fx(baby, [(3, 13, "w")])], "rare": []},
+        "baby-loop": {"at": [(2, 1)], "frames": [fx(rows(wide), [(0, 13, "R"), (1, 13, "R"), (3, 13, "R")]), fx(rows(wide), [])], "rare": []},
+        "baby-sleep": {"at": [(2, 1)], "frames": [fx(rows(shut), []), fx(rows(shut), z)], "rare": []},
+    }
 
 
 def look(base, eyes, dr, dc):
@@ -509,7 +526,7 @@ def animal(name, spec, gilt=None):
     weight, own, adult, eyes, cheeks, skin, baby, baby_eyes = spec
     own, adult, baby = zoned(name, own, adult, baby)
     pal = {**COMMON, **own}
-    states = {"baby": {"at": [(2, 1)], "frames": [baby], "rare": [blink(baby, baby_eyes, skin)]}, **derive(adult, eyes, cheeks, skin)}
+    states = {"baby": {"at": [(2, 1)], "frames": [baby], "rare": [blink(baby, baby_eyes, skin)]}, **derive(adult, eyes, cheeks, skin), **young(baby, baby_eyes)}
     # the calm states move a little now and then: the gestures of each body, the crowned one's drawn with its crown
     states["baby"]["idle"], states["adult"]["idle"], states["crown"]["idle"] = idle(baby, baby_eyes), idle(adult, eyes), idle(adult, eyes, crown)
     # the items on each body; the baby's neck is under its face, which takes most of it

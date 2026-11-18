@@ -4,9 +4,9 @@ How Hatchling works, and every command. Comments: [comments.md](comments.md). Wh
 
 ## The band
 
-The pet sits above the prompt with one dim row: its name, its stars, how many of your other chats wait for you and two buttons (`Tobo  ★ 29  ·  2 chats wait for you  ·  skin  pet`). When it has something to say, a speech bubble shows for some seconds, with its buttons under it. A narrow terminal drops the buttons first, then the bubble.
+The pet sits above the prompt at the right edge: its name and its stars over the drawing (`Tobo  ★ 29`), and under it the `skin` button once it has something to wear. On the top row, left of the name, how many of your other chats wait for you. A click on the pet's drawing cuddles it, in a terminal that reports clicks (the fullscreen one); everywhere else `/pet pet` does. When it has something to say, a speech bubble shows for some seconds to the left of the pet, with its buttons under it. The drawing is never squeezed: a narrow terminal wraps the bubble, then drops it, then the count, then the stars; a low one drops the `skin` button, then the name.
 
-**In the Claude apps.** In the desktop and mobile apps the pet is a small picture drawn from the same pixels (animal, age, coat and what it wears), with its name, its phrase and the same buttons beside it. It stands still there: the picture changes when the pet's state does, with no blink or gesture. It has an outline that reads on a light and on a dark app. VS Code keeps one row of text. Nothing more is sent or stored for it.
+**In the Claude apps.** In the desktop and mobile apps the pet is a small picture drawn from the same pixels (animal, age, coat and what it wears), with its name and stars over it, the `skin` button under it, and its phrase with the phrase's buttons beside it. A picture takes no click in the apps, so there a cuddle is `/pet pet`. It stands still there: the picture changes when the pet's state does, with no blink or gesture. It has an outline that reads on a light and on a dark app. VS Code keeps one row of text. Nothing more is sent or stored for it.
 
 At the first start the pet is an egg, and hatches after 8 seconds.
 
@@ -75,7 +75,7 @@ Fixed lines in your language, worded by the pet's character. No model is asked, 
 
 - **When it hatches** it says who it is for 20 seconds: its name, its animal, its five statistics and its character. A toast says the name too.
 - **Welcome back.** After an hour in which you did nothing in any chat, a welcome is in the bubble and stays until you do something (a prompt, a button, a `/pet` command). It is worded by how long you were away and the hour: after lunch, the next morning, after a weekend. With comments on, the recap is the first line and the welcome the one under it; reminders that fell due are said after your first prompt.
-- **Questions with buttons.** A question holds the bubble with 2 to 4 buttons. Answer with a click or with `/pet yes`, `/pet no`, `/pet answer <choice>`. One at a time, none while a turn runs, at most 3 a day, at least 5 minutes apart; one nobody answers goes after 30 minutes. A prompt does not answer it.
+- **Questions with buttons.** A question holds the bubble with 2 to 5 buttons. Answer with a click or with `/pet yes`, `/pet no`, `/pet answer <choice>`. The one about the finish time offers three whole hours, `other` and `later`: `other` puts `/pet until ` in the prompt box for you to complete with any time (`/pet until 12:00`) and send; nothing is sent by itself. One at a time, none while a turn runs, at most 3 a day, at least 5 minutes apart; one nobody answers goes after 30 minutes. A prompt does not answer it.
 - **What time do you finish today?** Asked once a day, 10 minutes after the first use: three whole hours from 17:00 (or the next ones still ahead) and `later`. `/pet until 18:30` sets any time, `/pet until off` drops it, `/pet until` says it. The pet warns 30 and 10 minutes before and at the time (set nearer than that, it says the minutes really left, and names only the warnings still to come): in the band of every open chat for a minute, with one toast for all of them. After three days with a finish time it asks `18:00 as usual today?` instead; `no` brings the hours.
 - **Coffee.** Before 11:00 it asks whether you had your coffee. `no`: one reminder two hours later. `yes`: one line three hours later. On a day with no coffee question it may ask about lunch between 13:00 and 16:00 instead (`no`: one reminder an hour later). One such question a day.
 - **What it learns.** For each of the last 30 days: when the day started and ended, coffee yes or no and when you said so, the finish time. From three days on: your usual start, finish and coffee, used only to word a question (`as usual?`) and the morning's welcome. `/pet routine` shows it, `/pet routine off` stops every question (a finish time you set is still warned about), `/pet routine on` brings them back, `/pet routine clear` forgets.
@@ -146,7 +146,7 @@ English, Spanish, Portuguese and Simplified Chinese. A newborn takes your system
 | Command | What it does |
 |---|---|
 | `/pet` | the card: stage, hearts, character, stars, briefox, comments and their cost |
-| `/pet pet` | pet it; the `pet` button does the same |
+| `/pet pet` | pet it; in a terminal that reports clicks, a click on the pet does the same |
 | `/pet name <name>` | rename it |
 | `/pet call me <name>` | tell the pet your name: it says it now and then, in a greeting or after a cuddle. Alone it shows the name, `nobody` forgets it. The pet knows only what you type here |
 | `/pet shop [item]` | the catalogue; with an item, buy it |
